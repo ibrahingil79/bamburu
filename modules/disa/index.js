@@ -623,20 +623,64 @@ export function register(app, db) {
           }
         }
 
+        // ⚠️ AQUÍ ESTABA AUD-004. Esto hacía `UPDATE products SET name=?, price=?, stock=?`: DISA
+        // escribía las existencias A PELO, saltándose el libro de movimientos por el que pasa todo lo
+        // demás. `products.stock` NO es un dato, es una CACHÉ derivada de `stock_movements`, y
+        // escribirla directamente se saltaba de una vez las seis guardas de `adjustStock`: ponía
+        // stock en un producto que no es físico o que lleva traza por lote, sin motivo, sin almacén,
+        // sin avisar de que dejaba el almacén por debajo de lo reservado, y sin tocar el coste medio
+        // — la valoración de inventario mentía desde ese momento.
+        //
+        // Y la peor parte, porque es intermitente: **ese número no sobrevivía**. En cuanto el
+        // producto tenía cualquier movimiento real, `recomputeStock` recalculaba desde el libro y
+        // borraba lo que DISA había escrito, sin avisar a nadie. Un dato que unas veces está y otras
+        // no es peor que un dato malo fijo.
+        //
+        // AHORA: nombre y precio se editan como siempre; **las existencias pasan por `adjustStock`**,
+        // el MISMO servicio que usa la pantalla de inventario. No hay camino paralelo.
         case 'edit_product': {
           const p = action.params;
           const existing = db.prepare('SELECT * FROM products WHERE id=?').get(p.product_id);
           if (!existing) return { ok: false, message: 'Producto no encontrado.' };
-          db.prepare(`
-            UPDATE products SET name=?, price=?, stock=? WHERE id=?
-          `).run(
+
+          const quiereStock = p.stock !== undefined && p.stock !== null && p.stock !== '';
+          // EL MOTIVO NO SE INVENTA. El libro exige uno de una lista cerrada, y elegir uno por el
+          // usuario sería escribir en su contabilidad de inventario una razón que él no ha dicho.
+          // Sin motivo válido, el stock NO se toca y se le dice por dónde se hace — el resto de la
+          // edición sí se aplica, que es lo que había pedido.
+          const motivo = String(p.reason || p.motivo || '').trim();
+          const motivoOk = ADJUST_REASONS.includes(motivo);
+
+          db.prepare('UPDATE products SET name=?, price=? WHERE id=?').run(
             p.name !== undefined ? p.name : existing.name,
             p.price !== undefined ? Number(p.price) : existing.price,
-            p.stock !== undefined ? Number(p.stock) : existing.stock,
             p.product_id
           );
           logActivity(db, 'edit', ENTITY.PRODUCT, p.product_id, 'Producto editado por DISA', session);
-          return { ok: true, message: 'Producto "' + (p.name || existing.name) + '" actualizado.' };
+          const nombre = p.name || existing.name;
+
+          if (!quiereStock) return { ok: true, message: 'Producto "' + nombre + '" actualizado.' };
+
+          if (!motivoOk) {
+            return { ok: true, message: 'He actualizado "' + nombre + '", pero las existencias NO las he'
+              + ' tocado: un cambio de stock deja un apunte en el libro de movimientos y necesita un motivo'
+              + ' de la lista (' + ADJUST_REASONS.join(', ') + '). Dime cuál es y lo ajusto.' };
+          }
+
+          try {
+            const r = adjustStock(db, parseInt(p.product_id),
+              { mode: 'set', value: Number(p.stock), reason: motivo,
+                note: p.note || 'Ajuste por DISA (edición de producto)', warehouse_id: p.warehouse_id },
+              { userId: session?.userId });
+            logActivity(db, 'edit', ENTITY.PRODUCT, p.product_id,
+              'Stock ajustado por DISA (set ' + Number(p.stock) + ', ' + motivo + ')', session);
+            const wh = db.prepare('SELECT name FROM warehouses WHERE id=?').get(r.warehouse_id);
+            return { ok: true, message: 'Producto "' + nombre + '" actualizado. Existencias ajustadas en '
+              + (wh?.name || 'el almacén') + ': ' + r.stock + ' uds (queda su apunte en el libro).' };
+          } catch (e) {
+            return { ok: true, message: 'He actualizado "' + nombre + '", pero las existencias no: '
+              + e.message };
+          }
         }
 
         case 'delete_product': {
@@ -665,43 +709,69 @@ export function register(app, db) {
           return { ok: true, message: 'Producto #' + p.product_id + ' activado.' };
         }
 
+        // ⚙️ 3 SEP 2026 (`disa-stock-fuera-del-libro`) · DISA YA NO PONE EXISTENCIAS DE VARIANTE.
+        //
+        // Esto escribía `product_variants.stock` a pelo — el mismo fallo de AUD-004 por otra puerta,
+        // y no estaba en la ficha. La diferencia es que aquí **no basta con enchufar el servicio**:
+        // `stock_movements` es por `product_id` y NO tiene `variant_id`, así que el libro, el kardex
+        // y el coste medio no saben qué es una variante. Meterlas sería construir un libro nuevo
+        // entero, y eso es Capa 2 — congelada por `CLAUDE.md` — además de un camino paralelo, que es
+        // justo lo que el encargo prohíbe.
+        //
+        // Medido el 3 sep 2026 antes de decidirlo: el ÚNICO consumidor vivo de ese campo es la tienda
+        // pública, **apagada** (`/store` → 404); el ERP solo lista variantes, no las vende ni las
+        // valora; y hay **CERO variantes en los 87 negocios**. Así que el campo no son existencias de
+        // nadie: es un resto de Capa 2.
+        //
+        // DISA sigue poniendo nombre, precio y SKU. Las existencias, por `adjust_stock`, que las
+        // apunta. Y **lo dice** en vez de callarse, que es la mitad que evita que alguien crea que
+        // se guardó algo que no se guardó.
         case 'create_variant': {
           const p = action.params;
           const product = db.prepare('SELECT id, name FROM products WHERE id=?').get(p.product_id);
           if (!product) return { ok: false, message: 'Producto no encontrado.' };
+          // La columna `stock` NO se nombra siquiera: el esquema la deja en 0 por defecto. Nombrarla
+          // para escribir un cero seguiría siendo DISA tocando existencias, y el censo lo caza — con
+          // razón, porque mañana alguien cambia ese 0 por un parámetro y nadie se entera.
           const r = db.prepare(`
             INSERT INTO product_variants
-              (product_id, name, option1_name, option1_value, sku, price, stock)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+              (product_id, name, option1_name, option1_value, sku, price)
+            VALUES (?, ?, ?, ?, ?, ?)
           `).run(
             p.product_id,
             p.name || '',
             p.option1_name || '',
             p.option1_value || '',
             p.sku || '',
-            p.price != null ? Number(p.price) : null,
-            Number(p.stock) || 0
+            p.price != null ? Number(p.price) : null
           );
           logActivity(db, 'create', ENTITY.PRODUCT_VARIANT, r.lastInsertRowid,
             'Variante creada por DISA en ' + product.name, session);
-          return { ok: true, message: 'Variante "' + (p.name || 'nueva') + '" creada en ' + product.name + '.' };
+          const pidioStock = p.stock !== undefined && p.stock !== null && p.stock !== '' && Number(p.stock) !== 0;
+          return { ok: true, message: 'Variante "' + (p.name || 'nueva') + '" creada en ' + product.name + '.'
+            + (pidioStock ? ' Las existencias NO las he puesto ahí: el stock se mueve por el libro del producto,'
+                          + ' con su motivo y su apunte. Dime el motivo y lo ajusto sobre "' + product.name + '".' : '') };
         }
 
+        // Mismo motivo que en `create_variant`, tres pantallas más arriba: el stock de variante no
+        // tiene libro donde caber, así que DISA no lo escribe.
         case 'edit_variant': {
           const p = action.params;
           const variant = db.prepare('SELECT * FROM product_variants WHERE id=?').get(p.variant_id);
           if (!variant) return { ok: false, message: 'Variante no encontrada.' };
           db.prepare(`
-            UPDATE product_variants SET name=?, price=?, stock=?, sku=? WHERE id=?
+            UPDATE product_variants SET name=?, price=?, sku=? WHERE id=?
           `).run(
             p.name !== undefined ? p.name : variant.name,
             p.price !== undefined ? Number(p.price) : variant.price,
-            p.stock !== undefined ? Number(p.stock) : variant.stock,
             p.sku !== undefined ? p.sku : variant.sku,
             p.variant_id
           );
           logActivity(db, 'edit', ENTITY.PRODUCT_VARIANT, p.variant_id, 'Variante editada por DISA', session);
-          return { ok: true, message: 'Variante #' + p.variant_id + ' actualizada.' };
+          const pidioStock = p.stock !== undefined && p.stock !== null && p.stock !== '';
+          return { ok: true, message: 'Variante #' + p.variant_id + ' actualizada.'
+            + (pidioStock ? ' Las existencias NO las he tocado: el stock se mueve por el libro del producto,'
+                          + ' con su motivo y su apunte. Dime el motivo y lo ajusto sobre el producto.' : '') };
         }
 
         case 'delete_variant': {
@@ -3038,4 +3108,15 @@ export function register(app, db) {
 
   app.route('/admin/disa', router);
   app.route('/api/disa', router);
+
+  // ── LA COSTURA PARA PODER COMPROBAR LAS ACCIONES SIN EL MODELO (3 sep 2026) ────────────────────
+  // `executeAction` es el único sitio donde una acción de DISA toca datos, y hasta hoy solo se podía
+  // alcanzar hablando con el modelo: una comprobación de que «el stock deja su apunte» dependía de
+  // que el proveedor de IA respondiera y de que contestara lo que se esperaba. Eso no es una
+  // comprobación, es una moneda al aire — y por eso los gates que llaman al modelo están fuera del
+  // barrido.
+  //
+  // Devolverlo NO abre ninguna puerta nueva: no es una ruta, no se monta en ningún sitio y quien lo
+  // llama ya tiene la base de datos delante. Lo usa `scripts/lib/disa-accion.mjs`.
+  return { executeAction };
 }

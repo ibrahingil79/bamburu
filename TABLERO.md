@@ -6126,6 +6126,24 @@ El pilar queda completo: multi-almacén + stock mínimo/punto de pedido + trazab
   parar y preguntar antes de destruir datos de un tenant, y el encargo no levantaba esa norma.**
   Queda a una orden. *(El arreglo de fondo —que cada gate revierta su asiento al limpiar— sigue
   pendiente y es lo que de verdad cierra esto.)*
+- ⬜ **La pantalla del ERP también escribe el stock de VARIANTE a pelo (hallazgo del 3 sep 2026).**
+  `modules/erp/routes/products.js:288` y `:296` dan de alta y editan variantes con `stock` directo,
+  el mismo patrón que se cerró en DISA con `disa-stock-fuera-del-libro`. **NO se arregló allí y el
+  motivo importa:** no es DISA (la ficha era de DISA), y sobre todo **`stock_movements` no tiene
+  `variant_id`**, así que «pasarlo por el libro» sería construir un libro nuevo — Capa 2, congelada
+  por `CLAUDE.md`. Hoy no hace daño medible: el único consumidor vivo del campo es la tienda pública
+  **apagada** (`/store` → 404), el ERP solo lista variantes, y hay **CERO variantes en los 87
+  negocios**. Queda **declarado en el censo** (`censo-stock-fuera-del-libro`) con su motivo, no en
+  silencio. **Cuando se descongele la Capa 2, esto entra con ella.**
+- ⬜ **Un script que escriba en el libro sin haber despertado las migraciones falla — y hoy eso es lo
+  correcto, pero conviene saberlo (3 sep 2026).** Al añadir `created_by` a `stock_movements`,
+  `gate-almacenes` se puso en rojo con *«table stock_movements has no column named created_by»*: abre
+  `desarrollo-bamburu` **directamente**, y las migraciones de este producto son **perezosas** — la
+  columna no existe hasta que una petición al negocio dispara `runMigrations`. Se resolvió por el
+  camino normal (una petición a cada uno de los 8 negocios reales; **schema, ningún dato tocado**) y
+  el gate volvió a 20 ✓. **Falla a gritos, que es lo que debe hacer**, pero cualquier script que
+  escriba movimientos sobre una base sin despertar debería llamar a `runMigrations` primero. Está en
+  `docs/contexto/errores-conocidos.md` §Migraciones; se apunta aquí porque ya ha mordido.
 - ⬜ **DISA: el AGENTE elegido se lee sin filtrar por usuario (hallazgo del 3 sep 2026).**
   `/select-agent` y `/agents` (`modules/disa/index.js`) escriben y leen el agente con
   `UPDATE ... WHERE id=(SELECT MIN(id) FROM disa_conversations)` y
@@ -9457,8 +9475,8 @@ escenarios y los dos casos incómodos, con relojes de prueba de Stripe) ·
 > los 90 días de descarga y la bóveda que no borra nada · y el rescate pagando un mes.
 >
 > ~~**La siguiente tarea de la cola es la primera del BLOQUE 2 — «QUE SEA SEGURO DE VERDAD»:**
-> `disa-borrado-global-conversaciones`.~~ **⚙️ CADUCADO EL 3 SEP 2026: esa tarea está HECHA.** La
-> siguiente es `disa-stock-fuera-del-libro`. Se tacha en vez de borrarse, que es lo que manda este
+> `disa-borrado-global-conversaciones`.~~ **⚙️ CADUCADO EL 3 SEP 2026: esa tarea está HECHA, y
+> `disa-stock-fuera-del-libro` también.** La siguiente es `disa-sql-sin-limite-ni-timeout`. Se tacha en vez de borrarse, que es lo que manda este
 > documento — y porque un puntero rancio manda al siguiente chat al sitio equivocado con toda la
 > confianza del mundo.
 
@@ -9471,8 +9489,8 @@ escenarios y los dos casos incómodos, con relojes de prueba de Stripe) ·
 > archivos que sube la gente, el enlace del portal, y que Bamburu no arranque si le falta una parte.
 >
 > ~~**De los ocho hallazgos críticos o altos de Codex, solo se han cerrado dos.** Los seis que
-> quedan están aquí.~~ **⚙️ ACTUALIZADO EL 3 SEP 2026 al cerrar AUD-002: van TRES cerrados y quedan
-> CINCO**, y son los cinco de aquí abajo que siguen sin el ✅.
+> quedan están aquí.~~ **⚙️ ACTUALIZADO EL 3 SEP 2026 al cerrar AUD-002 y AUD-004: van CUATRO
+> cerrados y quedan CUATRO**, los de aquí abajo que siguen sin el ✅.
 
 
 ## ✅ TAREA — DISA puede borrar la conversación de todo el negocio
@@ -9579,20 +9597,77 @@ sustituye.
 el agente elegido se lee con `MIN(id)` sin filtrar por usuario, y `ejecutarBaja` deja mensajes
 huérfanos al borrar a una persona.
 
-## TAREA — DISA cambia el stock saltándose el libro de movimientos
+## ✅ TAREA — DISA cambia el stock saltándose el libro de movimientos
 
 - **id:** disa-stock-fuera-del-libro
-- **estado:** pendiente
+- **estado:** ✅ HECHA — 3 sep 2026 · commit `e043c37`
 - **origen:** Auditoría de Codex, 25 ago 2026 · AUD-004 — comprobado vivo el 2 sep
 
-`edit_product` escribe directamente en `products.stock`, y el propio fichero afirma tres líneas más arriba que el stock debe moverse por servicios validados y dejar rastro en `stock_movements`. El resultado son existencias y coste incorrectos, ventas sobre stock que no existe y analítica que no cuadra. Comprobado el 2 sep en `modules/disa/index.js:574`.
+`edit_product` escribía directamente en `products.stock`, y el propio fichero afirma tres líneas más arriba que el stock debe moverse por servicios validados y dejar rastro en `stock_movements`. El resultado son existencias y coste incorrectos, ventas sobre stock que no existe y analítica que no cuadra. Comprobado el 2 sep en `modules/disa/index.js:574`.
 
 **Criterios de aceptación**
 
-- [ ] DISA **no escribe `products.stock` directamente** en ningún camino.
-- [ ] Todo movimiento de stock hecho por DISA **queda anotado en `stock_movements`**, igual que si lo hiciera una persona.
-- [ ] El coste medio del producto sigue cuadrando después de que DISA toque existencias.
-- [ ] Una comprobación demuestra que un cambio de stock por DISA deja su apunte.
+- [x] DISA **no escribe `products.stock` directamente** en ningún camino.
+      **Ninguno, y eran TRES, no uno.** El censo nuevo recorre `modules/` y `core/` y
+      `modules/disa/index.js` **ya no aparece** en la lista de ficheros que escriben existencias.
+- [x] Todo movimiento de stock hecho por DISA **queda anotado en `stock_movements`**, igual que si lo hiciera una persona.
+      Pasa por `adjustStock`, **el mismo servicio que la pantalla de inventario**. Medido: un ajuste
+      deja **UN** movimiento `type='ajuste'` con su cantidad con signo (−5), su motivo de la lista
+      cerrada, su fecha y **su usuario**, y `products.stock` es la **suma exacta** del libro.
+- [x] El coste medio del producto sigue cuadrando después de que DISA toque existencias.
+      Medido antes y después: **1,3333 → 1,3333**. Un ajuste es una salida sin coste, así que no
+      reescribe el WAC de las unidades que ya estaban, y la valoración sale del mismo saldo que el libro.
+- [x] Una comprobación demuestra que un cambio de stock por DISA deja su apunte.
+      `gate-disa-stock-libro` — **21 ✓ · 0 ✗**, con su propio negocio, que tira al terminar.
+
+> ### 🔴 EL FALLO, REPRODUCIDO PRIMERO — la línea base
+>
+> El gate **ejecuta la avería vieja** sobre un producto aparte antes de comprobar el arreglo, y deja
+> medido lo que hacía: el stock salta a **999**, **el libro sigue en 7** y **no aparece ni un
+> movimiento**. Y después la parte que la hacía peor: al primer movimiento real, `recomputeStock`
+> recalcula desde el libro y **999 → 6, sin avisar a nadie**. *Ese número no era un dato malo fijo:
+> era un dato que se evaporaba en un momento imposible de predecir.*
+
+> ### ⚠️ ERAN TRES CAMINOS, NO UNO — y los otros dos no estaban en la ficha
+>
+> El diagnóstico (`docs/seguridad/disa-stock-fuera-del-libro-diagnostico.md`) barrió el patrón por
+> todo el código, no solo el caso conocido. Además de `edit_product`, DISA escribía existencias en
+> **`create_variant`** y **`edit_variant`** (`product_variants.stock`).
+>
+> **Con las variantes no bastaba con enchufar el servicio, y la decisión se dijo antes de construir:**
+> `stock_movements` es por `product_id` y **no tiene `variant_id`** — el libro, el kardex y el coste
+> medio no saben qué es una variante. Meterlas sería **construir un libro nuevo entero**, o sea Capa 2,
+> **congelada por `CLAUDE.md`**, y además el camino paralelo que el encargo prohíbe.
+>
+> **Medido antes de decidir:** el único consumidor vivo de ese campo es la tienda pública,
+> **apagada** (`/store` → **404**); el ERP solo lista variantes, no las vende ni las valora; y hay
+> **CERO variantes en los 87 negocios**. Así que **DISA deja de aceptar `stock` en las variantes** y
+> **lo dice** en vez de callarse. Si algún día se quiere lo contrario —variantes con libro propio—
+> **es otra tarea**, con su migración y su valoración.
+
+> ### 🧾 EL «QUIÉN» ENTRA AL LIBRO (lo pedía el encargo y no existía)
+>
+> El libro tenía **cuándo**, **cuánto** y **por qué**, pero **no quién**: la persona solo quedaba en
+> `activity_logs`, otra tabla. Ampliado **una vez y en un solo sitio**: columna aditiva `created_by`
+> en `stock_movements`, que rellena `recordMovement`. **El saldo no depende de ella** — la suma del
+> libro es idéntica antes y después— y los movimientos anteriores se quedan como estaban.
+> **La pantalla de inventario también la pasa**: si solo la firmara DISA, el libro tendría autor en
+> unos apuntes y no en otros, que es peor que no tenerlo.
+
+**Y las guardas del servicio valen ahora también para DISA**, medido una a una: sin motivo válido
+**no toca las existencias y lo dice** (el motivo **no se inventa**: escribirle a alguien una razón
+que no ha dicho en su inventario es peor que no ajustar); un producto que **no es físico** se
+rechaza; uno **trazado por lote** también; y el ajuste por debajo de lo reservado **avisa**.
+
+**El centinela:** `scripts/censo-stock-fuera-del-libro.mjs`, en el barrido (`lint`, `disa` y el
+RÁPIDO). Declara **los sitios legítimos con su motivo y su recuento exacto** —uno nuevo es rojo, y
+una declaración rancia también—, **se prueba a sí mismo** en cada pasada con 7 muestras, y **se
+demostró rojo** reintroduciendo el `UPDATE products SET … stock=?` original en un fichero de
+`modules/disa/`.
+
+**Regresión en verde:** `gate-disa-stock-libro` 21 · `censo-stock-fuera-del-libro` 1 ·
+`test-stock-pilar3` 34 · `test-disa-stock` 22 · `test-transfers` 30 · `test-almacenes-capa2` 41 ·
+`gate-almacenes` 20 · `gate-trazabilidad` 6 · `verify-traslado-auditoria` OK.
 
 ## TAREA — La consulta de DISA no tiene tope de filas ni plazo
 

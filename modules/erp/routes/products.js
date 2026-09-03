@@ -167,7 +167,9 @@ export function createProductRoutes(db, cfg = {}) {
     try {
       const id = parseInt(c.req.param('id'));
       const d = c.get('validated');
-      const res = adjustStock(db, id, { mode: d.mode, value: d.value, reason: d.reason, note: d.note, warehouse_id: d.warehouse_id }, { confirmBelowReserved: d.confirm_below_reserved });
+      // El QUIÉN va al movimiento, no solo a `activity_logs` (3 sep 2026). Si solo lo pasara DISA,
+      // el libro tendría autor en unos apuntes y no en otros, que es peor que no tenerlo.
+      const res = adjustStock(db, id, { mode: d.mode, value: d.value, reason: d.reason, note: d.note, warehouse_id: d.warehouse_id }, { confirmBelowReserved: d.confirm_below_reserved, userId: c.get('session')?.userId });
       logActivity(db, c.get('session'), 'Ajustó stock', ENTITY.PRODUCT, id, `${d.mode} ${d.value} (${d.reason}) → ${res.stock}`);
       return c.json(res);
     } catch(e) { return c.json({ error: safeError(e) }, e.status || 400); }

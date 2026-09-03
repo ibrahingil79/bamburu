@@ -514,6 +514,15 @@ export function runMigrations(db) {
   db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_stock_lots_product_code ON stock_lots(product_id, code)`);
   // El movimiento del libro apunta a su unidad de traza (NULL en productos sin traza, como hasta ahora).
   addCol(db, 'stock_movements', 'lot_id', 'INTEGER');
+
+  // ⚙️ 3 SEP 2026 (`disa-stock-fuera-del-libro`) · EL «QUIÉN» ENTRA AL LIBRO.
+  // El libro tenía cuándo (`created_at`), cuánto (`quantity`) y por qué (`reason`), pero NO quién:
+  // la persona que movía el stock solo quedaba en `activity_logs`, otra tabla. Para responder «¿quién
+  // puso estas 20 unidades?» había que cruzar dos sitios y esperar que el apunte de actividad
+  // siguiera ahí. Ahora el movimiento lo lleva encima.
+  // ADITIVA y por defecto NULL: los movimientos anteriores se quedan como están y **el saldo no
+  // depende de esta columna** — la suma del libro es la misma antes y después.
+  addCol(db, 'stock_movements', 'created_by', 'INTEGER');
   db.exec(`CREATE INDEX IF NOT EXISTS idx_stock_movements_lot ON stock_movements(lot_id)`);
 
   // Migración de datos UNA vez: importa el libro viejo, siembra saldos iniciales y archiva.

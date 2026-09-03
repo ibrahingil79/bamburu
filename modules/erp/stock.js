@@ -153,15 +153,20 @@ export function isReversed(db, movementId) {
 // (salidas, aperturas, ajustes, reversiones) → el WAC lo cuenta como coste 0.
 // lot_id OPCIONAL (Pilar 3 · trazabilidad): la unidad de traza (lote/serie) de este movimiento. NULL en
 // productos sin traza (tracking='none') — que es todo hasta que el dueño active la traza en un producto.
+// created_by OPCIONAL (3 sep 2026): el id de quien lo movió. NULL en lo automático (una recepción,
+// una venta) y en todo lo anterior a esa fecha. **El saldo no depende de él**: la suma del libro es la
+// misma con o sin esta columna. Existe para poder responder «¿quién puso estas 20 unidades?» sin
+// cruzar con `activity_logs`, que es otra tabla y puede no tener el apunte.
 export function recordMovement(db, m) {
   const wid = m.warehouse_id || defaultWarehouseId(db);
   const res = db.prepare(
-    `INSERT INTO stock_movements (product_id, warehouse_id, type, quantity, reason, origin_type, origin_id, reverses_movement_id, note, unit_cost, created_at, lot_id)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`
+    `INSERT INTO stock_movements (product_id, warehouse_id, type, quantity, reason, origin_type, origin_id, reverses_movement_id, note, unit_cost, created_at, lot_id, created_by)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`
   ).run(m.product_id, wid, m.type, m.quantity, m.reason || null, m.origin_type || null,
         m.origin_id || null, m.reverses_movement_id || null, m.note || null,
         m.unit_cost == null ? null : m.unit_cost, m.created_at || nowStr(),
-        m.lot_id == null ? null : m.lot_id);
+        m.lot_id == null ? null : m.lot_id,
+        m.created_by == null ? null : Number(m.created_by));
   recomputeStock(db, m.product_id);
   return res.lastInsertRowid;
 }
@@ -217,6 +222,9 @@ export function adjustStock(db, productId, { mode, value, reason, note, warehous
   const movement_id = recordMovement(db, {
     product_id: productId, type: 'ajuste', quantity: delta, reason,
     origin_type: 'manual', note: note || null, warehouse_id: wid, created_at: opts.created_at,
+    // Quien ajusta queda EN EL MOVIMIENTO, no solo en el registro de actividad. Lo pasa quien llama
+    // (la pantalla o DISA) desde su sesión; si no lo pasa, queda NULL y no se inventa nadie.
+    created_by: opts.userId == null ? null : opts.userId,
   });
   return { stock: productStockInWarehouse(db, productId, wid), warehouse_id: wid, movement_id, delta };
 }
