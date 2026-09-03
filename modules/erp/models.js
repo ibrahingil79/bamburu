@@ -2658,6 +2658,25 @@ export function runMigrations(db) {
       ON disa_conversation_threads(updated_at DESC);
   `);
 
+  // ⚙️ 3 SEP 2026 — `pinned` LLEVABA AQUÍ FUERA DESDE QUE SE ESCRIBIÓ, Y LA LISTA DE CONVERSACIONES
+  // DE DISA ESTABA MUERTA EN TODOS LOS NEGOCIOS MENOS UNO.
+  //
+  // La columna se añadía en `modules/disa/index.js`, dentro de `register(app, db)`:
+  //     try { db.prepare('ALTER TABLE ... ADD COLUMN pinned ...').run(); } catch {}
+  // `register` corre UNA vez al arrancar y el `db` que recibe es el PROXY por tenant de
+  // `core/db.js`, que fuera de una petición LANZA. O sea: ese ALTER no se ejecutó nunca — el
+  // `catch {}` vacío se comía el error en cada arranque, en silencio.
+  //
+  // Coste medido el 3 sep 2026: de 87 bases con la tabla, **86 no tenían la columna** —
+  // `peluqueria-gil`, `duniya` y `rachibra` entre ellas—, y `GET /api/disa/threads` pide
+  // `t.pinned`: HTTP 500 y lista vacía. Solo funcionaba en `desarrollo-bamburu`, donde la columna
+  // se había añadido a mano, que es justo por lo que nadie lo veía.
+  //
+  // Aquí sí corre: `runMigrations` se dispara con la primera petición de CADA negocio. Aditiva, con
+  // su valor por defecto — no toca ni un dato. Lo destapó `gate-disa-borrado-conversaciones` al
+  // pedir la pantalla en un negocio recién nacido, que es el estado en el que vive todo el mundo.
+  addCol(db, 'disa_conversation_threads', 'pinned', 'INTEGER DEFAULT 0');
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS disa_quick_chips (
       user_id INTEGER PRIMARY KEY,

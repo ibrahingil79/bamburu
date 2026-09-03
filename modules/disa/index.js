@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { safeError } from '../../core/errors.js';
 import { bodyLimit } from 'hono/body-limit';
 import { adminAuth, getCsrfToken, requirePerm } from '../../core/auth.js';
+import { csrfProtect } from '../../core/csrf.js';   // solo sobre lo que BORRA de verdad; ver borrarConversaciones()
 import { checkPermission } from '../../core/permission-check.js';   // Permisos · Paso 2 — MISMO motor que requirePerm (sin lógica paralela), incluido el bypass owner/admin, desde el 31 ago 2026
 import { adminLayout } from '../erp/layout.js';
 // `generateInvoice` ya no se importa: era el puente pedido-viejo→factura (create_invoice_from_order),
@@ -225,7 +226,11 @@ export function register(app, db) {
   const router = new Hono();
 
   // ── Schema migrations ─────────────────────────────────────
-  try { db.prepare('ALTER TABLE disa_conversation_threads ADD COLUMN pinned INTEGER DEFAULT 0').run(); } catch {}
+  // La columna `pinned` se añadía AQUÍ y no se añadía nunca: `register` corre una vez al arrancar y
+  // este `db` es el proxy por tenant de `core/db.js`, que fuera de una petición lanza — el
+  // `catch {}` vacío se lo tragaba en cada arranque. Resultado: 86 de 87 negocios sin la columna y
+  // `GET /threads` dando 500. Vive donde viven las migraciones de este producto, en
+  // `runMigrations` (`modules/erp/models.js`), que sí corre por negocio.
 
   // ── Helpers ──────────────────────────────────────────────
 
@@ -271,6 +276,58 @@ export function register(app, db) {
       conv = db.prepare('SELECT * FROM disa_conversations WHERE id=?').get(r.lastInsertRowid);
     }
     return conv;
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  // BORRAR CONVERSACIONES DE VERDAD — la única puerta, y no sabe borrar sin dueño
+  //
+  // DE DÓNDE SALE (AUD-002, comprobado vivo el 2 sep 2026): `POST /clear` hacía
+  // `DELETE FROM disa_conversations` A SECAS. Una sola llamada de cualquiera con sesión —también un
+  // empleado— se llevaba el historial del NEGOCIO ENTERO, y con él la constancia de las decisiones
+  // que se tomaron hablando con DISA. No la llamaba ninguna pantalla: era una ruta viva por HTTP y
+  // muerta en el producto, que es lo que la hacía peor — nadie la habría echado de menos.
+  //
+  // Y LA OTRA MITAD, que no estaba en la ficha y salió al mirar: la papelera de cada conversación
+  // NO BORRABA NADA. Hacía `is_active=0` sobre el hilo y dejaba los mensajes enteros en
+  // `disa_conversations`. Medido en `desarrollo-bamburu` el 3 sep 2026: **62 de las 105** filas
+  // colgaban de hilos ya «borrados», y el dueño tenía **58 hilos ocultos con sus 61 conversaciones
+  // intactas**. Para él ese botón se pulsó 58 veces sin borrar un solo mensaje.
+  //
+  // LAS TRES REGLAS QUE IMPONE ESTA FUNCIÓN, y por eso el borrado pasa por aquí o no pasa:
+  //   1. **SIEMPRE por usuario.** `disa_conversations` no tiene `user_id`: el dueño solo se sabe
+  //      saltando por `thread_id → disa_conversation_threads.user_id`. Ese salto está aquí dentro y
+  //      no hay forma de llamar a esto sin dueño — sin `userId` entero no se borra NADA.
+  //   2. **Los mensajes primero, el hilo después, y en una transacción.** Al revés, si el borrado
+  //      del hilo pasa y el de los mensajes falla, quedan mensajes sin dueño e imposibles de
+  //      alcanzar. Medio borrado es peor que ninguno.
+  //   3. **Se lleva también lo ya oculto** (`is_active=0`). Si no, «borrado real» sería mentira
+  //      justo para las 62 filas que el usuario cree borradas desde hace meses.
+  //
+  // LO QUE NO TOCA, Y ES A PROPÓSITO: `disa_usage` y `disa_spend` (si borrar reseteara la cuota,
+  // borrar sería la forma de saltarse el tope de IA), `disa_action_audit` y `activity_logs` (rastro
+  // del negocio: que se ejecutara una acción es un hecho, no una charla) y los adjuntos (cuelgan de
+  // la compra, no del chat). El detalle, tabla por tabla, en
+  // `docs/seguridad/disa-borrado-conversaciones-diagnostico.md`.
+  function borrarConversaciones(db, userId, threadId = null) {
+    const uid = Number(userId);
+    if (!Number.isInteger(uid) || uid <= 0) return { mensajes: 0, hilos: 0 };
+    const unSoloHilo = threadId != null;
+    const hilo = Number(threadId);
+    if (unSoloHilo && (!Number.isInteger(hilo) || hilo <= 0)) return { mensajes: 0, hilos: 0 };
+    // LAS CUATRO SENTENCIAS VAN ESCRITAS ENTERAS, sin armar el WHERE con una variable. Cuesta
+    // cuatro líneas más, y a cambio el filtro por `user_id` **se lee en el propio SQL**: es lo que
+    // puede comprobar `scripts/censo-borrado-sin-filtro.mjs` y lo que puede leer quien audite esto
+    // dentro de un año. Un WHERE que llega desde otra línea es justo el que nadie revisa — la
+    // primera versión de esta función lo hacía así y el censo la cazó a ella, que para eso está.
+    return db.transaction(() => {
+      const msg = unSoloHilo
+        ? db.prepare('DELETE FROM disa_conversations WHERE thread_id IN (SELECT id FROM disa_conversation_threads WHERE user_id=? AND id=?)').run(uid, hilo)
+        : db.prepare('DELETE FROM disa_conversations WHERE thread_id IN (SELECT id FROM disa_conversation_threads WHERE user_id=?)').run(uid);
+      const hil = unSoloHilo
+        ? db.prepare('DELETE FROM disa_conversation_threads WHERE user_id=? AND id=?').run(uid, hilo)
+        : db.prepare('DELETE FROM disa_conversation_threads WHERE user_id=?').run(uid);
+      return { mensajes: msg.changes, hilos: hil.changes };
+    })();
   }
 
   function getProfile(db) {
@@ -1695,6 +1752,19 @@ export function register(app, db) {
     </div>
     <div id="dtList" style="flex:1;overflow-y:auto;padding:6px 4px;display:flex;flex-direction:column;
       gap:1px;scrollbar-width:thin;scrollbar-color:rgba(58,65,80,0.18) transparent"></div>
+    <div style="padding:8px 10px;border-top:1px solid var(--border);flex-shrink:0">
+      <button id="dtBorrarTodasBtn" onclick="dtBorrarTodas()"
+        style="width:100%;background:transparent;border:1px solid var(--border);border-radius:8px;
+               padding:7px;font-size:11px;cursor:pointer;font-family:inherit;color:var(--text3);
+               display:flex;align-items:center;justify-content:center;gap:5px;transition:color .15s,border-color .15s"
+        onmouseover="this.style.color='#C0392B';this.style.borderColor='#F0CFCC'"
+        onmouseout="this.style.color='var(--text3)';this.style.borderColor='var(--border)'">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+          <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/>
+        </svg>
+        Borrar todas mis conversaciones
+      </button>
+    </div>
   </div>
 
   <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;padding:1rem 1.5rem">
@@ -1880,18 +1950,61 @@ export function register(app, db) {
     } catch(e) { console.error('[DISA] dtNewThread', e); }
   };
 
+  // Un aviso HONESTO: antes esto ocultaba y ahora borra, así que la frase tiene que decirlo. Y va
+  // DENTRO de la página (window.confirmarEnPagina), nunca con confirm(): a la segunda ventanita
+  // seguida Chrome ofrece silenciarlas y el botón se queda muerto sin decir nada — la norma de
+  // CLAUDE.md, que aquí es literal porque este botón destruye datos.
+  function dtVaciarVista() {
+    window.disaActiveThreadId = null;
+    clearChatArea();
+    showEmpty('DISA', 'Selecciona o crea una conversación');
+    var titleEl = document.getElementById('dtCurrentTitle');
+    if (titleEl) titleEl.textContent = '';
+  }
+  function dtAviso(msg, tipo) {
+    if (typeof toast === 'function') toast(msg, tipo || 'ok');
+  }
+
   window.dtDelete = async function(id) {
+    if (!await window.confirmarEnPagina({
+      titulo: 'Borrar esta conversación',
+      texto: 'Se borra de la base de datos con todos sus mensajes. NO se puede deshacer: no hay '
+           + 'papelera ni forma de recuperarla después.',
+      aceptar: 'Sí, borrarla', cancelar: 'No, dejarla' })) return;
     try {
-      await fetch('/api/disa/threads/' + id, { method: 'DELETE', headers: { 'x-csrf-token': csrf } });
-      if (window.disaActiveThreadId === id) {
-        window.disaActiveThreadId = null;
-        clearChatArea();
-        showEmpty('DISA', 'Selecciona o crea una conversación');
-        var titleEl = document.getElementById('dtCurrentTitle');
-        if (titleEl) titleEl.textContent = '';
-      }
+      var res = await fetch('/api/disa/threads/' + id, { method: 'DELETE', headers: { 'x-csrf-token': csrf } });
+      if (!res.ok) { dtAviso('No se ha podido borrar. Recarga la página y vuelve a intentarlo.', 'err'); return; }
+      if (window.disaActiveThreadId === id) dtVaciarVista();
       await loadThreads();
-    } catch(e) { console.error('[DISA] dtDelete', e); }
+      dtAviso('Conversación borrada');
+    } catch(e) { console.error('[DISA] dtDelete', e); dtAviso('No se ha podido borrar.', 'err'); }
+  };
+
+  // BORRAR TODAS LAS MÍAS. «Todas» son todas de verdad, incluidas las que el usuario creía borradas
+  // hace meses y seguían enteras en la base — por eso el aviso lo dice con esas palabras. Y dice
+  // también lo que NO se lleva, que es la mitad que tranquiliza: no toca a nadie más del negocio.
+  window.dtBorrarTodas = async function() {
+    if (!await window.confirmarEnPagina({
+      titulo: 'Borrar todas tus conversaciones con DISA',
+      texto: 'Se borran TODAS las tuyas de la base de datos, con sus mensajes — también las que ya '
+           + 'habías ocultado. NO se puede deshacer. No afecta a las conversaciones de nadie más del '
+           + 'negocio, ni a tus facturas, ni a lo que DISA ya hizo por ti.',
+      aceptar: 'Sí, borrarlas todas', cancelar: 'No, dejarlas' })) return;
+    var btn = document.getElementById('dtBorrarTodasBtn');
+    if (btn) btn.disabled = true;
+    try {
+      var res = await fetch('/api/disa/clear', { method: 'POST', headers: { 'x-csrf-token': csrf } });
+      if (!res.ok) { dtAviso('No se han podido borrar. Recarga la página y vuelve a intentarlo.', 'err'); return; }
+      var r = {};
+      try { r = await res.json(); } catch(_e) {}
+      dtVaciarVista();
+      await loadThreads();
+      var n = r.hilos || 0;
+      dtAviso(n === 1 ? 'Borrada 1 conversación' : 'Borradas ' + n + ' conversaciones');
+    } catch(e) {
+      console.error('[DISA] dtBorrarTodas', e);
+      dtAviso('No se han podido borrar.', 'err');
+    } finally { if (btn) btn.disabled = false; }
   };
 
   window.dtPin = async function(id) {
@@ -2081,11 +2194,20 @@ export function register(app, db) {
     return c.json({ id: thread.id, title: thread.title });
   });
 
-  router.delete('/threads/:id', adminAuth(db), c => {
+  // BORRA UNA CONVERSACIÓN — la del que la pide, y de verdad.
+  //
+  // Antes hacía `is_active=0`: ocultaba el hilo y dejaba los mensajes en la base para siempre. El
+  // usuario pulsaba «Eliminar», la conversación desaparecía de la lista y su texto seguía entero.
+  // Ahora se borra, con `csrfProtect()` delante: convertir esto en definitivo sobre una ruta que
+  // nadie protege sería agravar el agujero abierto que ya tiene DISA (tarea `disa-rutas-sin-csrf`,
+  // que sigue teniendo que cubrir TODAS las rutas de escritura — esto no la sustituye).
+  router.delete('/threads/:id', adminAuth(db), csrfProtect(), c => {
     const threadId = parseInt(c.req.param('id'));
     const session = c.get('session');
-    db.prepare('UPDATE disa_conversation_threads SET is_active=0, updated_at=CURRENT_TIMESTAMP WHERE id=? AND user_id=?').run(threadId, session?.userId || null);
-    return c.json({ ok: true });
+    if (!Number.isInteger(threadId)) return c.json({ ok: false, error: 'Conversación no válida' }, 400);
+    const r = borrarConversaciones(db, session?.userId, threadId);
+    if (!r.hilos) return c.json({ ok: false, error: 'Conversación no encontrada' }, 404);
+    return c.json({ ok: true, ...r });
   });
 
   router.post('/threads/:id/title', adminAuth(db), async c => {
@@ -2824,9 +2946,20 @@ export function register(app, db) {
     }
   });
 
-  router.post('/clear', adminAuth(db), c => {
-    db.prepare('DELETE FROM disa_conversations').run();
-    return c.json({ ok: true });
+  // BORRA TODAS LAS CONVERSACIONES DEL QUE LO PIDE. Ni una más.
+  //
+  // ⚠️ AQUÍ ESTABA AUD-002. Esta ruta hacía `DELETE FROM disa_conversations` SIN WHERE: una llamada
+  // y el negocio entero se quedaba sin historial. Era además el ÚNICO `DELETE FROM` sin filtro de
+  // todo el producto, y no la llamaba ninguna pantalla.
+  //
+  // «Global» es global PARA QUIEN PULSA, no para el negocio — es la única lectura que cumple a la
+  // vez el encargo («borrado global», con confirmación y borrado real) y el criterio del TABLERO
+  // que dice que no puede quedar ninguna ruta capaz de vaciar la tabla de golpe. El razonamiento
+  // entero, en `docs/seguridad/disa-borrado-conversaciones-diagnostico.md` §5.
+  router.post('/clear', adminAuth(db), csrfProtect(), c => {
+    const session = c.get('session');
+    const r = borrarConversaciones(db, session?.userId);
+    return c.json({ ok: true, ...r });
   });
 
   // Paso (d) · RESUMEN-PRIMERO del badge. Al pulsar el badge, en vez de lanzar una pregunta

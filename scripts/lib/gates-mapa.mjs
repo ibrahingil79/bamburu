@@ -51,6 +51,10 @@ export const RAPIDO = new Map([
   ['verify-dinero-espanol',  'el dinero y las fechas, en pantalla y en papel'],
   // Que no haya cuadros de diálogo del navegador.
   ['censo-ventanitas',       'un prompt() o un confirm() nuevo deja un botón muerto sin avisar'],
+  // Y que nadie vuelva a dejar un borrado capaz de vaciar el historial de un negocio entero. Es de
+  // la misma familia que el anterior —estático, <1 s, no escribe nada— y del mismo día que el daño:
+  // una ruta así no se descubre por el uso, porque el que la dispara no vuelve a contarlo.
+  ['censo-borrado-sin-filtro', 'un DELETE sin filtro se lleva la conversación del negocio entero (AUD-002)'],
   // Que no falte ninguna sección ni ninguna puerta.
   ['verify-menu-completo',   'una sección sin enlace es una función que nadie encuentra'],
   // Que la cadena de VERI*FACTU esté entera. Va aquí y no en el completo por su propio motivo: exige
@@ -159,6 +163,10 @@ export const GRUPOS = {
     'gate-orden-compra-c1a', 'gate-recepciones-c1b', 'gate-devoluciones-proveedor', 'gate-c2-revision',
   ],
   disa: [
+    // 3 sep 2026 · el centinela de AUD-002: va TAMBIÉN aquí porque `modules/disa` despierta a este
+    // grupo, y el borrado sin filtro vivía justo ahí. En `lint` corre siempre; aquí, cuando toca.
+    'censo-borrado-sin-filtro',
+    'gate-disa-borrado-conversaciones',
     'test-c2-captura',
     // ↓ tres que ABORTABAN por pedir la ruta de la BD por parámetro (24 ago 2026): ya arrancan
     'verify-voz', 'verify-vigia', 'verify-dibujo',
@@ -304,8 +312,12 @@ export const GRUPOS = {
   // salen != 0 cuando encuentran algo, que es todo lo que el runner necesita.
   //   · lint-plantillas    — backticks sueltos y escapes que la plantilla se come (169 ficheros, <1 s)
   //   · censo-ventanitas   — que no vuelva a colarse un prompt() o un confirm() (<1 s)
+  //   · censo-borrado-sin-filtro — que no vuelva a colarse un DELETE capaz de vaciar el historial
+  //     de conversación de un negocio entero (AUD-002, 3 sep 2026; <1 s). Se une a los tres de
+  //     arriba por el mismo motivo por el que ellos entraron: una herramienta que nadie ejecuta
+  //     deja de cazar cosas.
   //   · lint-js-servido    — pide cada pantalla y compila su JavaScript en línea (~324 pantallas)
-  lint: ['lint-plantillas', 'censo-ventanitas', 'lint-js-servido', 'verify-nombre-documentos', 'verify-menu-completo',
+  lint: ['lint-plantillas', 'censo-ventanitas', 'censo-borrado-sin-filtro', 'lint-js-servido', 'verify-nombre-documentos', 'verify-menu-completo',
          'verify-barrido-no-infla-ventas', 'verify-deuda-una-sola-cuenta',
          'verify-factura-exenta', 'test-oficio', 'verify-libro-sin-huerfanos', 'verify-contabilidad-backfill',
          // PUNTO 5 (24 ago 2026) — el dinero y las fechas, como en España. Se mide sobre lo
@@ -366,6 +378,9 @@ export const EMPIEZAN_DE_CERO = new Set([
   'gate-migracion-puerta',         // negocio nuevo: es la condición del encargo («creas uno de cero»)
   'gate-agenda-visual',            // negocio nuevo: el lienzo de la agenda
   'gate-inicio-arranque',          // negocio RECIÉN CREADO: es justo lo que prueba
+  // 3 sep 2026 — se trae DOS negocios, y no podía ser de otra forma: DESTRUYE conversaciones para
+  // demostrar que el borrado es real. Un gate que borra no se ejecuta sobre las de nadie.
+  'gate-disa-borrado-conversaciones',
   'gate-importador-csv',           // negocio nuevo: DA DE ALTA clientes y productos. En el de
                                    // desarrollo dejaría basura y le movería los totales a los
                                    // gates que exigen neto-cero.
