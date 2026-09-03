@@ -10052,7 +10052,7 @@ Texto que viene de fuera —una factura adjunta, el nombre de un producto, un me
 ## ✅ TAREA — Bamburu arranca aunque se le caiga un módulo entero
 
 - **id:** arranque-no-tolera-modulo-ausente
-- **estado:** ✅ HECHA — 3 sep 2026 · commit `PENDIENTE-HASH`
+- **estado:** ✅ HECHA — 3 sep 2026 · commit `3b78130`
 - **origen:** Auditoría de Codex, 25 ago 2026 · AUD-007 — comprobado vivo el 2 sep
 
 Si falla la importación del ERP, la tienda, DISA o el portal, el cargador solo escribe un aviso en la consola **y sigue arrancando**. El servicio queda a medias y el primero en enterarse es un cliente, no quien opera. Comprobado el 2 sep en `core/loader.js`.
