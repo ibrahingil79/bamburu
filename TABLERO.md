@@ -10132,7 +10132,7 @@ Si falla la importación del ERP, la tienda, DISA o el portal, el cargador solo 
 ## ✅ TAREA — Las copias, cifradas y con todo lo que hace falta para volver
 
 - **id:** copias-cifradas-con-entorno-y-certificados
-- **estado:** ✅ HECHA — 3 sep 2026 · commit `PENDIENTE-HASH`
+- **estado:** ✅ HECHA — 3 sep 2026 · commit `2cf81b2`
 - **origen:** Codex AUD-008 · diagnóstico de la peluquería · inventario 24 ago · tablero — la misma cosa en cuatro sitios
 
 Las copias **siguen saliendo en claro** a dos cuentas de Drive personales. Comprobado el 2 sep en el servidor: no existe `~/.config/bamburu/backup-destinos.conf`, `rclone listremotes` da solo `gdrive:` y `gdrive_gili:`, y sin ese fichero el script usa el destino en claro.
