@@ -9682,7 +9682,7 @@ demostró rojo** reintroduciendo el `UPDATE products SET … stock=?` original e
 ## ✅ TAREA — La consulta de DISA no tiene tope de filas ni plazo
 
 - **id:** disa-sql-sin-limite-ni-timeout
-- **estado:** ✅ HECHA — 3 sep 2026 · commit `PENDIENTE_HASH`
+- **estado:** ✅ HECHA — 3 sep 2026 · commit `a024c98`
 - **origen:** Auditoría de Codex, 25 ago 2026 · AUD-005 — a medias el 2 sep
 
 La mitad grave ya estaba tapada: `evaluateQueryAccess` decide por permisos qué tablas puede tocar la consulta. Lo que seguía abierto es que se ejecutaba `db.prepare(sql).all()` **sin LIMIT y sin plazo**: una consulta podía traerse una tabla entera del negocio a la memoria y al proveedor de IA, y tardar lo que quisiera.
