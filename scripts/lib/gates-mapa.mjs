@@ -75,6 +75,10 @@ export const RAPIDO = new Map([
   // Y que Bamburu ARRANQUE, que es la pregunta más básica de todas. Va en el rápido porque cuesta
   // 0,3 s y porque un arranque a medias ya pasó CINCO veces en 30 días sin que nadie se enterara.
   ['gate-arranque-modulos', '¿arranca Bamburu, o arranca a medias sin decirlo? (AUD-007)'],
+  // Y que la copia de seguridad vaya CIFRADA, sirva para VOLVER y no se lleve los secretos en claro.
+  // Corre el guion de copia DE VERDAD contra un `crypt` montado sobre una carpeta local: sin red,
+  // sin Drive, sin tocar nada del servidor. 5,6 s medidos.
+  ['gate-copias-cifradas', 'la copia: ¿va cifrada, sirve para volver, y no filtra los secretos? (AUD-008)'],
   // Que no falte ninguna sección ni ninguna puerta.
   ['verify-menu-completo',   'una sección sin enlace es una función que nadie encuentra'],
   // Que la cadena de VERI*FACTU esté entera. Va aquí y no en el completo por su propio motivo: exige
@@ -314,7 +318,7 @@ export const GRUPOS = {
   // 25 ago 2026 · Las dos del correo. `verify-correo-freno` prueba que el freno para de verdad al
   // llegar al tope; `verify-comprobaciones-sin-correo-real` vigila la norma del dueño: ninguna
   // comprobación vuelve a escribir a una bandeja real. Ver docs/censo-correos.md.
-  infra: ['gate-arranque-modulos', 'verify-correo-freno', 'verify-comprobaciones-sin-correo-real', 'verify-disco-perfiles', 'test-c6-secretos', 'gate-conciliacion-deshacer', 'verify-superadmin-escrituras', 'verify-tenant-lookup-readonly', 'verify-wal-acotado', 'verify-safe-error',
+  infra: ['gate-arranque-modulos', 'gate-copias-cifradas', 'verify-correo-freno', 'verify-comprobaciones-sin-correo-real', 'verify-disco-perfiles', 'test-c6-secretos', 'gate-conciliacion-deshacer', 'verify-superadmin-escrituras', 'verify-tenant-lookup-readonly', 'verify-wal-acotado', 'verify-safe-error',
           'verify-xss-escape', 'gate-xss-escape', 'gate-csp-estricta',
           // PUNTO 2 (24 ago 2026) — dar de baja a alguien del equipo: borrar si no dejó rastro,
           // archivar si lo dejó, y decirlo ANTES de pulsar. Antes daba un 500 seco.

@@ -6082,6 +6082,21 @@ El pilar queda completo: multi-almacén + stock mínimo/punto de pedido + trazab
 - **D6 · [a verificar] XSS en páginas públicas de la tienda** (HTML guardado por admin sin escapar). La tienda está apagada de forma reversible (D1); revisar antes de reabrir en Capa 2. *(El bug de fuga de stock de `cancel_order` ya quedó resuelto al archivar `sales_orders`, D4.)*
 
 ### Deuda técnica
+- ⚠️ **319 copias antiguas siguen EN CLARO en Drive, y ya no caducan solas (3 sep 2026, AUD-008).**
+  Al pasar el destino a cifrado, la retención de 14 días apunta al destino nuevo: **el histórico en
+  claro del destino anterior (`gdrive:Bamburu-backup/daily`) no lo toca nadie ya**. Son copias reales
+  de los negocios, en dos Drive personales, sin cifrar y **permanentes**.
+  **Cómo se retira, y está construido y probado:** `bash scripts/cifrar-copias-de-seguridad.sh
+  --migrar-historico` (simulacro) y `--hazlo` — copia al contenedor cifrado, **verifica con
+  `cryptcheck`** y solo entonces borra el original. **No se ejecutó:** borra objetos de Drive y el
+  encargo no lo autorizaba. **Esperando una orden de Ibrahin.**
+- ⚠️ **La llave de cifrado de las copias pasó por una conversación de Claude Code (3 sep 2026).** El
+  activador la enseña una vez por pantalla —es su diseño y así es como llega a Ibrahin—, pero al
+  ejecutarlo la máquina, esa pantalla fue la sesión: la llave quedó en el transcript local (mismo
+  servidor donde ya vive) **y viajó al proveedor de IA**. **Rotarla es barato AHORA** —solo hay una
+  copia subida con ella— **y caro en unos días**, porque dejaría ilegible todo lo acumulado.
+  Rotarla = borrar los dos remotes `crypt` y el fichero de destinos, y volver a ejecutar el
+  activador **en una terminal de Ibrahin, no aquí**. **Decisión suya.**
 - ⚠️ **La tienda APAGADA canta dos líneas verdes en cada arranque (3 sep 2026, AUD-007).** `modules/store`
   se importa y ejecuta su `register`, pero el montaje de `/store` y `/api/store` está comentado desde
   D1 —a propósito y de forma reversible—, así que **no monta ni una ruta** y `/store` devuelve 404
@@ -9561,10 +9576,11 @@ escenarios y los dos casos incómodos, con relojes de prueba de Stripe) ·
 > EL 3 SEP 2026, MÁS TARDE: `disa-prompt-injection-defensas` también está HECHA.** Con ella van
 > **SEIS** cerradas hoy, **y con eso NO se cierra el BLOQUE 2**.
 > **⚙️ Y OTRA VEZ MÁS TARDE, EL MISMO DÍA: `arranque-no-tolera-modulo-ausente` también está HECHA —
-> van SIETE.** El bloque tiene **16 fichas**, de las que van **8 hechas** (las siete de hoy +
-> `manifiesto-huellas-backups`) y **quedan 8 PENDIENTES**. Contado sobre el documento con las marcas
+> van SIETE.** **⚙️ Y OCHO, con `copias-cifradas-con-entorno-y-certificados`** (las copias ya salen
+> cifradas). El bloque tiene **16 fichas**, de las que van **9 hechas** (las ocho de hoy +
+> `manifiesto-huellas-backups`) y **quedan 7 PENDIENTES**. Contado sobre el documento con las marcas
 > de sección, no de memoria ni con números de línea. **La siguiente es
-> `copias-cifradas-con-entorno-y-certificados`**, que sigue siendo del BLOQUE 2.
+> `restauracion-prueba-el-sistema-entero`**, que sigue siendo del BLOQUE 2.
 > Se tacha en vez de borrarse, que es lo que manda este
 > documento — y porque un puntero rancio manda al siguiente chat al sitio equivocado con toda la
 > confianza del mundo.
@@ -10113,10 +10129,10 @@ Si falla la importación del ERP, la tienda, DISA o el portal, el cargador solo 
 >
 > 📖 Diagnóstico y resultados: `docs/arranque/modulos-diagnostico.md`.
 
-## TAREA — Las copias, cifradas y con todo lo que hace falta para volver
+## ✅ TAREA — Las copias, cifradas y con todo lo que hace falta para volver
 
 - **id:** copias-cifradas-con-entorno-y-certificados
-- **estado:** pendiente
+- **estado:** ✅ HECHA — 3 sep 2026 · commit `PENDIENTE-HASH`
 - **origen:** Codex AUD-008 · diagnóstico de la peluquería · inventario 24 ago · tablero — la misma cosa en cuatro sitios
 
 Las copias **siguen saliendo en claro** a dos cuentas de Drive personales. Comprobado el 2 sep en el servidor: no existe `~/.config/bamburu/backup-destinos.conf`, `rclone listremotes` da solo `gdrive:` y `gdrive_gili:`, y sin ese fichero el script usa el destino en claro.
@@ -10129,12 +10145,56 @@ Hoy los datos son de prueba y no expone nada real. **Con un cliente dentro, expo
 
 **Criterios de aceptación**
 
-- [ ] Las dos copias suben **cifradas**, con **contenido y nombres** de fichero y de carpeta cifrados.
-- [ ] La copia incluye **`/etc/bamburu.env` y los certificados**, de modo que se puede levantar el sistema entero desde ella.
-- [ ] La llave vive en el servidor con permisos `600` y **una copia se le enseña a Ibrahin por pantalla, una sola vez**.
-- [ ] **En ningún momento el código exige cifrado sin que el destino cifrado exista.**
-- [ ] La comprobación nocturna **descifra de verdad** y compara byte a byte; no vale con mirar que el fichero está.
-- [ ] Una sola pieza sirve las dos copias: el script no se duplica.
+- [x] Las dos copias suben **cifradas**, con **contenido y nombres** de fichero y de carpeta cifrados. → las dos lanzadas hoy: **16 artefactos cada una, `CIFRADO`**; en crudo los nombres son `b3uripo95380lei…`
+- [x] La copia incluye **`/etc/bamburu.env` y los certificados**, de modo que se puede levantar el sistema entero desde ella. → `entorno-<fecha>.tar.gz`, **y Bamburu arrancó con ellos**
+- [x] La llave vive en el servidor con permisos `600` y **una copia se le enseña a Ibrahin por pantalla, una sola vez**. → `~/.config/rclone/rclone.conf` 600; enseñada una vez (ver §aviso)
+- [x] **En ningún momento el código exige cifrado sin que el destino cifrado exista.** → el fichero de destinos lo escribe el activador **después** del ensayo real
+- [x] La comprobación nocturna **descifra de verdad** y compara byte a byte. → `cryptcheck` + descarga y `cmp` de cada artefacto
+- [x] Una sola pieza sirve las dos copias: el script no se duplica. → comprobado por el gate sobre las units
+
+> ### 🔐 QUÉ SE HIZO — y lo que la prueba destapó por el camino
+>
+> **1 · El cifrado, encendido** (orden de Ibrahin, 3 sep 2026). El activador hizo su ensayo real en
+> las dos cuentas —subir, bajar, comparar byte a byte y mirar el destino en crudo— **y solo entonces**
+> cambió el destino. **Las dos copias de hoy: 16 artefactos cada una, cifradas y verificadas.**
+>
+> **2 · La copia ya sirve para VOLVER, no solo para recuperar datos.** Nuevo `entorno-<fecha>.tar.gz`
+> con `/etc/bamburu.env`, la carpeta de certificados y un `LEEME-PARA-VOLVER.txt` dentro.
+>
+> **3 · ⚠️ El cerrojo que separa una copia de una filtración.** `/etc/bamburu.env` guarda
+> `STRIPE_SECRET_KEY`, `ANTHROPIC_API_KEY`, `RESEND_API_KEY` y `NOTION_TOKEN`. **El entorno y los
+> certificados SOLO viajan si el destino es `crypt`.** El guion sabe volver a claro a propósito —para
+> no quedarse sin copia—, y en ese caso la copia sale igual, con los datos, **sin secretos, y lo dice**.
+>
+> **4 · Los certificados: hoy no hay ninguno, y eso no rompe nada.** Carpeta canónica `~/.secrets`
+> (la que ya decía la documentación de Verifactu), creada **vacía** con permisos 700 y **siempre**
+> incluida. El día que aparezca un `.p12` entra solo. **No se ha inventado ningún certificado.**
+>
+> **5 · Un fallo de copia ya no se queda callado.** Antes avisaba por correo y por healthchecks; si el
+> correo **no salía**, eso moría en un `WARN:` del log — la misma avería que arregló el cierre 7.
+> Ahora avisa también por Telegram, **reutilizando el transporte del cierre 7**: se extrajo a
+> `core/telegram-servidor.js` en vez de copiarlo, para que no haya dos sitios que lean el secreto.
+>
+> **6 · La vuelta, probada de verdad en el servidor.** Restaurados del Drive cifrado `control.db` y
+> `desarrollo-bamburu` (**212 clientes, 928 facturas**), Bamburu **levantó** y sirvió
+> `/admin/login` del negocio restaurado con **HTTP 200**. Y el entorno bajado del Drive es
+> **idéntico byte a byte** al del servidor.
+>
+> **⚠️ Y el primer intento NO arrancó**, con `Missing API key … new Resend(...)`: sin
+> `/etc/bamburu.env` el ERP no carga y, desde el cierre 7, **Bamburu se niega a arrancar y lo dice**.
+> Es exactamente la diferencia entre «tener los datos» y «poder volver» — la razón de esta ficha,
+> demostrada sin querer.
+>
+> **7 · Los dos rojos, sobre el Drive de verdad.** Con la llave equivocada: `Failed to lsf` y **0
+> ficheros sacados**. Un objeto bajado en crudo empieza por `RCLONE\0\0` y no contiene ni `STRIPE`
+> ni `SQLite` ni `bamburu`.
+>
+> **8 · `gate-copias-cifradas`, 28 ✓ · 0 ✗** (`infra` + RAPIDO, 5,6 s). **Ejecuta el guion de copia
+> de verdad** contra un `crypt` local —sin red y sin tocar el servidor— y **mira los bytes del
+> destino** buscando un canario. **Probado en rojo cuatro veces.**
+>
+> 📖 `docs/copias/volver-del-todo.md` (el procedimiento) · `docs/copias/cifrado-y-vuelta-diagnostico.md`.
+
 
 ## TAREA — La prueba de restauración no levanta el sistema, solo abre las bases
 

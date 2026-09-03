@@ -25,15 +25,13 @@
 // ─────────────────────────────────────────────────────────────────────────────────────────────────
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { enviar } from '../orchestrator/vigia/telegram.js';
+import { mandarTelegram } from './telegram-servidor.js';
 
-const ENV_ORQUESTADOR = '/etc/orquestador.env';
-const CONFIG_ORQUESTADOR = 'orchestrator/orquestador.config.json';
-
-// El plazo del envío. Corto A PROPÓSITO: esto corre mientras el arranque está muriéndose, y nadie
-// debe esperar veinte segundos a que Telegram conteste para enterarse de que Bamburu no levanta.
-// El orquestador usa 20 s porque allí no hay ningún proceso esperando para morirse.
-const PLAZO_MS = 5000;
+// ⚙️ 3 SEP 2026 (AUD-008) — EL TRANSPORTE SE MUDÓ. Leer las credenciales, montar la configuración y
+// enviar con plazo vivía aquí dentro. La tarea de las copias necesitaba exactamente lo mismo para
+// avisar de una copia fallida, y copiarlo habría sido un camino paralelo: dos sitios que leen el
+// mismo secreto y dos formas distintas de dejar de funcionar. Está en `core/telegram-servidor.js`.
+// Aquí se queda lo que SÍ es del arranque: el freno de repetición y el texto del aviso.
 
 // EL FRENO DEL BUCLE DE AVISOS. `systemctl show bamburu` dice hoy: Restart=on-failure, RestartSec=3,
 // StartLimitBurst=5 en StartLimitIntervalUSec=10s. O sea que **el bucle de arranques ya lo acota
@@ -43,36 +41,7 @@ const PLAZO_MS = 5000;
 const VENTANA_AVISO_MS = 10 * 60 * 1000;
 const ESTADO = 'data/estado-arranque.json';   // junto a `tiempos-gates.json`: `data/` ya es el sitio del estado
 
-/** Lee un fichero de entorno del disco. Nunca lanza y NUNCA devuelve el valor a ningún registro. */
-function leerEnvDeDisco(ruta) {
-  const out = {};
-  let texto;
-  try { texto = readFileSync(ruta, 'utf8'); } catch { return out; }
-  for (const linea of texto.split('\n')) {
-    const l = linea.trim();
-    if (!l || l.startsWith('#')) continue;
-    const i = l.indexOf('=');
-    if (i <= 0) continue;
-    let v = l.slice(i + 1).trim();
-    if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) v = v.slice(1, -1);
-    out[l.slice(0, i).trim()] = v;
-  }
-  return out;
-}
 
-/**
- * Los NOMBRES de las variables salen de la configuración del orquestador, no se teclean aquí: si
- * alguien las renombra allí, esto lo sigue. Si el fichero no se puede leer, se devuelve `null` y el
- * aviso se queda sin mandar — pero el arranque falla igual, que es lo que importa.
- */
-function configDeTelegram(raiz) {
-  try {
-    const c = JSON.parse(readFileSync(join(raiz, CONFIG_ORQUESTADOR), 'utf8'));
-    const t = c?.vigia?.telegram;
-    if (!t?.tokenEnv || !t?.chatIdEnv) return null;
-    return { vigia: { telegram: { ...t, timeoutMs: PLAZO_MS } } };
-  } catch { return null; }
-}
 
 /** ¿Toca avisar, o este mismo fallo ya se avisó hace nada? Ante la duda, SE AVISA. */
 function tocaAvisar(raiz, clave, ahora) {
@@ -130,24 +99,7 @@ export async function avisarArranqueRoto({ modulo, esencial, error, raiz = proce
     return { enviado: false, motivo: 'no se repite: el mismo fallo ya se avisó hace menos de ' + (VENTANA_AVISO_MS / 60000) + ' min' };
   }
 
-  const config = configDeTelegram(raiz);
-  if (!config) return { enviado: false, motivo: 'sin configuración de Telegram (' + CONFIG_ORQUESTADOR + ' ilegible)' };
-
-  // El entorno del proceso manda; el fichero del orquestador es el respaldo.
-  const entorno = { ...leerEnvDeDisco(ENV_ORQUESTADOR), ...process.env };
-
-  const texto = textoDeAviso({ modulo, esencial, error });
-
-  let r;
-  try {
-    // Doble cinturón: `enviar` ya trae su propio plazo, pero si algo lo dejara colgado, el arranque
-    // NO puede quedarse esperando a morirse.
-    r = await Promise.race([
-      enviar({ texto, config, entorno }),
-      new Promise((res) => setTimeout(() => res({ ok: false, motivo: 'plazo agotado esperando a Telegram' }), PLAZO_MS + 500)),
-    ]);
-  } catch (e) { r = { ok: false, motivo: 'el envío falló: ' + (e?.message || e) }; }
-
-  if (r?.ok) { anotarAviso(raiz, clave, ahora); return { enviado: true, motivo: 'avisado por Telegram' }; }
-  return { enviado: false, motivo: r?.motivo || 'no se pudo avisar' };
+  const r = await mandarTelegram({ texto: textoDeAviso({ modulo, esencial, error }), raiz });
+  if (r.ok) { anotarAviso(raiz, clave, ahora); return { enviado: true, motivo: r.motivo }; }
+  return { enviado: false, motivo: r.motivo };
 }

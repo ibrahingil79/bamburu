@@ -98,6 +98,7 @@ MANIFIESTO="$STATE_DIR/manifiesto$SUFFIX.jsonl"
 MANIF_ESTADO="$STATE_DIR/manifiesto$SUFFIX.estado.json"
 MANIFHELPER="$APP_DIR/scripts/lib/manifiesto-copias.mjs"
 MAILTO="ibrahingil@gmail.com"
+TELEGRAM_CLI="${TELEGRAM_CLI:-$APP_DIR/scripts/avisar-telegram.mjs}"
 MAILFROM="Bamburu <noreply@bamburu.com>"
 
 # Dead-man's-switch: la copia SECUNDARIA no debe pingear el mismo check que la
@@ -132,6 +133,22 @@ hc_ping(){  # $1 = "" éxito | "/fail" fallo | "/start" inicio
   curl -fsS -m 20 --retry 3 "${HC_URL}${1:-}" -o /dev/null 2>/dev/null || log "WARN: ping healthchecks falló (${1:-ok})"
 }
 
+# AUD-008, 3 sep 2026 — EL AVISO A TELEGRAM, con el mismo criterio que el arranque (cierre 7).
+# Antes un fallo avisaba por correo y por healthchecks. El correo esta bien, pero si NO SALE,
+# `send_email` lo deja en un `WARN:` del log y devuelve 0 — un fallo de aviso que solo vive en un
+# registro que no lee nadie, que es justo la averia que arreglo el cierre 7. Telegram es el canal
+# que Ibrahin mira. Se reutiliza el transporte compartido (core/telegram-servidor.js): NO hay un
+# segundo sitio que lea credenciales.
+#
+# El texto va por STDIN, nunca por argumentos: lo que va en la linea de comandos se ve en `ps`.
+# Y nunca aborta: `|| true`. Quien avisa de una averia no puede convertirse en la averia.
+avisar_telegram(){  # $1 = texto
+  local salida
+  if [ ! -r "$TELEGRAM_CLI" ]; then log "WARN: no encuentro $TELEGRAM_CLI, no se avisa por Telegram"; return 0; fi
+  salida="$(printf '%s' "$1" | "$NODE" "$TELEGRAM_CLI" 2>&1 || true)"
+  log "telegram: $salida"
+}
+
 fail_exit(){
   local msg="$1"
   log "FALLO: $msg"
@@ -142,6 +159,14 @@ Destino: $REMOTE — $MODO
 
 --- log ---
 $LOGBUF"
+  # El aviso al movil va DESPUES del correo y ANTES del ping: si el proceso muriera aqui, el
+  # dead-man's-switch de healthchecks salta igual por no recibir el ping de exito.
+  avisar_telegram "🛑 <b>COPIA DE SEGURIDAD FALLIDA</b> [$LABEL]
+Fecha: $DATE · $HOST
+Destino: $REMOTE — $MODO
+Falló en: <code>$(printf '%s' "$msg" | tr '<>&' '   ' | cut -c1-300)</code>
+
+Sin copia buena de hoy. Revísalo antes de que la retención vuelva a intentarlo."
   hc_ping "/fail"
   exit 1
 }
@@ -274,6 +299,86 @@ if [ -d "$DATA_DIR/uploads" ]; then
   printf '%s %s %s\n' "$uname" "$sha" "$(stat -c%s "$utar")" >> "$ARTEFACTOS"
   SUMMARY+="  • $uname ($(du -h "$utar" | awk '{print $1}')) — subido, verificado y restore OK — sha256 $sha"$'\n'
   uploaded=$((uploaded+1))
+fi
+
+# --- EL ENTORNO Y LOS CERTIFICADOS -> tar.gz -------------------------------------
+# AUD-008, 3 sep 2026. Sin esto la copia servia para recuperar DATOS pero no para VOLVER:
+# tras una perdida total habria 87 bases de datos y nada con que levantarlas — ni la
+# configuracion del servidor ni los certificados con los que se firma ante Hacienda.
+#
+# ⚠️ EL CERROJO, Y ES LO MAS IMPORTANTE DE ESTE BLOQUE: esto SOLO viaja si el destino va
+# CIFRADO. /etc/bamburu.env contiene hoy ANTHROPIC_API_KEY, STRIPE_SECRET_KEY,
+# STRIPE_WEBHOOK_SECRET, RESEND_API_KEY y NOTION_TOKEN: subirlo en claro a dos Drive
+# personales seria regalar las llaves del negocio. El script sabe volver a claro a
+# proposito —para no quedarse sin copia si el destino cifrado desaparece—, y en ese caso
+# la copia sale igual, con los datos, PERO SIN SECRETOS, y lo dice en el log y en el correo.
+# No es una comprobacion de cortesia: es la diferencia entre una copia y una filtracion.
+#
+# LOS CERTIFICADOS: hoy NO hay ninguno (el .p12 del dueno se borro a proposito tras las
+# pruebas de julio). La carpeta se incluye VACIA si hace falta —crear una carpeta no es
+# inventar un certificado— para que el dia que aparezca uno entre en la copia sin que
+# nadie tenga que acordarse. La ruta sigue a VERIFACTU_CERT_DIR si esta definida, que es
+# lo que lee el codigo (certPathForTenant, modules/erp/verifactu-envio.js).
+CERT_DIR="${VERIFACTU_CERT_DIR:-$HOME/.secrets}"
+ENV_FILE="${BACKUP_ENV_FILE:-/etc/bamburu.env}"
+
+if [ "$DESTINO_ES_CRYPT" != 1 ]; then
+  log "entorno+certificados: NO se incluyen — el destino es EN CLARO y ahí no viajan secretos"
+  SUMMARY+="  • entorno y certificados — ⚠️ NO incluidos: el destino no va cifrado"$'\n'
+else
+  ename="entorno-${DATE}.tar.gz"
+  etar="$TMPDIR/$ename"
+  ESTAGE="$TMPDIR/entorno"
+  rm -rf "$ESTAGE"; mkdir -p "$ESTAGE/certificados"; chmod 700 "$ESTAGE"
+
+  # El entorno. Si no se puede leer es un FALLO, no un aviso: una copia sin el no sirve
+  # para volver, y dar por buena una copia incompleta es justo lo que esta tarea arregla.
+  [ -r "$ENV_FILE" ] || fail_exit "no se puede leer $ENV_FILE y sin él la copia no permite volver"
+  cp -p "$ENV_FILE" "$ESTAGE/bamburu.env" || fail_exit "copiando $ENV_FILE"
+
+  # Los certificados. La carpeta se crea si no existe, y se copia este vacia o llena.
+  mkdir -p "$CERT_DIR" && chmod 700 "$CERT_DIR" 2>/dev/null || true
+  NCERT=0
+  if [ -d "$CERT_DIR" ]; then
+    cp -a "$CERT_DIR"/. "$ESTAGE/certificados/" 2>/dev/null || true
+    NCERT="$(find "$ESTAGE/certificados" -type f | wc -l)"
+  fi
+  log "entorno+certificados: $(basename "$ENV_FILE") + $NCERT fichero(s) de $CERT_DIR"
+
+  # Un recordatorio DENTRO de la copia: quien la abra dentro de dos anos no tiene por que
+  # saber que hace falta la llave de rclone ni donde esta el procedimiento.
+  cat > "$ESTAGE/LEEME-PARA-VOLVER.txt" <<LEEME
+Copia de seguridad de Bamburu — $DATE ($HOST)
+
+Aqui dentro esta lo que NO son datos y hace falta para levantar el sistema:
+  bamburu.env      -> va a /etc/bamburu.env con permisos 600 (dueno: ubuntu)
+  certificados/    -> va a ~/.secrets con permisos 700 (los .p12, 600)
+
+Las bases de datos viajan aparte, en este mismo destino, una por negocio.
+El procedimiento completo y en orden: docs/copias/volver-del-todo.md, en el repositorio.
+
+La llave de cifrado NO esta aqui dentro y no puede estarlo: sin ella no habrias
+podido leer esto. Vive en el gestor de contrasenas de Ibrahin.
+LEEME
+
+  tar -czf "$etar" -C "$ESTAGE" . || fail_exit "tar del entorno y los certificados"
+  chmod 600 "$etar"
+  log "subiendo $ename"
+  "$RCLONE" copy "$etar" "$REMOTE/" 2>&1 | sed 's/^/    /' || true
+  verify_uploaded "$etar" "$ename" || fail_exit "verificación de subida de $ename"
+  log "restore-test: descarga + comparación byte a byte + tar -tzf de $ename"
+  "$RCLONE" copy "$REMOTE/$ename" "$RDIR/" 2>/dev/null || fail_exit "descarga de restore de $ename"
+  verify_restored "$etar" "$RDIR/$ename" || fail_exit "el restore de $ename no es idéntico al original"
+  tar -tzf "$RDIR/$ename" >/dev/null 2>&1 || fail_exit "el tar del entorno no es válido tras restore"
+  # Y que lo que vuelve traiga DE VERDAD el entorno: un tar valido y vacio pasaria lo de arriba.
+  tar -tzf "$RDIR/$ename" 2>/dev/null | grep -q '\./bamburu\.env$' \
+    || fail_exit "el tar del entorno no contiene bamburu.env"
+  rm -f "$RDIR/$ename"
+  sha="$(sha256sum "$etar" | awk '{print $1}')"
+  printf '%s %s %s\n' "$ename" "$sha" "$(stat -c%s "$etar")" >> "$ARTEFACTOS"
+  SUMMARY+="  • $ename ($(du -h "$etar" | awk '{print $1}')) — entorno + $NCERT certificado(s), subido, verificado y restore OK — sha256 $sha"$'\n'
+  uploaded=$((uploaded+1))
+  rm -rf "$ESTAGE"
 fi
 
 [ "$uploaded" -gt 0 ] || fail_exit "no se subió ningún archivo"
