@@ -9970,7 +9970,7 @@ frases ambiguas **el cliente no cambia** y con un «sí» limpio **sí cambia**.
 ## TAREA — Prompt injection: qué defensas hay y cuáles faltan
 
 - **id:** disa-prompt-injection-defensas
-- **estado:** HECHA (3 sep 2026) · commit `PENDIENTE-HASH`
+- **estado:** ✅ HECHA — 3 sep 2026 · commit `e03b4bc`
 - **origen:** Auditoría de Codex, 25 ago 2026 · AUD-016 — NO comprobado el 2 sep
 
 Texto que viene de fuera —una factura adjunta, el nombre de un producto, un mensaje del portal— llega al modelo mezclado con sus instrucciones. **No es una casilla que se cierre**: es un riesgo permanente que se acota. Se dejó sin comprobar a propósito en vez de darlo por vivo o por cerrado.
