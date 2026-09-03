@@ -9870,7 +9870,7 @@ DISA inservible— y un montaje nuevo por fuera de la puerta.
 ## ✅ TAREA — La confirmación de DISA acepta demasiadas cosas por un «sí»
 
 - **id:** disa-confirmacion-textual-estricta
-- **estado:** ✅ HECHA — 3 sep 2026 · commit `PENDIENTE_HASH` · **CERRADA CON PRUEBA: el hallazgo NO estaba vivo**
+- **estado:** ✅ HECHA — 3 sep 2026 · commit `1951722` · **CERRADA CON PRUEBA: el hallazgo NO estaba vivo**
 - **origen:** Auditoría de Codex, 25 ago 2026 · AUD-015 — NO comprobado el 2 sep
 
 Codex encontró que la confirmación previa a una acción de DISA se da por buena con un texto demasiado permisivo. **No se había comprobado si seguía vivo.**
