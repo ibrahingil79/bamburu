@@ -9789,7 +9789,7 @@ reglas**: un camino de consulta nuevo sin declarar, y un límite escrito a mano 
 ## ✅ TAREA — Las rutas de DISA no pasan por la protección común
 
 - **id:** disa-rutas-sin-csrf
-- **estado:** ✅ HECHA — 3 sep 2026 · commit `PENDIENTE_HASH`
+- **estado:** ✅ HECHA — 3 sep 2026 · commit `ff89439`
 - **origen:** Auditoría de Codex, 25 ago 2026 · AUD-006 — comprobado vivo el 2 sep
 
 El router de DISA se montaba directo en `/admin/disa` y `/api/disa`, y **no heredaba** el `csrfProtect()` que sí llevan los routers del ERP. Con la sesión de una víctima abierta, una página ajena podía ejecutar acciones de DISA en su nombre.
