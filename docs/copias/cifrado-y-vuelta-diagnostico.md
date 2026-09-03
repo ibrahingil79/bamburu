@@ -159,3 +159,63 @@ contenido.
    `cryptcheck`** y solo entonces borra. **No se ejecuta sin orden expresa**: borra objetos de Drive.
 3. **Ningún certificado existe todavía.** La carpeta `~/.secrets` se crea vacía y viaja vacía. Es lo
    correcto y está probado, pero conviene no confundirlo con «los certificados están respaldados».
+
+---
+
+# 🔑 ROTACIÓN DE LA LLAVE (3 sep 2026, ~19:30)
+
+## 13. Por qué se rotó
+
+La llave que encendió el cifrado (§7) se mostró en una sesión de Claude Code y se dio por
+**quemada**: además de vivir en el servidor, pasó por el proveedor de IA. Se decidió rotarla el
+mismo día, antes de que hubiera más de una copia subida con ella.
+
+## 14. Cómo se rotó — quién ejecuta qué
+
+**Regla que mandó todo el proceso: Claude Code NO ejecuta el paso que genera o muestra la llave.**
+Esa salida acaba en un chat, que es justo lo que la rotación resuelve. Por eso:
+
+- **Preparado por Code (sin tocar la llave):** borrados los dos remotes `crypt` de rclone
+  (`gdrive_cif`, `gdrive_gili_cif`) y `~/.config/bamburu/backup-destinos.conf`. Comprobado con
+  `rclone lsf` sobre los remotes base que **nada de Drive se tocó** — solo configuración local.
+- **⚠️ Un despiste en el propio proceso de preparación, corregido en el acto.** Al comprobar el
+  estado tras borrar los remotes, se relanzó `cifrar-copias-de-seguridad.sh` sin argumentos como
+  si fuera una lectura de estado —lo era, minutos antes, cuando los remotes existían—. Al haberlos
+  borrado justo antes, el mismo comando generó una llave nueva de verdad, sin que nadie la
+  guardara. Detectado al momento (remotes y fichero de destinos reaparecidos) y **deshecho entero**
+  antes de escribir `ROTAR-LLAVE.txt`: vuelto a borrar todo, verificado Drive intacto. Ese incidente
+  no dejó ninguna llave en uso — la que cuenta es la que Ibrahin generó después, él mismo.
+- **`ROTAR-LLAVE.txt`**, en la raíz del repo: el comando exacto (uno solo), el aviso de que la
+  llave sale una vez por pantalla y va al gestor de contraseñas, y por dónde puede fallar
+  (en lenguaje llano, sin exigir ninguna confirmación por teclado — el guion no la pide).
+- **Ejecutado por Ibrahin, en su propia terminal.** Confirmado por él.
+
+## 15. Verificación, sin ver la llave en ningún momento
+
+Con la rotación ya hecha por Ibrahin, se lanzaron **las dos copias completas** (`bamburu-backup`
+y `bamburu-backup-secondary`) contra las dos cuentas de Drive:
+
+| Comprobación | Resultado |
+|---|---|
+| Las dos copias terminan bien | `Result=success` en las dos, **16 artefactos cada una**, destino **CIFRADO** |
+| Descargar el entorno de hoy y comparar | **idéntico byte a byte** con `/etc/bamburu.env` del servidor |
+| Descargar `desarrollo-bamburu` y comparar | `PRAGMA integrity_check` → `ok` · 212 clientes · 928 facturas |
+| Objeto en crudo de la carpeta **nueva** | binario, empieza por `RCLONE\0\0`; **0 coincidencias** con `STRIPE`, `SQLite`, `ANTHROPIC`, `bamburu.env` |
+| La carpeta **vieja** (llave quemada), vista **con la llave nueva** | rclone dice literalmente: `Skipping undecryptable dir name: bad PKCS#7 padding — too long` |
+
+**Y la prueba más limpia de todas la dio el propio rclone, sin que hiciera falta reconstruir nada:**
+con la llave nueva puesta, la carpeta de esta mañana (cifrada con la llave vieja) **no se puede ni
+listar** — el propio programa la rechaza por «nombre de directorio indescifrable». Es justo lo que
+significa «queda ilegible a propósito»: no es que nadie la vaya a mirar, es que **con la llave que
+ahora existe, no se puede**.
+
+## 16. Cuál copia cuenta
+
+**Hay dos carpetas distintas en cada cuenta de Drive**, con nombres cifrados diferentes porque la
+llave cambió (el cifrado de nombres depende de la contraseña): la de esta mañana —cifrada con la
+llave quemada, **abandonada a propósito, sin guardar su llave en ningún sitio**— y la de esta
+noche —cifrada con la llave nueva, la que Ibrahin acaba de guardar en su gestor de contraseñas—.
+
+**A partir de ahora, la única copia que cuenta es la de esta noche y las que vengan detrás.** La
+de esta mañana no se borra (borrar de Drive no estaba en el encargo, y tocar Drive no era parte de
+esta tarea) pero es papel mojado: nadie tiene la llave para abrirla, y así se queda.

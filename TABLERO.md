@@ -6109,13 +6109,24 @@ El pilar queda completo: multi-almacén + stock mínimo/punto de pedido + trazab
   --migrar-historico` (simulacro) y `--hazlo` — copia al contenedor cifrado, **verifica con
   `cryptcheck`** y solo entonces borra el original. **No se ejecutó:** borra objetos de Drive y el
   encargo no lo autorizaba. **Esperando una orden de Ibrahin.**
-- ⚠️ **La llave de cifrado de las copias pasó por una conversación de Claude Code (3 sep 2026).** El
+- ~~⚠️ **La llave de cifrado de las copias pasó por una conversación de Claude Code (3 sep 2026).** El
   activador la enseña una vez por pantalla —es su diseño y así es como llega a Ibrahin—, pero al
   ejecutarlo la máquina, esa pantalla fue la sesión: la llave quedó en el transcript local (mismo
   servidor donde ya vive) **y viajó al proveedor de IA**. **Rotarla es barato AHORA** —solo hay una
   copia subida con ella— **y caro en unos días**, porque dejaría ilegible todo lo acumulado.
   Rotarla = borrar los dos remotes `crypt` y el fichero de destinos, y volver a ejecutar el
-  activador **en una terminal de Ibrahin, no aquí**. **Decisión suya.**
+  activador **en una terminal de Ibrahin, no aquí**. **Decisión suya.**~~
+  **✅ ⚙️ CERRADO EL 3 SEP 2026 (~19:30).** Rotada. Terreno preparado por Code (borrados los dos
+  `crypt` y el fichero de destinos, sin tocar Drive) y `ROTAR-LLAVE.txt` escrito con el comando
+  exacto; **el paso que genera y enseña la llave lo ejecutó Ibrahin, en su propia terminal** — Code
+  no lo tocó. Verificado después sin ver la llave en ningún momento: las dos copias completas
+  salen **CIFRADO**, 16 artefactos cada una; lo descargado coincide **byte a byte**; un objeto en
+  crudo de la carpeta nueva es binario e ilegible; y **la carpeta vieja (llave quemada) el propio
+  rclone la rechaza ya como «nombre de directorio indescifrable»** con la llave nueva puesta —la
+  prueba de que queda ilegible a propósito, sin reconstruir nada. Un despiste durante la
+  preparación (relanzar el activador sin re-comprobar que ya había borrado los remotes, lo que
+  generó una llave de más sin que nadie la guardara) se detectó y deshizo en el acto, antes de
+  escribir `ROTAR-LLAVE.txt`; detalle completo en `docs/copias/cifrado-y-vuelta-diagnostico.md` §14.
 - ⚠️ **La tienda APAGADA canta dos líneas verdes en cada arranque (3 sep 2026, AUD-007).** `modules/store`
   se importa y ejecuta su `register`, pero el montaje de `/store` y `/api/store` está comentado desde
   D1 —a propósito y de forma reversible—, así que **no monta ni una ruta** y `/store` devuelve 404

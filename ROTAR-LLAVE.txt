@@ -1,0 +1,65 @@
+ROTAR LA LLAVE DE CIFRADO DE LAS COPIAS — 3 sep 2026
+======================================================
+
+QUÉ HA PASADO Y POR QUÉ ESTÁS LEYENDO ESTO
+-------------------------------------------
+La llave de cifrado de las copias se mostró en una sesión de Claude Code y se da por
+quemada: además de vivir en el servidor, pasó por el proveedor de IA. Se rota.
+
+El terreno ya está preparado (hecho por Code, sin tocar la llave en ningún momento):
+  - Los dos remotes cifrados de rclone (gdrive_cif, gdrive_gili_cif) están borrados.
+  - ~/.config/bamburu/backup-destinos.conf está borrado.
+  - Nada de esto ha tocado Google Drive. Es SOLO configuración local del servidor:
+    las cuentas base (gdrive:, gdrive_gili:) siguen intactas, y las copias que ya
+    subiste hoy (cifradas con la llave vieja) siguen ahí, tal cual.
+
+Con el terreno así, las copias de esta noche saldrían EN CLARO si no haces esto antes.
+
+
+EL COMANDO — UNO SOLO, EN TU TERMINAL
+---------------------------------------
+Conéctate al servidor como el usuario ubuntu y ejecuta:
+
+    bash /home/ubuntu/bamburu/scripts/cifrar-copias-de-seguridad.sh
+
+Eso es todo. No hace falta estar en ningún directorio concreto, no lleva argumentos.
+
+
+LA LLAVE — UNA SOLA VEZ, SOLO PARA TI
+----------------------------------------
+Al final, el propio comando te enseñará por pantalla una Contraseña y una Sal.
+Se muestran UNA VEZ — el guion no las vuelve a imprimir nunca más — y van
+DIRECTAS a tu gestor de contraseñas (o a un papel en un cajón, cualquier sitio
+que sobreviva a que este servidor desaparezca).
+
+NO LAS PEGUES EN NINGÚN CHAT, NI AQUÍ NI EN NINGÚN OTRO SITIO. Ese es exactamente
+el problema que se está arreglando. Cuando las hayas guardado, cierra la terminal
+sin más.
+
+
+POR DÓNDE VA — EN LENGUAJE LLANO
+------------------------------------
+No te va a pedir que confirmes nada por teclado: el comando no espera ninguna
+tecla en ningún momento, corre solo de principio a fin. Lo único que tienes que
+hacer TÚ es copiar la llave al final, antes de cerrar la terminal.
+
+Dónde puede fallar, y qué significa si falla:
+
+  · "rclone no encontrado" — no debería pasar en este servidor. Si sale, avísame.
+
+  · "EL ENSAYO HA FALLADO en 'gdrive_cif' (o 'gdrive_gili_cif')" — el comando sube
+    un archivo de prueba a tu Drive, lo baja y compara que sea idéntico. Si Google
+    Drive tiene un hipo de red en ese momento, esto puede fallar. NO ES GRAVE:
+    el comando NO toca el destino de las copias si esto falla (se deshace solo lo
+    que había creado) y se puede volver a lanzar el mismo comando sin más.
+
+  · Cualquier otro mensaje que empiece por un aviso de error — el comando se para
+    ahí mismo y no cambia nada de las copias. Es seguro relanzarlo.
+
+  · Si NO sale ningún error y al final ves "Destino cambiado" con la Contraseña y
+    la Sal por pantalla — ha ido bien. Guarda la llave y avísame.
+
+
+NO EJECUTES NADA MÁS. Yo no lo lanzo — es tu terminal, tu llave. Cuando lo hayas
+hecho, dime "ya está" y verifico que las copias salen cifradas de verdad, sin
+que yo necesite ver la llave para nada.
