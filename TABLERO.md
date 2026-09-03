@@ -6100,7 +6100,7 @@ El pilar queda completo: multi-almacén + stock mínimo/punto de pedido + trazab
   mismo comportamiento, sin duplicar la lista de secretos que no le correspondía. **Criterio de
   cierre probado de verdad**: se apartó la carpeta `orchestrator/` entera del árbol, se lanzó un
   aviso y **salió**; restaurada la carpeta después. Lo vigila `censo-avisos-sin-fabrica` (`lint` +
-  `infra` + RAPIDO, con autoprueba). Commit `PENDIENTE-HASH`.
+  `infra` + RAPIDO, con autoprueba). Commit `c24813d`.
 - ⚠️ **319 copias antiguas siguen EN CLARO en Drive, y ya no caducan solas (3 sep 2026, AUD-008).**
   Al pasar el destino a cifrado, la retención de 14 días apunta al destino nuevo: **el histórico en
   claro del destino anterior (`gdrive:Bamburu-backup/daily`) no lo toca nadie ya**. Son copias reales
