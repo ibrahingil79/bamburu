@@ -81,6 +81,19 @@ export function enlaceDeReceta(r) {
 }
 
 // `hasPerm` recibe la clave entera ('invoices.read'), igual que en el constructor.
+// ⚙️ 3 SEP 2026 (AUD-005) · EL RECORTE SE DICE. `cruzar()` ya recortaba y ya devolvía `truncado`
+// —lleva haciéndolo desde que existe—, pero estas dos herramientas **se lo comían**: devolvían
+// `{ filas, total_filas }` y tiraban la bandera. Así que DISA recibía 30 filas **sin ninguna señal
+// de que había más** y podía contestar «tus cinco mejores clientes son…» sobre una lista cortada,
+// dándola por completa. Un resultado recortado que parece completo es el peor fallo posible aquí.
+//
+// El aviso va con el texto ya escrito y en un campo aparte, para que no se confunda con datos.
+function avisoDeRecorte(r) {
+  if (!r || !r.truncado) return {};
+  return { recortado: true, aviso: 'RECORTADO: el informe tenía más filas de las que caben en el chat. '
+    + 'Aquí van solo las primeras. NO son todas: dilo al responder y ofrece abrir el enlace para verlo entero.' };
+}
+
 export function herramientasDeInformes(db, { userId = null, hasPerm = () => true, limite = 30 } = {}) {
   const listar = () => {
     const todos = listarPaneles(db, userId) || [];
@@ -101,7 +114,8 @@ export function herramientasDeInformes(db, { userId = null, hasPerm = () => true
     if (!p) return { error: 'No existe ese informe, o no es tuyo ni está compartido.' };
     const r = cruzar(db, { ...p.config, hasPerm, limit: limite });
     return { nombre: p.nombre, receta: p.config, enlace: '/admin/analytics?panel=' + p.id,
-             periodo: r.rangoEtiqueta || null, filas: r.filas, total_filas: (r.filas || []).length };
+             periodo: r.rangoEtiqueta || null, filas: r.filas, total_filas: (r.filas || []).length,
+             ...avisoDeRecorte(r) };
   };
   const catalogo = () => {
     const areas = areasPara(hasPerm) || {};
@@ -126,6 +140,7 @@ export function herramientasDeInformes(db, { userId = null, hasPerm = () => true
     };
     const r = cruzar(db, { ...receta, hasPerm, limit: limite });
     return { receta, periodo: r.rangoEtiqueta || null, filas: r.filas, total_filas: (r.filas || []).length,
+             ...avisoDeRecorte(r),
              enlace: enlaceDeReceta(receta),
              nota: 'Para guardarlo, abre el enlace y pulsa Guardar: desde el chat no se guarda.' };
   };

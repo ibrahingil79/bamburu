@@ -6126,6 +6126,15 @@ El pilar queda completo: multi-almacén + stock mínimo/punto de pedido + trazab
   parar y preguntar antes de destruir datos de un tenant, y el encargo no levantaba esa norma.**
   Queda a una orden. *(El arreglo de fondo —que cada gate revierta su asiento al limpiar— sigue
   pendiente y es lo que de verdad cierra esto.)*
+- ⬜ **`gate-disa-informes` afirma sobre un texto del código que ya no existe (medido el 3 sep 2026).**
+  Su aserción *«y el bucle sabe despacharlas»* hace `grep` de `NOMBRES_INFORMES.has(toolUse.name)`
+  sobre `modules/disa/index.js`, y **ese texto no está**: el despacho se reescribió para ir POR
+  NOMBRE (`NOMBRES_INFORMES.has(nombre)`) en el commit `d61c434`, y nadie actualizó el gate. **No lo
+  causó la tarea de hoy y está comprobado, no supuesto:** en `38e3209` —el HEAD de ayer, antes de
+  tocar nada— ese texto ya daba **0 apariciones**. El gate va 27 ✓ · 1 ✗ y **ese 1 no puede ponerse
+  verde nunca** hasta que se corrija la cadena. Es uno de los 39 rojos que vienen del 1 de
+  septiembre; **se apunta y no se arregla de paso** porque el encargo pedía cambios quirúrgicos, y
+  porque la deuda del barrido tiene su propio encargo. Arreglarlo es cambiar una cadena.
 - ⬜ **La pantalla del ERP también escribe el stock de VARIANTE a pelo (hallazgo del 3 sep 2026).**
   `modules/erp/routes/products.js:288` y `:296` dan de alta y editan variantes con `stock` directo,
   el mismo patrón que se cerró en DISA con `disa-stock-fuera-del-libro`. **NO se arregló allí y el
@@ -9475,8 +9484,9 @@ escenarios y los dos casos incómodos, con relojes de prueba de Stripe) ·
 > los 90 días de descarga y la bóveda que no borra nada · y el rescate pagando un mes.
 >
 > ~~**La siguiente tarea de la cola es la primera del BLOQUE 2 — «QUE SEA SEGURO DE VERDAD»:**
-> `disa-borrado-global-conversaciones`.~~ **⚙️ CADUCADO EL 3 SEP 2026: esa tarea está HECHA, y
-> `disa-stock-fuera-del-libro` también.** La siguiente es `disa-sql-sin-limite-ni-timeout`. Se tacha en vez de borrarse, que es lo que manda este
+> `disa-borrado-global-conversaciones`.~~ **⚙️ CADUCADO EL 3 SEP 2026: van TRES del BLOQUE 2
+> hechas** — el borrado, el stock fuera del libro y el tope/plazo de las consultas. La siguiente es
+> `disa-rutas-sin-csrf`. Se tacha en vez de borrarse, que es lo que manda este
 > documento — y porque un puntero rancio manda al siguiente chat al sitio equivocado con toda la
 > confianza del mundo.
 
@@ -9489,8 +9499,8 @@ escenarios y los dos casos incómodos, con relojes de prueba de Stripe) ·
 > archivos que sube la gente, el enlace del portal, y que Bamburu no arranque si le falta una parte.
 >
 > ~~**De los ocho hallazgos críticos o altos de Codex, solo se han cerrado dos.** Los seis que
-> quedan están aquí.~~ **⚙️ ACTUALIZADO EL 3 SEP 2026 al cerrar AUD-002 y AUD-004: van CUATRO
-> cerrados y quedan CUATRO**, los de aquí abajo que siguen sin el ✅.
+> quedan están aquí.~~ **⚙️ ACTUALIZADO EL 3 SEP 2026 al cerrar AUD-002, AUD-004 y AUD-005: van
+> CINCO cerrados y quedan TRES**, los de aquí abajo que siguen sin el ✅.
 
 
 ## ✅ TAREA — DISA puede borrar la conversación de todo el negocio
@@ -9669,20 +9679,88 @@ demostró rojo** reintroduciendo el `UPDATE products SET … stock=?` original e
 `test-stock-pilar3` 34 · `test-disa-stock` 22 · `test-transfers` 30 · `test-almacenes-capa2` 41 ·
 `gate-almacenes` 20 · `gate-trazabilidad` 6 · `verify-traslado-auditoria` OK.
 
-## TAREA — La consulta de DISA no tiene tope de filas ni plazo
+## ✅ TAREA — La consulta de DISA no tiene tope de filas ni plazo
 
 - **id:** disa-sql-sin-limite-ni-timeout
-- **estado:** pendiente
+- **estado:** ✅ HECHA — 3 sep 2026 · commit `PENDIENTE_HASH`
 - **origen:** Auditoría de Codex, 25 ago 2026 · AUD-005 — a medias el 2 sep
 
-La mitad grave ya está tapada: `evaluateQueryAccess` decide por permisos qué tablas puede tocar la consulta. Lo que sigue abierto es que se ejecuta `db.prepare(sql).all()` **sin LIMIT y sin plazo**: una consulta puede traerse una tabla entera del negocio a la memoria y al proveedor de IA, y tardar lo que quiera.
+La mitad grave ya estaba tapada: `evaluateQueryAccess` decide por permisos qué tablas puede tocar la consulta. Lo que seguía abierto es que se ejecutaba `db.prepare(sql).all()` **sin LIMIT y sin plazo**: una consulta podía traerse una tabla entera del negocio a la memoria y al proveedor de IA, y tardar lo que quisiera.
 
 **Criterios de aceptación**
 
-- [ ] Toda consulta de DISA lleva **un tope de filas impuesto por el servidor**, no pedido al modelo.
-- [ ] Toda consulta tiene **un plazo máximo**, y al vencer se corta y se dice.
-- [ ] Si la consulta llega al tope, **se avisa de que la respuesta está recortada** en vez de darla por completa.
-- [ ] La lista de permisos que ya existe sigue funcionando igual.
+- [x] Toda consulta de DISA lleva **un tope de filas impuesto por el servidor**, no pedido al modelo.
+      **200 filas, y lo impone el servidor.** Medido: sin `LIMIT` llegan exactamente 200; **pidiendo
+      `LIMIT 5000` llegan exactamente 200**. El modelo no puede saltárselo porque no depende de él.
+- [x] Toda consulta tiene **un plazo máximo**, y al vencer se corta y se dice.
+      **5 segundos, y se cancela DE VERDAD.** La consulta corre en un `worker_thread` y al vencer
+      **se mata el hilo**. Medido: la consulta lenta se corta a los 6,3 s (plazo 5 s + arranque), no
+      devuelve datos a medias, el error se maneja y **queda anotado** en el registro de la plataforma.
+- [x] Si la consulta llega al tope, **se avisa de que la respuesta está recortada** en vez de darla por completa.
+      El resultado que ve DISA trae `recortado: true` y un `aviso` con el texto ya escrito —*«NO son
+      todas»*—, y la descripción de la herramienta le dice que tiene que contarlo. Una consulta que
+      cabe **no** se marca (sin falsos avisos).
+- [x] La lista de permisos que ya existe sigue funcionando igual.
+      **Intacta y comprobada**: lo que no es `SELECT` se deniega, una tabla protegida se deniega, sin
+      permiso de área se deniega, y el dueño sigue consultando lo suyo. Esta tarea **añadió** tope y
+      reloj; no rehízo nada de eso.
+
+> ### ⚠️ POR QUÉ UN RELOJ NO BASTABA, Y HUBO QUE CAMBIAR DE HILO
+>
+> `better-sqlite3` es **síncrono** y **no expone `interrupt()`** (comprobado:
+> `typeof db.interrupt === 'undefined'`). Dos consecuencias, las dos medidas el 3 sep 2026:
+>
+> - **Un reloj mirado «entre filas» no llega.** Con `SELECT a.id FROM ledger_lines a, ledger_lines b
+>   ORDER BY (a.id * b.id)`, SQLite tiene que ordenarlo todo antes de soltar la primera fila:
+>   **10.623 ms hasta la primera**. Un contador que se mira en cada fila no se mira ni una vez.
+> - **Y mientras corre, bloquea el bucle de eventos: el servidor entero, para TODOS los negocios.**
+>
+> Por eso la consulta va a un `worker_thread` y al vencer el plazo se **termina el hilo**. El gate lo
+> demuestra por el lado que importa: **mientras la consulta lenta corre, se le pide una pantalla al
+> servidor por HTTP y responde 200 en 67 ms**. Antes, esa petición habría esperado los cinco segundos.
+
+> ### 📏 LO QUE SE IBA AL PROVEEDOR, MEDIDO
+>
+> El tope se le **pedía al modelo** en la descripción de la herramienta: *«Usa LIMIT 20 como
+> maximo»*. Un ruego, no un cerrojo — y el resultado entero se serializa y viaja al proveedor de IA
+> dentro del `tool_result`, con los nombres, NIF, direcciones e importes de los clientes del cliente.
+>
+> | Consulta en `desarrollo-bamburu` | Filas | JSON al proveedor |
+> |---|---|---|
+> | `SELECT * FROM invoices` | 928 | **1.098 KB** |
+> | `SELECT * FROM ledger_lines` | 5.585 | 595 KB |
+> | `SELECT * FROM clients` | 212 | 117 KB |
+>
+> Con 8 herramientas por mensaje (`MAX_HERRAMIENTAS_POR_MENSAJE`), el techo de ayer era del orden de
+> **8 MB de datos del negocio por mensaje de chat**. Con el tope, 200 filas de la tabla más gorda son
+> ~240 KB.
+
+> ### 🔍 UN SEGUNDO SITIO QUE RECORTABA EN SILENCIO, y no estaba en la ficha
+>
+> `cruzar()` **ya** recortaba y **ya** devolvía `truncado` — lleva haciéndolo desde que existe. Pero
+> las herramientas de informes de DISA **se comían la bandera**: devolvían `{ filas, total_filas }` y
+> tiraban `r.truncado`. DISA recibía 30 filas **sin ninguna señal de que había más**, así que podía
+> contestar «tus cinco mejores clientes son…» sobre una lista cortada y darla por completa. **Es el
+> mismo criterio 3 por otra puerta, y se arregló aquí.**
+
+**Los valores viven en UN SOLO SITIO**, `modules/disa/limites-consulta.js`, con su motivo escrito y
+con las medidas que los justifican — la lección de la llave del cobro: *una regla repartida a mano
+por el código vuelve en cuanto alguien la olvida*. El centinela sale en rojo si alguien escribe un
+número de límite fuera de ese fichero.
+
+**El registro:** lo que se recorta o se cancela se anota en `error_log` de `control.db` (el registro
+de plataforma que ya existía; no se inventa tabla nueva) **con el SQL SANEADO** por `redactarSql` —
+sus literales son datos de los clientes del cliente, y un registro no se limpia solo. Una consulta
+normal **no** ensucia el registro.
+
+**Comprobaciones — 23 aserciones, 0 fallos, más el centinela:**
+`gate-disa-sql-limites` **23 ✓ · 0 ✗** (negocio propio con 250 clientes sembrados, que se tira al
+terminar; reproduce la vía vieja en rojo como línea base y no usa el modelo) ·
+`censo-consultas-disa` **1 ✓ · 0 ✗**, con autoprueba de 6 muestras y **probado en rojo por sus dos
+reglas**: un camino de consulta nuevo sin declarar, y un límite escrito a mano fuera de su sitio.
+**Regresión de DISA en verde:** `verify-disa-herramientas-paralelo` 50 · `verify-permisos-disa` 14 ·
+`test-disa-clientes-t5` 30 · `gate-disa-borrado-conversaciones` 36 · `verify-disa-query-permisos` y
+`verify-disa-sin-pedidos` OK.
 
 ## TAREA — Las rutas de DISA no pasan por la protección común
 
@@ -10390,6 +10468,57 @@ Para una peluquería esto no es un adorno: la agenda se mira de pie, entre clien
 > **No es un cajón de sastre: es orden.** Aquí está el resto del tablero y los hallazgos menores.
 > Nada de esto se ha recortado ni simplificado.
 
+
+## TAREA — El stock de las variantes no tiene libro, y por eso DISA no puede tocarlo
+
+- **id:** variantes-stock-con-libro
+- **estado:** pendiente
+- **origen:** hallazgos de `disa-stock-fuera-del-libro` (3 sep 2026) — registrada como ficha el mismo día
+
+**Por qué está aquí y no en el BLOQUE 2:** no es un agujero de seguridad. Es una pieza a medias que
+se destapó al cerrar AUD-004, y **hoy no hace daño medible** — por eso va en EL RESTO y no antes.
+
+**El estado real, medido el 3 sep 2026 y no supuesto.** `products.stock` es una caché derivada del
+libro `stock_movements`; el stock de una **variante** (talla, color) no tiene nada de eso:
+`product_variants.stock` es un número suelto que se escribe a pelo. Y no puede tenerlo tal cual está,
+porque **`stock_movements` es por `product_id` y no tiene `variant_id`**: el libro, el kardex y el
+coste medio no saben qué es una variante.
+
+Al cerrar `disa-stock-fuera-del-libro` quedaron **dos puertas** escribiendo ese número:
+
+1. **La pantalla del ERP** (`modules/erp/routes/products.js:288` y `:296`) lo sigue escribiendo a
+   pelo. Declarada en `scripts/censo-stock-fuera-del-libro.mjs` con su motivo, no en silencio.
+2. **DISA ya no lo escribe:** `create_variant` y `edit_variant` **rechazan** el stock y **lo dicen**
+   («las existencias no las he tocado; el stock se mueve por el libro del producto»). Al cerrar esta
+   tarea, **DISA recupera esa capacidad** — pasando por el libro, como todo lo demás.
+
+**Lo que hace que esto NO sea urgente, y conviene tenerlo delante antes de priorizarlo:** el único
+consumidor vivo de `product_variants.stock` es la tienda pública `modules/store/`, **apagada desde
+D1** (`/store` responde **404**, medido); el ERP solo **lista** variantes, no las vende ni las valora;
+y hay **CERO variantes en los 87 negocios**. O sea: hoy ese campo no son las existencias de nadie.
+
+**⚠️ Dependencia, y es la que manda el orden:** las variantes son **Capa 2 (e-commerce)**, congelada
+por `CLAUDE.md` hasta cerrar la Capa 1. **Esta tarea entra cuando se descongele la Capa 2**, o cuando
+Ibrahin lo decida antes. Construirla ahora sería descongelarla por la puerta de atrás.
+
+**Criterios de aceptación**
+
+- [ ] El stock de variante **tiene libro de movimientos**: o se integra en `stock_movements` (añadiendo
+      la variante al movimiento, que es lo más limpio si el coste medio lo admite) o tiene el suyo
+      propio. **Se decide con la medida delante, no de memoria**, y queda escrito por qué.
+- [ ] Cada movimiento de variante lleva **quién, cuándo, cuánto y por qué**, igual que los de
+      producto — con la columna `created_by` que ya existe en el libro desde el 3 sep 2026.
+- [ ] **El número final se deriva del libro**, nunca se escribe: `product_variants.stock` pasa a ser
+      caché, como lo es `products.stock`.
+- [ ] **Las dos puertas pasan por ese libro.** La pantalla del ERP deja de escribir el número a pelo,
+      y **DISA recupera la capacidad** de cambiar existencias de variante — por el servicio, con su
+      motivo y su apunte, no a pelo.
+- [ ] **El centinela cubre también las variantes:** `scripts/censo-stock-fuera-del-libro.mjs` deja de
+      tener declarados como legítimos los dos sitios de `routes/products.js`, y sale en rojo si
+      alguien vuelve a escribir `product_variants.stock` fuera del libro.
+- [ ] El coste medio y la valoración **siguen cuadrando** con variantes en juego.
+- [ ] Una comprobación demuestra que un cambio de stock de variante deja su apunte, y **se prueba en
+      rojo primero**.
 
 ## TAREA — Hay 90 facturas esperando y nunca ha salido ninguna a Hacienda
 

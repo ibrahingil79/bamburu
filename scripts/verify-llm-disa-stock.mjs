@@ -93,7 +93,7 @@ async function ask(userMsg) {
     const bloques = toolUseBlocks(data);
     if (data.stop_reason === 'tool_use' && bloques.length) {
       usedTool = true; lastSql = bloques[bloques.length - 1].input?.sql || '';
-      const r = resultadosDeHerramientas(bloques, (_nombre, input) => {
+      const r = await resultadosDeHerramientas(bloques, (_nombre, input) => {
         const sql = input.sql || '';
         try { const rows = db.prepare(sql).all(); return { rows, count: rows.length }; } catch (e) { return { error: e.message }; }
       });

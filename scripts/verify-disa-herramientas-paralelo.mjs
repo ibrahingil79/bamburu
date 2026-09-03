@@ -77,7 +77,7 @@ try {
   say('\n=== 3. LA FORMA DE LA RESPUESTA: un tool_result por cada tool_use, mismo orden, mismos ids ===\n');
   for (const n of [1, 2, 3]) {
     const bloques = Array.from({ length: n }, (_, i) => TOOL('id_' + i, 'herramienta_' + i));
-    const r = resultadosDeHerramientas(bloques, () => ({ filas: [] }));
+    const r = await resultadosDeHerramientas(bloques, () => ({ filas: [] }));
     ok(r.mensaje.role === 'user', 'N=' + n + ': el mensaje es del rol `user`');
     ok(r.mensaje.content.length === n, 'N=' + n + ': ' + n + ' tool_use → ' + n + ' tool_result', 'salieron ' + r.mensaje.content.length);
     ok(r.mensaje.content.every(b => b.type === 'tool_result'), 'N=' + n + ': todos los bloques son tool_result');
@@ -90,14 +90,14 @@ try {
       'N=' + n + ': la traza dice ' + n + ' completadas (y solo nombre + estado, nunca SQL ni argumentos)');
   }
   {
-    const r = resultadosDeHerramientas([TOOL('dup'), TOOL('dup', 'otra')], () => ({ ok: true }));
+    const r = await resultadosDeHerramientas([TOOL('dup'), TOOL('dup', 'otra')], () => ({ ok: true }));
     ok(r.mensaje.content.length === 1,
       'un tool_use_id repetido recibe UN solo resultado (dos con el mismo id es otro 400). Defensivo');
   }
 
   say('\n=== 4. AISLAMIENTO DEL ERROR: el fallo de una no se lleva por delante a las demás ===\n');
   {
-    const r = resultadosDeHerramientas([TOOL('A'), TOOL('B', 'componer_informe')],
+    const r = await resultadosDeHerramientas([TOOL('A'), TOOL('B', 'componer_informe')],
       (nombre) => nombre === 'componer_informe' ? { error: 'No tienes permiso para ver esos datos.' } : { filas: [1, 2, 3] });
     ok(r.mensaje.content.length === 2, 'siguen saliendo 2 tool_result');
     ok(!r.mensaje.content[0].is_error && /filas/.test(r.mensaje.content[0].content),
@@ -109,13 +109,13 @@ try {
   }
   {
     const orden = [];
-    const r = resultadosDeHerramientas([TOOL('A', 'primera'), TOOL('B', 'segunda')],
+    const r = await resultadosDeHerramientas([TOOL('A', 'primera'), TOOL('B', 'segunda')],
       (nombre) => { orden.push(nombre); return { ok: true }; });
     ok(r.mensaje.content.length === 2 && JSON.stringify(orden) === '["primera","segunda"]',
       'con dos bloques se ejecutan LOS DOS, en el orden de los bloques (un for síncrono, sin Promise.all)');
 
     say('  · (la traza de `[error]` que sale aquí debajo es de safeError, y es lo esperado)');
-    const revienta = resultadosDeHerramientas([TOOL('A'), TOOL('B', 'buena')],
+    const revienta = await resultadosDeHerramientas([TOOL('A'), TOOL('B', 'buena')],
       (nombre) => { if (nombre !== 'buena') throw new Error('boom: no such column: cliente_id'); return { filas: [] }; });
     ok(revienta.mensaje.content.length === 2 && !revienta.mensaje.content[1].is_error,
       'una excepción en la primera NO impide que la segunda se ejecute y conserve su resultado');
@@ -130,7 +130,7 @@ try {
   say('\n=== 5. PRESUPUESTO: pasado el tope se rechaza CONTESTANDO, nunca callando ===\n');
   {
     let llamadas = 0;
-    const r = resultadosDeHerramientas([TOOL('A'), TOOL('B'), TOOL('C')],
+    const r = await resultadosDeHerramientas([TOOL('A'), TOOL('B'), TOOL('C')],
       () => { llamadas++; return { filas: [] }; }, { presupuesto: 1 });
     ok(r.mensaje.content.length === 3, 'con presupuesto 1 y 3 bloques salen 3 tool_result (los 3 se contestan)');
     ok(llamadas === 1, '`ejecutar` se llamó UNA vez', 'llamadas=' + llamadas);
@@ -138,7 +138,7 @@ try {
     ok(r.mensaje.content.slice(1).every(b => b.is_error === true && b.content.includes(MSG_PRESUPUESTO_HERRAMIENTAS)),
       'los 2 sobrantes traen MSG_PRESUPUESTO_HERRAMIENTAS con is_error: true');
     ok(r.traza.filter(t => t.estado === 'sin presupuesto').length === 2, 'la traza los marca «sin presupuesto»');
-    const cero = resultadosDeHerramientas([TOOL('A')], () => ({ ok: true }), { presupuesto: 0 });
+    const cero = await resultadosDeHerramientas([TOOL('A')], () => ({ ok: true }), { presupuesto: 0 });
     ok(cero.mensaje.content.length === 1 && cero.ejecutadas === 0,
       'presupuesto 0 → se contesta igual, sin ejecutar nada (descartar sin contestar es volver al 400)');
     ok(MAX_VUELTAS === 5 && MAX_HERRAMIENTAS_POR_MENSAJE === 8,
@@ -166,7 +166,7 @@ try {
       });
       const bloques = toolUseBlocks(data);
       if (data.stop_reason !== 'tool_use' || bloques.length === 0) { reply = textFromResponse(data); break; }
-      const r = resultadosDeHerramientas(bloques, (nombre) => ({ herramienta: nombre, filas: [] }),
+      const r = await resultadosDeHerramientas(bloques, (nombre) => ({ herramienta: nombre, filas: [] }),
         { presupuesto: Math.max(0, MAX_HERRAMIENTAS_POR_MENSAJE - gastadas) });
       gastadas += r.ejecutadas;
       apiMessages.push({ role: 'assistant', content: data.content });

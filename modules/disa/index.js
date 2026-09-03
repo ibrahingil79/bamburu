@@ -4,6 +4,8 @@ import { safeError } from '../../core/errors.js';
 import { bodyLimit } from 'hono/body-limit';
 import { adminAuth, getCsrfToken, requirePerm } from '../../core/auth.js';
 import { csrfProtect } from '../../core/csrf.js';   // solo sobre lo que BORRA de verdad; ver borrarConversaciones()
+import { consultarConLimites, registrarConsultaDisa } from './consulta.js';   // AUD-005: tope de filas y plazo, impuestos por el servidor
+import { MAX_FILAS, PLAZO_MS } from './limites-consulta.js';
 import { checkPermission } from '../../core/permission-check.js';   // Permisos · Paso 2 — MISMO motor que requirePerm (sin lógica paralela), incluido el bypass owner/admin, desde el 31 ago 2026
 import { adminLayout } from '../erp/layout.js';
 // `generateInvoice` ya no se importa: era el puente pedido-viejo→factura (create_invoice_from_order),
@@ -180,7 +182,11 @@ export const MSG_PRESUPUESTO_HERRAMIENTAS =
 //
 // NO LANZA NUNCA (patrón `seguro()` de informes.js:138): una excepción a mitad del lote dejaría el
 // mensaje malformado, que es el fallo original con otro disfraz. Un error es un resultado.
-export function resultadosDeHerramientas(bloques, ejecutar, { presupuesto = Infinity } = {}) {
+// ⚙️ 3 SEP 2026 (AUD-005) · ASÍNCRONA. `query_database` pasó a ejecutarse en otro hilo para poder
+// matarlo al vencer el plazo, así que `ejecutar` puede devolver una promesa. Se espera con `await`,
+// que también funciona con las herramientas que siguen siendo síncronas (informes, descuentos): un
+// valor que no es promesa se resuelve solo. El emparejamiento por `tool_use_id` no cambia.
+export async function resultadosDeHerramientas(bloques, ejecutar, { presupuesto = Infinity } = {}) {
   const content = [];
   const traza = [];
   const vistos = new Set();
@@ -199,7 +205,7 @@ export function resultadosDeHerramientas(bloques, ejecutar, { presupuesto = Infi
       estado = 'sin presupuesto';
     } else {
       try {
-        resultado = ejecutar(b.name, b.input || {});
+        resultado = await ejecutar(b.name, b.input || {});
         if (!resultado || typeof resultado !== 'object') resultado = { resultado };
         texto = JSON.stringify(resultado);
         if (typeof texto !== 'string') throw new Error('resultado no serializable');
@@ -2779,7 +2785,17 @@ export function register(app, db) {
       // CUALQUIER tabla referida —también las no mapeadas— para poder denegarlas.
       const ALL_TABLES = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map(r => r.name);
 
-      function runQueryTool(sql) {
+      // ⚠️ AQUÍ ESTABA AUD-005. Esto hacía `db.prepare(sql).all()` a secas: **sin tope de filas y sin
+      // plazo**. El tope se le PEDÍA al modelo en la descripción de la herramienta —«Usa LIMIT 20
+      // como maximo»—, que es un ruego, no un cerrojo. Medido el 3 sep 2026: un `SELECT * FROM
+      // invoices` del negocio grande son 928 filas y **1.098 KB de JSON viajando al proveedor de
+      // IA**, con los nombres, NIF e importes de los clientes del cliente dentro. Y una consulta
+      // lenta bloqueaba el bucle de eventos, o sea **el servidor entero para todos los negocios**.
+      //
+      // Ahora pasa por `consultarConLimites`, que impone el tope desde el servidor y ejecuta en otro
+      // hilo para poder MATARLO al vencer el plazo. El control de acceso no se toca: sigue siendo
+      // `evaluateQueryAccess`, primero y sin cambios.
+      async function runQueryTool(sql) {
         // Toda la decisión de acceso vive en `evaluateQueryAccess` (módulo, exportada y testeada).
         const err = evaluateQueryAccess(sql, {
           isAdmin: isAdminUser(session),
@@ -2787,12 +2803,18 @@ export function register(app, db) {
           hasPerm: (m, a) => checkPermission(db, session, m, a),
         });
         if (err) return { error: err };
-        try {
-          const rows = db.prepare(sql).all();
-          return { rows, count: rows.length };
-        } catch (e) {
-          return { error: safeError(e) };
-        }
+        return await consultarConLimites(db.name, sql, {
+          // El registro va con el SQL SANEADO (`redactarSql`), nunca con los literales: el SQL lo
+          // escribe el modelo a partir de lo que pide el dueño, así que los valores SON los datos.
+          alRegistrar: (info) => {
+            try {
+              registrarConsultaDisa(db, {
+                sql: redactarSql(sql), tenant: c.get('tenant')?.slug || null,
+                userId: session?.userId || null, ...info,
+              });
+            } catch { /* el registro no puede tumbar la consulta */ }
+          },
+        });
       }
 
       // ── PUNTO 10 · LOS INFORMES, POR CHAT ────────────────────────────────────────────────────
@@ -2807,7 +2829,9 @@ export function register(app, db) {
 
       const tools = [...INFORMES_TOOL.TOOLS, ...DTO_TOOL.TOOLS, {
         name: 'query_database',
-        description: 'Ejecuta una consulta SQL SELECT para obtener datos especificos del negocio. Usala cuando necesites datos que no estan en el contexto inicial: clientes por gasto, productos por ventas, pedidos por periodo, etc. Solo lectura. Usa LIMIT 20 como maximo.',
+        description: 'Ejecuta una consulta SQL SELECT para obtener datos especificos del negocio. Usala cuando necesites datos que no estan en el contexto inicial: clientes por gasto, productos por ventas, pedidos por periodo, etc. Solo lectura. '
+          + 'Pon tu propio LIMIT (20 suele bastar) para que la respuesta sea util. IMPORTANTE: el servidor impone ademas un tope de ' + MAX_FILAS + ' filas y un plazo de ' + (PLAZO_MS / 1000) + ' s, y eso NO depende de ti: '
+          + 'si el resultado llega con el campo "aviso", esta RECORTADO y tienes que decirselo al usuario en tu respuesta, nunca darlo por completo.',
         input_schema: {
           type: 'object',
           properties: {
@@ -2821,10 +2845,10 @@ export function register(app, db) {
       // ternarios que acababa en `runQueryTool(inp.sql || '')`, así que CUALQUIER nombre que el
       // modelo se inventara se ejecutaba como una consulta SQL vacía: fallaba cerrado por
       // casualidad (`evaluateQueryAccess` rechaza la cadena vacía), no por diseño.
-      const ejecutarHerramienta = (nombre, input = {}) => {
+      const ejecutarHerramienta = async (nombre, input = {}) => {
         if (NOMBRES_INFORMES.has(nombre))   return INFORMES_TOOL.ejecutar(nombre, input);
         if (NOMBRES_DESCUENTOS.has(nombre)) return DTO_TOOL.ejecutar(nombre, input);
-        if (nombre === 'query_database')    return runQueryTool(input.sql || '');
+        if (nombre === 'query_database')    return await runQueryTool(input.sql || '');
         return { error: 'No conozco la herramienta "' + nombre + '".' };
       };
 
@@ -2867,7 +2891,7 @@ export function register(app, db) {
           break;
         }
 
-        const r = resultadosDeHerramientas(bloques, ejecutarHerramienta, {
+        const r = await resultadosDeHerramientas(bloques, ejecutarHerramienta, {
           presupuesto: Math.max(0, MAX_HERRAMIENTAS_POR_MENSAJE - gastadas),
         });
         gastadas += r.ejecutadas;

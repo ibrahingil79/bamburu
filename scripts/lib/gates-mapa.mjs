@@ -59,6 +59,9 @@ export const RAPIDO = new Map([
   // familia: estático, <1 s, no escribe nada, y el daño se hace el mismo día — un stock escrito a
   // mano se evapora en el próximo recálculo y nadie sabe cuándo.
   ['censo-stock-fuera-del-libro', 'existencias escritas a pelo: se saltan las guardas y se evaporan (AUD-004)'],
+  // Y que ninguna consulta de DISA se quede sin tope ni reloj. Estático, <1 s: una consulta sin
+  // tope se lleva una tabla entera al proveedor de IA, y una lenta bloqueaba el servidor de todos.
+  ['censo-consultas-disa', 'una consulta de DISA sin tope ni plazo se lleva la tabla entera al proveedor (AUD-005)'],
   // Que no falte ninguna sección ni ninguna puerta.
   ['verify-menu-completo',   'una sección sin enlace es una función que nadie encuentra'],
   // Que la cadena de VERI*FACTU esté entera. Va aquí y no en el completo por su propio motivo: exige
@@ -171,8 +174,10 @@ export const GRUPOS = {
     // grupo, y el borrado sin filtro vivía justo ahí. En `lint` corre siempre; aquí, cuando toca.
     'censo-borrado-sin-filtro',
     'censo-stock-fuera-del-libro',
+    'censo-consultas-disa',
     'gate-disa-borrado-conversaciones',
     'gate-disa-stock-libro',
+    'gate-disa-sql-limites',
     'test-c2-captura',
     // ↓ tres que ABORTABAN por pedir la ruta de la BD por parámetro (24 ago 2026): ya arrancan
     'verify-voz', 'verify-vigia', 'verify-dibujo',
@@ -323,7 +328,7 @@ export const GRUPOS = {
   //     arriba por el mismo motivo por el que ellos entraron: una herramienta que nadie ejecuta
   //     deja de cazar cosas.
   //   · lint-js-servido    — pide cada pantalla y compila su JavaScript en línea (~324 pantallas)
-  lint: ['lint-plantillas', 'censo-ventanitas', 'censo-borrado-sin-filtro', 'censo-stock-fuera-del-libro', 'lint-js-servido', 'verify-nombre-documentos', 'verify-menu-completo',
+  lint: ['lint-plantillas', 'censo-ventanitas', 'censo-borrado-sin-filtro', 'censo-stock-fuera-del-libro', 'censo-consultas-disa', 'lint-js-servido', 'verify-nombre-documentos', 'verify-menu-completo',
          'verify-barrido-no-infla-ventas', 'verify-deuda-una-sola-cuenta',
          'verify-factura-exenta', 'test-oficio', 'verify-libro-sin-huerfanos', 'verify-contabilidad-backfill',
          // PUNTO 5 (24 ago 2026) — el dinero y las fechas, como en España. Se mide sobre lo
@@ -409,6 +414,9 @@ export const EMPIEZAN_DE_CERO = new Set([
   // 3 sep 2026 — negocio propio: siembra productos y MUEVE stock para demostrar que el ajuste deja
   // su apunte. En el de desarrollo movería los totales de los gates que exigen neto-cero.
   'gate-disa-stock-libro',
+  // 3 sep 2026 — negocio propio: siembra 250 clientes para forzar el recorte y lanza una consulta
+  // lenta a propósito. En el de desarrollo dejaría basura y ocuparía el servidor cinco segundos.
+  'gate-disa-sql-limites',
 ]);
 
 // NI DE CERO NI COMPARTIDO DEL TODO: los que levantan un negocio EXTRA para UN caso concreto y el
