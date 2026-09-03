@@ -220,13 +220,38 @@ export function reversarHuerfanos(db, { hoy, simulacro = false } = {}) {
 // de otro periodo no es una venta de este, y contarla como si lo fuera deja un rojo permanente —y un
 // rojo permanente se acaba ignorando, que es como se llega a 99 comprobaciones que nadie mira.
 //
+// ⚙️ 3 SEP 2026 · LA REGLA ESTABA ESCRITA A MEDIAS, Y EL COMENTARIO DE ARRIBA YA PROMETÍA LAS DOS
+// MITADES. Decía «hace que la comparación compare lo mismo en los dos lados» y solo miraba UN lado:
+// la reversión fechada DENTRO del periodo cuyo original está fuera. **Le faltaba el espejo** — el
+// original DENTRO del periodo y su reversión FUERA—, que es lo que sale cuando se corrige en
+// septiembre un apunte de agosto.
+//
+// Cómo apareció: el 3 de septiembre se anularon 12 asientos huérfanos de `desarrollo-bamburu`; dos
+// estaban fechados el 29 y el 30 de AGOSTO y su contrasiento fue de HOY, septiembre. El libro de
+// agosto se quedó con **96,80 €** de apuntes cuya factura ya no existe, la comprobación cantó un
+// descuadre y **tenía razón**: 3.821,79 − 96,80 = 3.724,99, que es justo lo vivo. Lo que fallaba no
+// era el producto ni la corrección: era que esta función solo sabía restar en un sentido.
+//
+// Las dos mitades, y por qué se restan las dos:
+//   · **Reversión DENTRO, original FUERA** → el periodo trae un descuento que no es suyo. Se quita
+//     lo que aporta la REVERSIÓN (negativo), así que restarlo SUBE la cifra del periodo.
+//   · **Original DENTRO, reversión FUERA** → el periodo trae una venta que ya se anuló en otro mes.
+//     Se quita lo que aporta el ORIGINAL (positivo), así que restarlo BAJA la cifra del periodo.
+// En los dos casos la operación es la misma —`libro − total`—, y el signo lo pone cada mitad.
+//
 // Devuelve lo que esas correcciones aportan al periodo, con su detalle, para que la cifra se pueda
-// enseñar en vez de aplicarse a ciegas.
+// enseñar en vez de aplicarse a ciegas. `sentido` dice de cuál de las dos mitades viene cada fila:
+// una cifra agregada que no se puede desglosar es la que nadie puede comprobar.
 export function correccionesDeOtroPeriodo(db, tipoOrigen, from, to) {
   if (!from || !to) return { total: 0, detalle: [] };
-  const filas = db.prepare(`
+  // Lo que un asiento aporta a las cuentas de resultado del libro. Se escribe una vez: si mañana
+  // entra otra cuenta, entra para las dos mitades o vuelve el mismo agujero por el otro lado.
+  const APORTA = "ROUND(SUM(CASE WHEN l.account_code IN ('700','705','477') THEN l.credit - l.debit ELSE 0 END), 2)";
+
+  // Mitad 1 — la de siempre: la REVERSIÓN cae dentro del periodo y su original, fuera.
+  const dentro = db.prepare(`
     SELECT e.id, e.entry_date, e.origin_id, o.entry_date AS fecha_original,
-           ROUND(SUM(CASE WHEN l.account_code IN ('700','705','477') THEN l.credit - l.debit ELSE 0 END), 2) AS aporta
+           'reversion_dentro' AS sentido, ${APORTA} AS aporta
       FROM ledger_entries e
       JOIN ledger_entries o ON o.id = e.reverses_entry_id
       JOIN ledger_lines  l ON l.entry_id = e.id
@@ -235,6 +260,23 @@ export function correccionesDeOtroPeriodo(db, tipoOrigen, from, to) {
        AND e.entry_date BETWEEN ? AND ?
        AND (o.entry_date < ? OR o.entry_date > ?)
      GROUP BY e.id`).all(tipoOrigen, from, to, from, to);
+
+  // Mitad 2 — EL ESPEJO: el ORIGINAL cae dentro del periodo y su reversión, fuera. Aquí se suman las
+  // líneas del ORIGINAL (`o`), no las de la reversión: es el apunte del original el que sigue dentro
+  // del libro de este periodo inflándolo.
+  const fuera = db.prepare(`
+    SELECT o.id, o.entry_date, o.origin_id, e.entry_date AS fecha_reversion,
+           'original_dentro' AS sentido, ${APORTA} AS aporta
+      FROM ledger_entries e
+      JOIN ledger_entries o ON o.id = e.reverses_entry_id
+      JOIN ledger_lines  l ON l.entry_id = o.id
+     WHERE e.entry_type = 'reversion'
+       AND e.origin_type = ?
+       AND o.entry_date BETWEEN ? AND ?
+       AND (e.entry_date < ? OR e.entry_date > ?)
+     GROUP BY o.id`).all(tipoOrigen, from, to, from, to);
+
+  const filas = dentro.concat(fuera);
   const total = Math.round(filas.reduce((s, f) => s + (f.aporta || 0), 0) * 100) / 100;
   return { total, detalle: filas };
 }

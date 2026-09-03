@@ -337,7 +337,9 @@
 > **Encargo de Ibrahin (3 sep 2026):** correr el barrido completo tras 21 commits y 57 ficheros
 > tocados, y arreglar lo que saliera en rojo.
 
-**TRES pasadas completas, 20-22 min cada una: `150/210` → `167/210` → `168/210`** (`e4b8f08`).
+**TRES pasadas completas, 20-22 min cada una: `150/210` → `167/210` → `168/210`** (`e4b8f08`),
+y **170** tras cerrar los dos de contabilidad esa misma tarde (comprobados uno a uno; la próxima
+pasada entera lo confirmará).
 La cifra que manda es la última, que es la única medida con todo commiteado. Lo que sigue es lo que
 se encontró, con su medida.
 
@@ -392,6 +394,47 @@ durante todo el barrido**: la fuga está cerrada.
   cuatro entradas al pie del rail. Añadida, y corregido de paso su recuento, que decía
   «39+5+1+3+6 = 54» y llevaba tiempo sin cuadrar con sus propias listas (son **66**). **157 ✓ · 0 ✗.**
 
+### ✅ LOS DOS DE CONTABILIDAD, CERRADOS — y el punto ciego que apareció detrás
+
+**Con orden expresa de Ibrahin (3 sep 2026), y con copia de la base antes de cada paso**
+(`data/copias-limpieza/`).
+
+**Paso 1 · `limpiar-residuo-gates.mjs --hazlo`.** Retiró **222 asientos huérfanos**, 15 asientos, 9
+facturas de proveedor, 6 órdenes, 6 recepciones, 3 compras, 12 movimientos de stock y 1 almacén, y
+desactivó 12 personas fantasma. Recalculó el stock —cuatro productos a su valor real— con todas sus
+comprobaciones de cuadre en verde.
+
+> ⚠️ **Y AQUÍ SE VIO QUE EL DIAGNÓSTICO ESTABA INCOMPLETO, dicho para que no se repita.** Se había
+> escrito que los dos gates fallaban por esos 222 huérfanos. **No era cierto:** los 222 eran del lado
+> de COMPRAS y ese script solo recorre el grafo de compras. Los dos gates fallaban por **12 huérfanos
+> del lado de VENTAS** —asientos de facturas de gate que ya no existen— que ese comando no iba a
+> tocar nunca. **La lección: un huérfano no es «un huérfano»; tiene familia, y hay que mirarla antes
+> de prometer que un comando lo cierra.**
+
+**Paso 2 · `reversar-asientos-huerfanos.mjs desarrollo-bamburu --hazlo`.** Los 12 de ventas, anulados
+**con su contrasiento**, no borrados: el libro es inmutable y corregir es revertir. El libro de
+ventas pasó de 419.674,59 € a **417.593,39 €**, que es exactamente la cifra viva.
+`verify-libro-sin-huerfanos` → **3 ✓ · 0 ✗**.
+
+**Paso 3 · el punto ciego de la regla, completado en los dos sentidos.** Quedaba un descuadre de
+**96,80 €** en el libro de agosto, y no era residuo: dos de los 12 huérfanos estaban fechados el 29 y
+el 30 de AGOSTO y su contrasiento va fechado HOY, septiembre — que es lo correcto, un mes cerrado no
+se reabre. `correccionesDeOtroPeriodo` (`modules/erp/contabilidad.js`) prometía en su propio
+comentario *«comparar lo mismo en los dos lados»* y **solo miraba uno**: la reversión fechada DENTRO
+del periodo con su original fuera. **Le faltaba el espejo** — el original DENTRO y su reversión
+FUERA. Medido: 5 correcciones vistas, 2 invisibles, y `3.821,79 − 96,80 = 3.724,99`, justo lo vivo.
+
+**Probado poniéndolo ROJO primero**, que es lo único que valida aquí una regla nueva: con una base de
+mentira y **los dos casos exactos**, la versión vieja daba *«CASO A: LO VE ✓ · CASO B: CIEGO ✗»*. Con
+la regla completa, los dos. **Y ese escenario se queda dentro del gate como aserción fija**, no como
+una prueba de una tarde: si alguien vuelve a escribir la regla a medias, sale en rojo **ahí**, y no
+dentro de un mes cuando alguien corrija un apunte del mes anterior.
+
+`verify-contabilidad-backfill` → **14 ✓ · 0 ✗** (eran 11 antes de añadir las tres del espejo).
+**La función solo la usa esa comprobación: ninguna cifra que vea un cliente cambia.** Regresión de la
+familia entera en verde: `test-contabilidad` 38 · `verify-contabilidad-diario-mayor` 14 ·
+`verify-contabilidad-export` 21 · `test-contabilidad-bienes` 33 · `test-contabilidad-modelos` 28.
+
 ### 📉 LO QUE SIGUE EN ROJO, Y NO SE HA TOCADO — con su motivo
 
 - **39 son DEUDA ANTERIOR**, ya catalogada el 1 sep 2026 en
@@ -399,12 +442,10 @@ durante todo el barrido**: la fuga está cerrada.
   entonces**, por otras tareas y por ésta). Son causas variadas —clasificación fiscal por línea desde
   el Saneamiento 4/5, el empleado de prueba inactivo, gates que necesitan su propio negocio— y
   **arreglarlas es un trabajo propio, no un remate de esta tarea**. Va a la cola como tarea.
-- **2 son RESIDUO CONTABLE, no un defecto del producto:** `verify-libro-sin-huerfanos` y
-  `verify-contabilidad-backfill` fallan por **222 asientos huérfanos** que los gates dejan en
-  `desarrollo-bamburu`. El remedio existe y el propio barrido lo imprime:
-  `node scripts/limpiar-residuo-gates.mjs --hazlo`. **NO se ha ejecutado**: borra asientos y
-  documentos de un negocio, y `CLAUDE.md` manda parar y preguntar antes de destruir datos de un
-  tenant. **Queda a una orden de Ibrahin.**
+- ~~**2 son RESIDUO CONTABLE, no un defecto del producto:** `verify-libro-sin-huerfanos` y
+  `verify-contabilidad-backfill` fallan por **222 asientos huérfanos**…~~ **✅ CERRADO EL 3 SEP 2026,
+  con orden expresa de Ibrahin — y de paso se destapó un punto ciego de la comprobación.** Ver el
+  bloque de abajo: los dos están en VERDE.
 - **1 es INTERMITENTE:** `verify-vigia` salió verde en la primera pasada y rojo en la segunda, y
   **pasa en solitario (5 OK)**. Se declara en vez de silenciarse, que es la norma: *un rojo que sale
   una vez de cada cuatro es peor que uno fijo, porque enseña a desconfiar del barrido.*
@@ -6073,7 +6114,10 @@ El pilar queda completo: multi-almacén + stock mínimo/punto de pedido + trazab
   comprobación. Se declara en vez de silenciarse: *un rojo que sale una vez de cada cuatro es peor
   que uno fijo, porque enseña a desconfiar del barrido.* Si se confirma que es de concurrencia, su
   sitio es `SOLOS` en `scripts/lib/gates-mapa.mjs`, con su motivo escrito.
-- ⬜ **222 ASIENTOS CONTABLES HUÉRFANOS en `desarrollo-bamburu` (medido el 3 sep 2026).** Los dejan
+- ✅ ~~**222 ASIENTOS CONTABLES HUÉRFANOS en `desarrollo-bamburu` (medido el 3 sep 2026).**~~
+  **CERRADO el mismo día con orden de Ibrahin.** Detalle en §BARRIDO COMPLETO DEL 3 SEP. *(El arreglo
+  de fondo —que cada gate revierta su asiento al limpiar— sigue pendiente y es lo que de verdad
+  cierra esto.)* Lo que decía la ficha: Los dejan
   los gates: borran el documento y no su asiento. Tumban `verify-libro-sin-huerfanos` y
   `verify-contabilidad-backfill`, que **no fallan por un defecto del producto sino por la basura**.
   El remedio existe y el propio barrido lo imprime: `node scripts/limpiar-residuo-gates.mjs --hazlo`

@@ -116,6 +116,43 @@ try {
          ? '  ·  descontadas ' + corr.detalle.length + ' correcciones de otro periodo por ' + r2(-corr.total) + ' €'
            + ' (el libro en bruto suma ' + r2(mlv.totals.total) + ')'
          : ''));
+
+    // ── Y QUE LA REGLA SIGA CUBRIENDO LOS DOS SENTIDOS ───────────────────────────────────────────
+    // 3 sep 2026. `correccionesDeOtroPeriodo` prometía en su comentario «comparar lo mismo en los dos
+    // lados» y **solo miraba uno**: la reversión fechada DENTRO del periodo con su original fuera. Le
+    // faltaba el espejo —el original DENTRO y su reversión FUERA—, que es lo que sale al corregir en
+    // septiembre un apunte de agosto. Costó 96,80 € de descuadre en el libro de agosto y una tarde de
+    // perseguir un fallo del producto que no existía.
+    //
+    // Esto NO mira los datos del negocio, que cambian solos: monta una base de mentira con **los dos
+    // casos exactos** y exige que la función los vea. Si alguien vuelve a escribir la regla a medias,
+    // sale en rojo aquí y no dentro de un mes, cuando alguien corrija un apunte del mes anterior.
+    const bd = new Database(':memory:');
+    bd.exec(`CREATE TABLE ledger_entries (id INTEGER PRIMARY KEY, entry_date DATE NOT NULL,
+      entry_type TEXT NOT NULL, origin_type TEXT NOT NULL, origin_id INTEGER NOT NULL,
+      reverses_entry_id INTEGER, memo TEXT DEFAULT '', created_at DATETIME);
+     CREATE TABLE ledger_lines (id INTEGER PRIMARY KEY, entry_id INTEGER NOT NULL,
+      account_code TEXT NOT NULL, debit REAL NOT NULL DEFAULT 0, credit REAL NOT NULL DEFAULT 0,
+      tax_rate REAL, line_kind TEXT);`);
+    const asi = (id, fecha, tipo, origen, revierte) =>
+      bd.prepare('INSERT INTO ledger_entries (id,entry_date,entry_type,origin_type,origin_id,reverses_entry_id) VALUES (?,?,?,?,?,?)')
+        .run(id, fecha, tipo, 'invoice', origen, revierte || null);
+    const lin = (id, cuenta, debe, haber) =>
+      bd.prepare('INSERT INTO ledger_lines (entry_id,account_code,debit,credit) VALUES (?,?,?,?)').run(id, cuenta, debe, haber);
+    const vta = (id, base, iva) => { lin(id, '430', base + iva, 0); lin(id, '700', 0, base); lin(id, '477', 0, iva); };
+    const rev = (id, base, iva) => { lin(id, '430', 0, base + iva); lin(id, '700', base, 0); lin(id, '477', iva, 0); };
+    asi(1, '2026-01-15', 'asiento', 101, null); vta(1, 100, 21);    // original FUERA
+    asi(2, '2026-08-10', 'reversion', 101, 1);  rev(2, 100, 21);    //   reversión DENTRO
+    asi(3, '2026-08-20', 'asiento', 202, null); vta(3, 40, 8.40);   // original DENTRO  ← el espejo
+    asi(4, '2026-09-03', 'reversion', 202, 3);  rev(4, 40, 8.40);   //   reversión FUERA
+    const dos = correccionesDeOtroPeriodo(bd, 'invoice', '2026-08-01', '2026-08-31');
+    const veA = dos.detalle.some(f => f.origin_id === 101);
+    const veB = dos.detalle.some(f => f.origin_id === 202);
+    bd.close();
+    ok(veA, 'la regla ve la reversión fechada DENTRO del periodo con su original fuera');
+    ok(veB, 'y ve el ESPEJO: el original dentro del periodo con su reversión fuera (el punto ciego del 3 sep)');
+    ok(veA && veB && r2(dos.total) === -72.6,
+       'y las suma con su signo: la de fuera sube el periodo y la de dentro lo baja', r2(dos.total) + ' € (esperado -72,6)');
   }
 
   // 9) Coherencia del DESGLOSE por tipo en TODAS las filas (ventas y compras): Σ por tipo = total fila.
