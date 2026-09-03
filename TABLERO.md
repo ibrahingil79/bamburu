@@ -337,8 +337,15 @@
 > **Encargo de Ibrahin (3 sep 2026):** correr el barrido completo tras 21 commits y 57 ficheros
 > tocados, y arreglar lo que saliera en rojo.
 
-**Dos pasadas completas, 20-22 min cada una: de `150/210` a `167/210`**, y con los dos arreglos
-posteriores comprobados uno a uno, **169**. Lo que sigue es lo que se encontró, con su medida.
+**TRES pasadas completas, 20-22 min cada una: `150/210` → `167/210` → `168/210`** (`e4b8f08`).
+La cifra que manda es la última, que es la única medida con todo commiteado. Lo que sigue es lo que
+se encontró, con su medida.
+
+> ⚙️ **La cifra intermedia que se escribió aquí antes de la tercera pasada decía «169», contando los
+> dos gates arreglados y comprobados uno a uno.** El barrido entero da **168**, y la diferencia tiene
+> nombre: `verify-vigia`, que es **intermitente** y pasa en solitario. Se corrige en vez de dejar la
+> cifra optimista — *si dos cifras del mismo documento no cuadran, se dice; no se elige la que
+> conviene.*
 
 ### ⚠️ LA REGRESIÓN QUE NADIE VEÍA: 43 NEGOCIOS FANTASMA POR PASADA
 
@@ -387,8 +394,8 @@ durante todo el barrido**: la fuga está cerrada.
 
 ### 📉 LO QUE SIGUE EN ROJO, Y NO SE HA TOCADO — con su motivo
 
-- **38 son DEUDA ANTERIOR**, ya catalogada el 1 sep 2026 en
-  `docs/barridos/2026-09-01-los-113-rojos.md` (aquel día eran 85; **se han arreglado 37 desde
+- **39 son DEUDA ANTERIOR**, ya catalogada el 1 sep 2026 en
+  `docs/barridos/2026-09-01-los-113-rojos.md` (aquel día eran 85; **se han arreglado 46 desde
   entonces**, por otras tareas y por ésta). Son causas variadas —clasificación fiscal por línea desde
   el Saneamiento 4/5, el empleado de prueba inactivo, gates que necesitan su propio negocio— y
   **arreglarlas es un trabajo propio, no un remate de esta tarea**. Va a la cola como tarea.
@@ -412,7 +419,7 @@ durante todo el barrido**: la fuga está cerrada.
 > cuándo no se corre— y se espera un sí. Si dice que no, queda pendiente aquí y se vuelve a
 > proponer al abrir la siguiente sesión.
 
-- **Último barrido completo:** 2026-09-03 · `f677a6f` · **167/210** · 1203 s
+- **Último barrido completo:** 2026-09-03 · `e4b8f08` · **168/210** · 1195 s
 - **Estado:** ✅ al día
 
 <!-- BARRIDO:FIN -->
@@ -6052,13 +6059,13 @@ El pilar queda completo: multi-almacén + stock mínimo/punto de pedido + trazab
   `test-disa-clientes-t5` (un test aparcado que no probaba nada). **El flujo humano no se tocó.** Gates:
   `verify-disa-sin-pedidos` (32/0, estructural) y `verify-disa-pedidos-modelo-real` (10/0, contra el modelo
   de verdad: pide crear/cancelar/facturar un pedido y DISA declina y redirige a `/admin/pedidos`).
-- ⬜ **LOS 38 ROJOS DEL BARRIDO QUE VIENEN DE ANTES (medido el 3 sep 2026).** El barrido completo
-  da **169/210**; los 38 que siguen en rojo **ya lo estaban el 1 de septiembre** y están nombrados
+- ⬜ **LOS 39 ROJOS DEL BARRIDO QUE VIENEN DE ANTES (medido el 3 sep 2026).** El barrido completo
+  da **168/210**; los 39 que siguen en rojo **ya lo estaban el 1 de septiembre** y están nombrados
   uno a uno en `docs/barridos/2026-09-01-los-113-rojos.md`. **No son una sola avería**: hay al menos
   tres familias —comprobaciones que emiten factura sin clasificación fiscal por línea (desde el
   Saneamiento 4/5), las que exigen un 403 a un empleado de prueba que está INACTIVO, y las que
   todavía siembran en el negocio de desarrollo en vez de traerse el suyo—. Aquel día eran 85 y **se
-  han cerrado 37**, así que la deuda baja, pero **no se cierra de remate en otra tarea**: es trabajo
+  han cerrado 46**, así que la deuda baja, pero **no se cierra de remate en otra tarea**: es trabajo
   propio, con su encargo. Mientras siga así, **el barrido completo NO puede usarse como semáforo de
   «todo bien»**, y conviene saberlo antes de mirarlo.
 - ⬜ **`verify-vigia` es INTERMITENTE (3 sep 2026).** Verde en la primera pasada del barrido, rojo en
