@@ -5,7 +5,7 @@
 // intenta mandar, y si no sale se guarda para el próximo intento. Nunca se pierde.
 import { leerLineas, escribirAtomico } from '../nucleo/almacen.js';
 import { revisarTeclado } from './ordenes.js';
-import { enviar, configurado, queFalta } from './telegram.js';
+import { enviar, configurado, queFalta } from '../../core/telegram-transporte.js';
 import { botRetirado } from './bot-retirado.js';   // 3 sep 2026: el bot es exclusivo de Bamburu
 import { alcanzaParaCiclo } from '../nucleo/maquina.js';
 

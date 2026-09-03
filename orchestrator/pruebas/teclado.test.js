@@ -6,7 +6,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { cargarConfig } from '../nucleo/config.js';
 import { interpretar, revisarTeclado, ORDENES, PIDEN_CONFIRMACION } from '../vigia/ordenes.js';
-import { marcaTeclado, enviar } from '../vigia/telegram.js';
+import { marcaTeclado, enviar } from '../../core/telegram-transporte.js';
 
 const cfg = cargarConfig({ raiz: '/tmp', entorno: {} });
 

@@ -82,6 +82,10 @@ export const RAPIDO = new Map([
   // Y que el bot de Telegram siga siendo SOLO de Bamburu. Estático, <1 s: desenganchar a la fábrica
   // cuesta un rato y volver a engancharla, dos líneas en un fichero de entorno.
   ['censo-bot-de-bamburu', 'el bot de avisos: ¿sigue siendo exclusivo de Bamburu? (decisión 3 sep 2026)'],
+  // Y que Bamburu no vuelva a importar nada de la carpeta de la fábrica. Estático, <1 s: la
+  // tubería de Telegram se mudó a core/ el 3 sep 2026 y esto es lo que impide que un import nuevo
+  // la vuelva a atar a orchestrator/.
+  ['censo-avisos-sin-fabrica', 'Bamburu: ¿sigue sin importar nada de orchestrator/? (remate del bot, 3 sep 2026)'],
   // Que no falte ninguna sección ni ninguna puerta.
   ['verify-menu-completo',   'una sección sin enlace es una función que nadie encuentra'],
   // Que la cadena de VERI*FACTU esté entera. Va aquí y no en el completo por su propio motivo: exige
@@ -321,7 +325,7 @@ export const GRUPOS = {
   // 25 ago 2026 · Las dos del correo. `verify-correo-freno` prueba que el freno para de verdad al
   // llegar al tope; `verify-comprobaciones-sin-correo-real` vigila la norma del dueño: ninguna
   // comprobación vuelve a escribir a una bandeja real. Ver docs/censo-correos.md.
-  infra: ['gate-arranque-modulos', 'gate-copias-cifradas', 'censo-bot-de-bamburu', 'verify-correo-freno', 'verify-comprobaciones-sin-correo-real', 'verify-disco-perfiles', 'test-c6-secretos', 'gate-conciliacion-deshacer', 'verify-superadmin-escrituras', 'verify-tenant-lookup-readonly', 'verify-wal-acotado', 'verify-safe-error',
+  infra: ['gate-arranque-modulos', 'gate-copias-cifradas', 'censo-bot-de-bamburu', 'censo-avisos-sin-fabrica', 'verify-correo-freno', 'verify-comprobaciones-sin-correo-real', 'verify-disco-perfiles', 'test-c6-secretos', 'gate-conciliacion-deshacer', 'verify-superadmin-escrituras', 'verify-tenant-lookup-readonly', 'verify-wal-acotado', 'verify-safe-error',
           'verify-xss-escape', 'gate-xss-escape', 'gate-csp-estricta',
           // PUNTO 2 (24 ago 2026) — dar de baja a alguien del equipo: borrar si no dejó rastro,
           // archivar si lo dejó, y decirlo ANTES de pulsar. Antes daba un 500 seco.
@@ -354,7 +358,7 @@ export const GRUPOS = {
   //     arriba por el mismo motivo por el que ellos entraron: una herramienta que nadie ejecuta
   //     deja de cazar cosas.
   //   · lint-js-servido    — pide cada pantalla y compila su JavaScript en línea (~324 pantallas)
-  lint: ['lint-plantillas', 'censo-ventanitas', 'censo-borrado-sin-filtro', 'censo-stock-fuera-del-libro', 'censo-consultas-disa', 'censo-disa-csrf', 'censo-disa-confirmacion', 'censo-texto-ajeno', 'censo-bot-de-bamburu', 'gate-arranque-modulos', 'lint-js-servido', 'verify-nombre-documentos', 'verify-menu-completo',
+  lint: ['lint-plantillas', 'censo-ventanitas', 'censo-borrado-sin-filtro', 'censo-stock-fuera-del-libro', 'censo-consultas-disa', 'censo-disa-csrf', 'censo-disa-confirmacion', 'censo-texto-ajeno', 'censo-bot-de-bamburu', 'censo-avisos-sin-fabrica', 'gate-arranque-modulos', 'lint-js-servido', 'verify-nombre-documentos', 'verify-menu-completo',
          'verify-barrido-no-infla-ventas', 'verify-deuda-una-sola-cuenta',
          'verify-factura-exenta', 'test-oficio', 'verify-libro-sin-huerfanos', 'verify-contabilidad-backfill',
          // PUNTO 5 (24 ago 2026) — el dinero y las fechas, como en España. Se mide sobre lo

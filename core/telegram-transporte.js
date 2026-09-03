@@ -1,4 +1,4 @@
-// telegram.js — El transporte. Envía partes y, desde el 31 ago 2026, TAMBIÉN escucha.
+// telegram-transporte.js — El transporte. Envía partes y, desde el 31 ago 2026, TAMBIÉN escucha.
 //
 // ~~El vigía INFORMA y no recibe órdenes: no hay long-polling, ni webhook, ni comandos. Un bot
 // que solo escribe no puede ser usado para mandar sobre el servidor, y eso es deliberado.~~
@@ -6,14 +6,35 @@
 // ⚙️ CAMBIADO EL 31 ago 2026 POR ENCARGO DE IBRAHIN. El bot ahora recibe órdenes desde el
 // móvil. La preocupación de la frase tachada sigue siendo la correcta, y por eso el permiso
 // NO vive aquí: este fichero es tubería —mete y saca mensajes— y no decide nada. Quién puede
-// mandar y QUÉ se puede mandar está en vigia/ordenes.js, en una lista cerrada:
+// mandar y QUÉ se puede mandar estaba en vigia/ordenes.js, en una lista cerrada — y ese permiso
+// ya no aplica: ver el aviso de más abajo.
 //
-//   · solo obedece al chat de Ibrahin; cualquier otro se ignora y se anota;
-//   · las órdenes son un enum fijo. NO hay forma de mandar una orden libre al servidor:
-//     el texto que llega nunca se ejecuta, solo se compara contra esa lista;
-//   · ni el token ni ningún secreto salen por el chat (todo pasa por `tapar`).
+//   · las órdenes eran un enum fijo. NO había forma de mandar una orden libre al servidor:
+//     el texto que llegaba nunca se ejecutaba, solo se comparaba contra esa lista;
+//   · ni el token ni ningún secreto salían por el chat (todo pasaba por `tapar`, aquí abajo).
+//
+// ⚙️ MOVIDO EL 3 SEP 2026 (remate de la decisión del bot exclusivo de Bamburu, Ibrahin) — de
+// `orchestrator/vigia/telegram.js` A AQUÍ. El bot ya es solo de los avisos de Bamburu: la tubería
+// que lo habla tiene que vivir en territorio de Bamburu, no importarse desde la carpeta de la
+// fábrica. **La fábrica, si algún día revive con bot propio, importará ESTE fichero — no al
+// revés.** Cambio quirúrgico: mover y recablear, sin tocar el comportamiento de una sola línea de
+// `enviar`, `recibir`, `postear` o `responderA`.
+//
+// Lo único que exigió un ajuste real fue `tapar()`: vivía en `orchestrator/nucleo/secretos.js`,
+// que sigue siendo de la fábrica (lo usan `escucha.js` y `orq.js` para más cosas que Telegram, así
+// que no se mueve entero). Traerlo tal cual habría vuelto a importar desde la fábrica; copiarlo
+// entero habría duplicado una lista de secretos que no le corresponde a este fichero. Se queda,
+// aquí abajo, SOLO la parte que este transporte de verdad usa: tapar un token de Telegram POR SU
+// FORMA en las respuestas de la API y en los errores de red — que es exactamente lo que las cuatro
+// llamadas a `tapar(...)` de este fichero hacían, ni más ni menos.
 import https from 'node:https';
-import { tapar } from '../nucleo/secretos.js';
+
+// Un token de bot de Telegram tiene esta forma: 8+ dígitos, dos puntos, 20+ caracteres. Bastaba
+// con la forma (no con el VALOR de una variable de entorno) porque lo que aquí se tapa es lo que
+// *Telegram* o la red devuelven, nunca texto arbitrario del negocio — y Telegram no repite hacia
+// atrás ningún otro secreto de Bamburu.
+const FORMA_TOKEN_TELEGRAM = /\b\d{6,}:[A-Za-z0-9_-]{20,}\b/g;
+function tapar(texto) { return String(texto ?? '').replace(FORMA_TOKEN_TELEGRAM, '«token tapado»'); }
 
 export function configurado(config, entorno = process.env) {
   const t = config.vigia.telegram;

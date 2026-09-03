@@ -36,7 +36,7 @@ import { crearRegistro } from './nucleo/registro.js';
 import { Vigilante } from './cuota/vigilante.js';
 import { Ciclo } from './ciclo.js';
 import { redactar, redactarApartada, redactarAveria, redactarFirma, entregar } from './vigia/parte.js';
-import { configurado, queFalta } from './vigia/telegram.js';
+import { configurado, queFalta } from '../core/telegram-transporte.js';
 import { leerTablero, buscarSiguienteTarea, tareasPendientes, esRepo, rama } from './reader.js';
 import { correrBarrido } from './barrido.js';
 import { alcanzaParaCiclo } from './nucleo/maquina.js';

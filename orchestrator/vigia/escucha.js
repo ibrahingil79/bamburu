@@ -23,7 +23,7 @@ import { anadirLinea, leerLineas } from '../nucleo/almacen.js';
 import { tapar } from '../nucleo/secretos.js';
 import { guardarRespuesta } from '../tablero/respuestas.js';
 import { desfasados } from '../nucleo/despliegue.js';
-import { recibir, responderA, configurado, queFalta } from './telegram.js';
+import { recibir, responderA, configurado, queFalta } from '../../core/telegram-transporte.js';
 import { botRetirado, escuchaRetirada } from './bot-retirado.js';   // 3 sep 2026: el bot es exclusivo de Bamburu
 import { redactar } from './parte.js';
 import {

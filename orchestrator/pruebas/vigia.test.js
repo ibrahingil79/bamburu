@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { redactar, redactarApartada, entregar } from '../vigia/parte.js';
-import { configurado, queFalta } from '../vigia/telegram.js';
+import { configurado, queFalta } from '../../core/telegram-transporte.js';
 import { estadoInicial } from '../nucleo/almacen.js';
 import { leerLineas } from '../nucleo/almacen.js';
 

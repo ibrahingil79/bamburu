@@ -320,7 +320,7 @@ async function conectarTelegram(cfg) {
 }
 
 async function probarTelegram(cfg) {
-  const { enviar, configurado, queFalta } = await import('./vigia/telegram.js');
+  const { enviar, configurado, queFalta } = await import('../core/telegram-transporte.js');
   const { pista } = await import('./nucleo/secretos.js');
   const L = [];
   const decir = (t) => L.push(t);

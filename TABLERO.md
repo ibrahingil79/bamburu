@@ -6082,14 +6082,25 @@ El pilar queda completo: multi-almacén + stock mínimo/punto de pedido + trazab
 - **D6 · [a verificar] XSS en páginas públicas de la tienda** (HTML guardado por admin sin escapar). La tienda está apagada de forma reversible (D1); revisar antes de reabrir en Capa 2. *(El bug de fuga de stock de `cancel_order` ya quedó resuelto al archivar `sales_orders`, D4.)*
 
 ### Deuda técnica
-- ⚠️ **Los avisos de Bamburu siguen importando la tubería de Telegram de la fábrica (3 sep 2026).**
+- ~~⚠️ **Los avisos de Bamburu siguen importando la tubería de Telegram de la fábrica (3 sep 2026).**
   `core/telegram-servidor.js` ya tiene **sus propias credenciales** (`BAMBURU_TELEGRAM_*` en
   `/etc/bamburu.env`) y **su propia configuración**, pero la función que hace el POST —`enviar`—
   sigue viviendo en `orchestrator/vigia/telegram.js`. **No le da a la fábrica ninguna forma de
   hablar** (es un fichero que no decide nada: recibe token, chat y texto; y sus llamantes están
   cerrojados), pero **si alguien borrara esa carpeta, Bamburu se quedaría mudo**. Traerla a `core/`
   es una tarea aparte y pequeña. Está dicho también en la cabecera del propio fichero, para que
-  nadie lea allí una independencia que todavía no es completa.
+  nadie lea allí una independencia que todavía no es completa.~~
+  **✅ ⚙️ CERRADO EL 3 SEP 2026 (remate de la decisión del bot exclusivo).** La tubería se movió
+  entera de `orchestrator/vigia/telegram.js` a `core/telegram-transporte.js`, y los siete sitios
+  que la usaban —incluidos `bucle.js`, `vigia/parte.js`, `vigia/escucha.js`, `orq.js` y sus dos
+  ficheros de pruebas— quedaron recableados a la nueva ruta. Lo único que exigió tocarse de verdad
+  fue `tapar()`: es de `orchestrator/nucleo/secretos.js`, que sigue siendo de la fábrica (lo usan
+  `escucha.js` y `orq.js` para más cosas), así que no se movió entero; se dejó, dentro del fichero
+  movido, solo el redactor por FORMA de un token de Telegram que las cuatro llamadas ya usaban —
+  mismo comportamiento, sin duplicar la lista de secretos que no le correspondía. **Criterio de
+  cierre probado de verdad**: se apartó la carpeta `orchestrator/` entera del árbol, se lanzó un
+  aviso y **salió**; restaurada la carpeta después. Lo vigila `censo-avisos-sin-fabrica` (`lint` +
+  `infra` + RAPIDO, con autoprueba). Commit `PENDIENTE-HASH`.
 - ⚠️ **319 copias antiguas siguen EN CLARO en Drive, y ya no caducan solas (3 sep 2026, AUD-008).**
   Al pasar el destino a cifrado, la retención de 14 días apunta al destino nuevo: **el histórico en
   claro del destino anterior (`gdrive:Bamburu-backup/daily`) no lo toca nadie ya**. Son copias reales

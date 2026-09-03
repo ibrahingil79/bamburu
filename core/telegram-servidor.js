@@ -21,12 +21,10 @@
 // producción llegan por `process.env` sin leer ningún disco. El respaldo de leer el fichero está
 // para los guiones que corren a mano.
 //
-// ⚠️ LO QUE SIGUE ATADO, Y SE DICE EN VEZ DE REDONDEARLO: la CREDENCIAL y la CONFIGURACIÓN ya no
-// dependen de la fábrica, pero la TUBERÍA (`enviar`, aquí debajo) todavía se importa de
-// `orchestrator/vigia/telegram.js`. Es un fichero que no decide nada —recibe token, chat y texto—,
-// así que no le da a la fábrica ninguna forma de hablar: eso lo cierran el cerrojo de sus llamantes
-// y que ya no tenga credenciales. Pero **si alguien borrara esa carpeta, Bamburu se quedaría mudo**.
-// Traerla a `core/` es una tarea aparte y está apuntada en `TABLERO.md` §Deuda técnica.
+// ⚙️ CERRADO EL 3 SEP 2026 (remate de la decisión). La TUBERÍA (`enviar`, aquí debajo) ya no se
+// importa de la carpeta de la fábrica: vive al lado, en `./telegram-transporte.js`. Se puede
+// borrar `orchestrator/` entero y los avisos de Bamburu siguen saliendo — probado de verdad
+// apartando la carpeta y lanzando un aviso. Lo vigila `scripts/censo-avisos-sin-fabrica.mjs`.
 //
 // ⚠️ LA REGLA QUE MANDA: **esto nunca lanza y nunca se queda colgado.** Quien avisa de una avería no
 // puede convertirse en la avería. Devuelve `{ ok, motivo }` y el que llama decide qué hacer — pero
@@ -36,7 +34,7 @@
 // (una librería que no lanza) y su canal (un chat).
 // ─────────────────────────────────────────────────────────────────────────────────────────────────
 import { readFileSync } from 'node:fs';
-import { enviar } from '../orchestrator/vigia/telegram.js';
+import { enviar } from './telegram-transporte.js';
 
 const ENV_BAMBURU = '/etc/bamburu.env';
 

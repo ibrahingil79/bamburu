@@ -14,8 +14,9 @@
 // para que no vuelvan a crecer solas.
 //
 // DÓNDE VA: al principio de CADA camino de la fábrica que hablaba o escuchaba por el bot
-// (`vigia/parte.js`, `vigia/escucha.js`, `orq.js`). NO va dentro de `vigia/telegram.js`, que es
-// tubería compartida: Bamburu manda sus avisos por ahí y este cerrojo lo dejaría mudo también.
+// (`vigia/parte.js`, `vigia/escucha.js`, `orq.js`). NO va dentro de la tubería compartida
+// (`core/telegram-transporte.js`, desde el 3 sep 2026 en territorio de Bamburu): Bamburu manda
+// sus avisos por ahí y este cerrojo lo dejaría mudo también.
 // `scripts/censo-bot-de-bamburu.mjs` se pone rojo si alguna pieza de la fábrica vuelve a llamar
 // al transporte sin pasar por aquí.
 // ─────────────────────────────────────────────────────────────────────────────────────────────────
