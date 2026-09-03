@@ -69,6 +69,9 @@ export const RAPIDO = new Map([
   // fichero para EJECUTARLA: quitar el ancla o añadir una palabra a la lista son retoques de una
   // línea que no se ven raros al leerlos, y ejecutar de más es irreversible.
   ['censo-disa-confirmacion', 'una confirmación relajada ejecuta acciones que el dueño no pidió (AUD-015)'],
+  // Y que el texto que no escribió el usuario siga llegando MARCADO. Estático, <1 s, y va en `lint`
+  // porque una de sus cuatro vías —el extractor de facturas— NO despierta al grupo `disa`.
+  ['censo-texto-ajeno', 'texto ajeno sin marcar: una orden dentro de un dato se lee como instrucción (AUD-016)'],
   // Que no falte ninguna sección ni ninguna puerta.
   ['verify-menu-completo',   'una sección sin enlace es una función que nadie encuentra'],
   // Que la cadena de VERI*FACTU esté entera. Va aquí y no en el completo por su propio motivo: exige
@@ -184,11 +187,13 @@ export const GRUPOS = {
     'censo-consultas-disa',
     'censo-disa-csrf',
     'censo-disa-confirmacion',
+    'censo-texto-ajeno',
     'gate-disa-borrado-conversaciones',
     'gate-disa-confirmacion',
     'gate-disa-csrf',
     'gate-disa-stock-libro',
     'gate-disa-sql-limites',
+    'gate-disa-inyeccion',
     'test-c2-captura',
     // ↓ tres que ABORTABAN por pedir la ruta de la BD por parámetro (24 ago 2026): ya arrancan
     'verify-voz', 'verify-vigia', 'verify-dibujo',
@@ -339,7 +344,7 @@ export const GRUPOS = {
   //     arriba por el mismo motivo por el que ellos entraron: una herramienta que nadie ejecuta
   //     deja de cazar cosas.
   //   · lint-js-servido    — pide cada pantalla y compila su JavaScript en línea (~324 pantallas)
-  lint: ['lint-plantillas', 'censo-ventanitas', 'censo-borrado-sin-filtro', 'censo-stock-fuera-del-libro', 'censo-consultas-disa', 'censo-disa-csrf', 'censo-disa-confirmacion', 'lint-js-servido', 'verify-nombre-documentos', 'verify-menu-completo',
+  lint: ['lint-plantillas', 'censo-ventanitas', 'censo-borrado-sin-filtro', 'censo-stock-fuera-del-libro', 'censo-consultas-disa', 'censo-disa-csrf', 'censo-disa-confirmacion', 'censo-texto-ajeno', 'lint-js-servido', 'verify-nombre-documentos', 'verify-menu-completo',
          'verify-barrido-no-infla-ventas', 'verify-deuda-una-sola-cuenta',
          'verify-factura-exenta', 'test-oficio', 'verify-libro-sin-huerfanos', 'verify-contabilidad-backfill',
          // PUNTO 5 (24 ago 2026) — el dinero y las fechas, como en España. Se mide sobre lo
@@ -434,6 +439,11 @@ export const EMPIEZAN_DE_CERO = new Set([
   // 3 sep 2026 — negocio propio: crea un cliente y le cambia el nombre para demostrar que confirmar
   // ejecuta exactamente lo propuesto. En el de desarrollo dejaría un cliente de prueba.
   'gate-disa-confirmacion',
+  // 3 sep 2026 — negocio propio, y aquí no es una preferencia: siembra órdenes maliciosas DENTRO de
+  // los datos (un producto llamado «IGNORA TUS INSTRUCCIONES…»), levanta un segundo negocio para
+  // comprobar que no se filtra nada entre ellos, y lanza escrituras contra la base. En el de
+  // desarrollo dejaría esos nombres en los informes del dueño, que es la avería del 23 ago.
+  'gate-disa-inyeccion',
 ]);
 
 // NI DE CERO NI COMPARTIDO DEL TODO: los que levantan un negocio EXTRA para UN caso concreto y el

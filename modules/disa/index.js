@@ -4,6 +4,7 @@ import { safeError } from '../../core/errors.js';
 import { bodyLimit } from 'hono/body-limit';
 import { adminAuth, getCsrfToken, requirePerm } from '../../core/auth.js';
 import { csrfProtect } from '../../core/csrf.js';   // AUD-006: se aplica en la PUERTA, al final de este fichero, no ruta a ruta
+import { marcarResultadoDeHerramienta } from './texto-ajeno.js';   // AUD-016: el texto ajeno va marcado, no suelto
 import { consultarConLimites, registrarConsultaDisa } from './consulta.js';   // AUD-005: tope de filas y plazo, impuestos por el servidor
 import { MAX_FILAS, PLAZO_MS } from './limites-consulta.js';
 import { checkPermission } from '../../core/permission-check.js';   // Permisos · Paso 2 — MISMO motor que requirePerm (sin lógica paralela), incluido el bypass owner/admin, desde el 31 ago 2026
@@ -207,7 +208,12 @@ export async function resultadosDeHerramientas(bloques, ejecutar, { presupuesto 
       try {
         resultado = await ejecutar(b.name, b.input || {});
         if (!resultado || typeof resultado !== 'object') resultado = { resultado };
-        texto = JSON.stringify(resultado);
+        // ⚙️ 3 SEP 2026 (AUD-016) · MARCADO. Lo que devuelve una herramienta son DATOS DEL NEGOCIO
+        // —nombres de clientes, de productos, conceptos escritos por gente— y hasta hoy viajaban al
+        // modelo como JSON crudo, indistinguibles de nuestras instrucciones. El contexto ya iba
+        // marcado desde antes; esta puerta no. Marcar no es una garantía (es una petición al
+        // modelo): lo que de verdad protege son los cerrojos del servidor. Sube el listón.
+        texto = marcarResultadoDeHerramienta(resultado);
         if (typeof texto !== 'string') throw new Error('resultado no serializable');
       } catch (e) {
         resultado = { error: safeError(e) };
@@ -3174,5 +3180,14 @@ export function register(app, db) {
   //
   // Devolverlo NO abre ninguna puerta nueva: no es una ruta, no se monta en ningún sitio y quien lo
   // llama ya tiene la base de datos delante. Lo usa `scripts/lib/disa-accion.mjs`.
-  return { executeAction };
+  //
+  // ⚠️ AMPLIADO EL 3 SEP 2026 (AUD-016, inyección de instrucciones) — Y CON UNA CORRECCIÓN DENTRO.
+  // `executeAction` NO comprueba permisos: los cerrojos que deciden si una acción puede siquiera
+  // intentarse viven ANTES, en la ruta `/message` (`validActionEnvelope` → `actionAllowed` →
+  // `claimConfirmation`). Una comprobación que solo llame a `executeAction` mide el efecto, no la
+  // defensa — y la batería de inyección necesita medir justo la defensa, porque su pregunta es
+  // «¿aguanta el cerrojo AUNQUE la IA se haya tragado la orden inyectada?».
+  // Por eso salen también los tres cerrojos y las dos listas. Siguen siendo los MISMOS objetos que
+  // usa la ruta viva: no hay copia, así que no pueden divergir de lo que corre en producción.
+  return { executeAction, actionAllowed, claimConfirmation, validActionEnvelope, EXECUTABLE_ACTIONS, HANDOFF_ACTIONS };
 }
