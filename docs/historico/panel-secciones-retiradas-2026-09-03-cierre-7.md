@@ -1,0 +1,32 @@
+# Panel de Notion — entradas retiradas el 3 sep 2026 (cierre 7), por tamaño
+
+> **Por qué se retiran.** Al añadir la entrada del cierre 7 el panel volvió a acercarse a su tope de
+> **45.000 letras** (por encima, el chat que lo abre revienta). Salen las dos entradas más antiguas
+> que quedaban vivas —los cierres 5 y 4—, **íntegras aquí y sin borrar nada**, y en el panel queda un
+> puntero. **En la página se quedan los cierres 6 y 7**, que son los últimos.
+>
+> Las siete anteriores del mismo día están en `panel-secciones-retiradas-2026-09-03-cierre-6.md`.
+
+---
+
+## Cierre 5 — la confirmación de DISA ya era estricta (cerrada con prueba, sin tocar nada)
+## Cierre 4 — una página ajena ya no puede mandarle a DISA en tu nombre
+
+> 🔒 **3 SEP 2026 (cierre 5) — LA CONFIRMACIÓN DE DISA YA ERA ESTRICTA. CERRADA CON PRUEBA, SIN TOCAR NADA.**
+> **Quinta del BLOQUE 2, y esta se cierra distinto.** La ficha decía que Codex sospechaba que DISA daba por buena una confirmación **con cualquier texto que se pareciera a un sí** — pero también decía, con todas las letras, que **eso no se había comprobado**. Así que la tarea empezaba por comprobarlo. **Lo he comprobado: no es cierto. Y por eso no he cambiado ni una línea del programa.**
+> **Lo que probé, y con qué frases.** Le pasé once respuestas ambiguas de verdad — *«sí, pero espera»*, *«sí a lo de antes»*, *«vale, ¿y si mejor no?»*, *«creo que sí»*, *«sí pero antes dime el precio»*, *«ok pero cambia la fecha»*, *«no, déjalo»*… **Las once cancelan.** Y los diecisiete «sí» limpios —con tilde, en mayúsculas, con punto, con espacios— **siguen funcionando**, que es la otra mitad: una cerradura que no deja pasar a nadie tampoco vale.
+> **Por qué aguanta:** la decisión **NO la toma la IA**, la toma el servidor comparando tu respuesta con una **lista cerrada** de once palabras, **y tiene que ser la frase entera**. Un «sí» metido dentro de una frase no cuenta — y ahí es donde se rompía todo lo demás.
+> **⏳ Y hay dos cerrojos más que no esperaba encontrar, y son los buenos.** El primero: **la propuesta caduca sola**. Si DISA te propone algo y tú le preguntas otra cosa, la propuesta **deja de existir** — un «sí» dicho tres mensajes después ya no confirma nada. Nadie tiene que acordarse de caducarla: no sobrevive. El segundo: **una propuesta solo se puede confirmar UNA vez**, y solo por la persona a la que se le enseñó, así que un doble clic o un reintento no la ejecutan dos veces. Y las acciones delicadas —desactivar el doble factor de alguien— **no se confirman con «sí»**: hay que escribir una frase exacta.
+> **🧪 Entonces, ¿qué he hecho, si no había nada roto? Poner el guardián.** Lo que hoy te protege es un detalle diminuto: que la comparación exija la frase **entera** y que la lista tenga **once** palabras. **Quitar ese detalle o añadir una palabra son cambios de una línea que no se ven raros al leerlos** — y ejecutar algo que no pediste no se puede deshacer. Así que el guardián **coge la comparación del propio programa y la prueba** contra esas frases: si alguien la afloja, prueba **la aflojada** y salta. No revisa una copia suya — esa es justo la trampa de los guardianes que dicen que todo va bien sin haber mirado.
+> **Probado poniéndolo rojo cuatro veces sobre el programa de verdad.** La más clara: al quitar el «la frase entera», **nueve de las frases ambiguas pasaron a ejecutar** — justo lo que Codex sospechaba— y en la comprobación se ve el cliente renombrado a «ZZ NO DEBERÍA» **por un «sí, pero espera»**. **16 comprobaciones en verde**, con negocio de prueba propio, y sin depender de que la IA conteste.
+> **📝 Apuntado, y está bien:** dictar una compra por voz sí se ejecuta sin el «¿confirmas?» del chat — pero **solo prepara un borrador**: no crea la compra, no mueve stock ni dinero. **El confirmar de verdad está en la pantalla de revisión**, con los datos delante para que los veas. No se ha tocado.
+>
+> 🚪 **3 SEP 2026 (cierre 4) — UNA PÁGINA AJENA YA NO PUEDE MANDARLE A DISA EN TU NOMBRE.**
+> **Cuarta del BLOQUE 2, hecha.** Imagina que tienes Bamburu abierto en una pestaña y, en otra, abres una página cualquiera. Esa página podía **darle órdenes a DISA como si fueras tú** — el navegador manda tu sesión sola, sin preguntarte. Nueve puertas de DISA estaban abiertas de par en par.
+> **Lo que podía hacer:** mandarle un mensaje a DISA en tu nombre, cambiarte el nombre de las conversaciones o fijarlas, cambiarte el asistente… y **subirte un adjunto que arranca la lectura de una factura por IA**, que además **te gasta cuota**. Había un límite de velocidad y un control de permisos, pero **ninguno de los dos sirve para esto**: son otra cosa.
+> **El arreglo no es un invento nuevo: es la misma cerradura que ya usa el resto del programa.** Todas las pantallas de Bamburu pasan por una **puerta común** que exige una prueba que **solo puede poner una página del propio Bamburu** — una página ajena no puede leerla ni fabricarla. DISA se montaba **por fuera** de esa puerta; ahora entra por ella.
+> **🔑 Y lo importante: ya no hay que acordarse.** Antes había **dos** rutas con la protección escrita a mano, una por una — eso protege esas dos y ninguna más. Ahora la pone la puerta, así que **cualquier función nueva de DISA nace protegida sola**. Las dos que la tenían escrita a mano se han integrado: dos cerraduras para la misma puerta no protegen el doble, solo hacen dudar de cuál manda.
+> **Y lo que NO cambia:** consultar no lleva prueba, así que **ninguna pantalla de solo mirar se ha tocado**.
+> **25 comprobaciones en verde, 0 fallos**, con negocio de prueba propio. Se reproduce el ataque tal cual —misma sesión, sin la prueba— y **las 8 puertas lo rechazan**; con la prueba legítima siguen funcionando; y **se prueba en un navegador de verdad con tus pantallas reales**: abrir DISA, crear una conversación, subir un adjunto y borrar una conversación. **Que la cerradura no te estorbe era la mitad de la tarea.** Más un centinela probado en rojo por sus tres reglas.
+> **📝 Lo que censé de paso y NO he tocado:** el **panel de superadmin** tiene su propia cerradura, distinta de la común — **no es un agujero** (usa otra sesión y no puede compartirla), pero es la misma regla escrita dos veces, y eso acaba costando caro. Apuntado. Y dejé escrito **qué NO debe llevar esta protección** —el enlace del portal que abre tu cliente, el alta pública y la tienda apagada— **porque ponérsela las rompería**, y quería que quedara dicho antes de que alguien lo «arregle».
+>
