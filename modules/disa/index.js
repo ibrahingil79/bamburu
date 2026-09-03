@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { safeError } from '../../core/errors.js';
 import { bodyLimit } from 'hono/body-limit';
 import { adminAuth, getCsrfToken, requirePerm } from '../../core/auth.js';
-import { csrfProtect } from '../../core/csrf.js';   // solo sobre lo que BORRA de verdad; ver borrarConversaciones()
+import { csrfProtect } from '../../core/csrf.js';   // AUD-006: se aplica en la PUERTA, al final de este fichero, no ruta a ruta
 import { consultarConLimites, registrarConsultaDisa } from './consulta.js';   // AUD-005: tope de filas y plazo, impuestos por el servidor
 import { MAX_FILAS, PLAZO_MS } from './limites-consulta.js';
 import { checkPermission } from '../../core/permission-check.js';   // Permisos · Paso 2 — MISMO motor que requirePerm (sin lógica paralela), incluido el bypass owner/admin, desde el 31 ago 2026
@@ -1614,7 +1614,7 @@ export function register(app, db) {
 
   // ── Summary (métricas + alertas sin llamada a Claude) ─────
 
-  router.get('/summary', adminAuth(db), c => {
+  router.get('/summary', c => {
     try {
       const cfg = db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get() || {};
       const sym = cfg.currency_symbol || '€';
@@ -1708,7 +1708,7 @@ export function register(app, db) {
 
   // ── Vista ─────────────────────────────────────────────────
 
-  router.get('/', adminAuth(db), c => {
+  router.get('/', c => {
     const session = c.get('session');
     const prefill = c.req.query('q') || '';
     const usage = getUsage(db);
@@ -2212,7 +2212,7 @@ export function register(app, db) {
 
   // ── API ──────────────────────────────────────────────────
 
-  router.post('/select-agent', adminAuth(db), async c => {
+  router.post('/select-agent', async c => {
     let b;
     try { b = await c.req.json(); } catch { return c.json({ ok: false }, 400); }
     const agentId = parseInt(b?.agent_id) || 1;
@@ -2223,7 +2223,7 @@ export function register(app, db) {
     return c.json({ ok: true });
   });
 
-  router.get('/agents', adminAuth(db), c => {
+  router.get('/agents', c => {
     let agents = [];
     try {
       agents = db.prepare('SELECT id, name, icon, slug FROM disa_agents WHERE active=1 ORDER BY id').all();
@@ -2238,7 +2238,7 @@ export function register(app, db) {
 
   // ── Thread endpoints ─────────────────────────────────────
 
-  router.get('/threads', adminAuth(db), c => {
+  router.get('/threads', c => {
     const session = c.get('session');
     const threads = db.prepare(`
       SELECT t.id, t.title, t.pinned, t.created_at, t.updated_at
@@ -2249,7 +2249,7 @@ export function register(app, db) {
     return c.json(threads);
   });
 
-  router.get('/threads/:id', adminAuth(db), c => {
+  router.get('/threads/:id', c => {
     const threadId = parseInt(c.req.param('id'));
     const session = c.get('session');
     const thread = db.prepare('SELECT * FROM disa_conversation_threads WHERE id=? AND is_active=1 AND user_id=?').get(threadId, session?.userId || null);
@@ -2263,7 +2263,7 @@ export function register(app, db) {
     return c.json({ id: thread.id, title: thread.title, created_at: thread.created_at, updated_at: thread.updated_at, messages });
   });
 
-  router.post('/threads', adminAuth(db), c => {
+  router.post('/threads', c => {
     const session = c.get('session');
     const r = db.prepare('INSERT INTO disa_conversation_threads (user_id) VALUES (?)').run(session?.userId || null);
     const thread = db.prepare('SELECT * FROM disa_conversation_threads WHERE id=?').get(r.lastInsertRowid);
@@ -2274,10 +2274,11 @@ export function register(app, db) {
   //
   // Antes hacía `is_active=0`: ocultaba el hilo y dejaba los mensajes en la base para siempre. El
   // usuario pulsaba «Eliminar», la conversación desaparecía de la lista y su texto seguía entero.
-  // Ahora se borra, con `csrfProtect()` delante: convertir esto en definitivo sobre una ruta que
-  // nadie protege sería agravar el agujero abierto que ya tiene DISA (tarea `disa-rutas-sin-csrf`,
-  // que sigue teniendo que cubrir TODAS las rutas de escritura — esto no la sustituye).
-  router.delete('/threads/:id', adminAuth(db), csrfProtect(), c => {
+  // Ahora se borra. ⚙️ 3 SEP 2026 · la protección anti-CSRF que esta línea declaraba a mano **ya no
+  // hace falta aquí**: la pone la PUERTA, al final de este fichero, para todo el router de DISA
+  // (tarea `disa-rutas-sin-csrf`). Se retira la declaración suelta porque dos protecciones para lo
+  // mismo no protegen el doble — solo hacen dudar de cuál manda.
+  router.delete('/threads/:id', c => {
     const threadId = parseInt(c.req.param('id'));
     const session = c.get('session');
     if (!Number.isInteger(threadId)) return c.json({ ok: false, error: 'Conversación no válida' }, 400);
@@ -2286,7 +2287,7 @@ export function register(app, db) {
     return c.json({ ok: true, ...r });
   });
 
-  router.post('/threads/:id/title', adminAuth(db), async c => {
+  router.post('/threads/:id/title', async c => {
     const threadId = parseInt(c.req.param('id'));
     const session = c.get('session');
     let body;
@@ -2297,7 +2298,7 @@ export function register(app, db) {
     return c.json({ ok: true });
   });
 
-  router.post('/threads/:id/pin', adminAuth(db), c => {
+  router.post('/threads/:id/pin', c => {
     const threadId = parseInt(c.req.param('id'));
     const session = c.get('session');
     const row = db.prepare('SELECT pinned FROM disa_conversation_threads WHERE id=? AND is_active=1 AND user_id=?').get(threadId, session?.userId || null);
@@ -2308,7 +2309,7 @@ export function register(app, db) {
   });
 
   // ── Store Builder chat ────────────────────────────────────
-  router.post('/store-message', adminAuth(db), async c => {
+  router.post('/store-message', async c => {
     // D2 — builder de tienda por voz DESMONTADO (el editor "Tienda Online" se retiró; store_settings
     // se conserva, no se archiva). Endpoint neutralizado; cuerpo original abajo, inalcanzable.
     return c.json({ reply: 'El editor de tienda está desmontado (D2). La tienda pública está desactivada.', action: null }, 404);
@@ -2377,7 +2378,7 @@ export function register(app, db) {
     }
   });
 
-  router.get('/chips', adminAuth(db), c => {
+  router.get('/chips', c => {
     const session = c.get('session');
     const row = db.prepare('SELECT chips FROM disa_quick_chips WHERE user_id=?').get(session?.userId);
     const defaults = ['Resumen del día', 'Top productos', 'Clientes inactivos'];
@@ -2386,7 +2387,7 @@ export function register(app, db) {
     catch { return c.json(defaults); }
   });
 
-  router.post('/chips', adminAuth(db), async c => {
+  router.post('/chips', async c => {
     let body;
     try { body = await c.req.json(); } catch { return c.json({ ok: false }, 400); }
     const chips = Array.isArray(body?.chips)
@@ -2400,7 +2401,7 @@ export function register(app, db) {
 
   router.post('/message',
     rateLimit({ windowMs: 60000, max: 15, keyPrefix: 'disa-message', message: 'Vas demasiado rápido con DISA. Espera un momento.' }),
-    adminAuth(db), async c => {
+    async c => {
     const usage = getUsage(db);
     const limit = 50;
     const tenantSlug = c.get('tenant')?.slug;
@@ -3057,7 +3058,9 @@ export function register(app, db) {
   // puede pedirlo, doble confirmación, y rastro de quién lo hizo y cuándo). **Nadie lo añade aquí
   // «de paso».** Escrito también en `docs/contexto/decisiones.md` §DISA y en la ficha del TABLERO;
   // el razonamiento entero, en `docs/seguridad/disa-borrado-conversaciones-diagnostico.md` §5.
-  router.post('/clear', adminAuth(db), csrfProtect(), c => {
+  // ⚙️ 3 SEP 2026 · el `csrfProtect()` que llevaba escrito aquí lo pone ahora la PUERTA, abajo, para
+  // todas las rutas de DISA. Misma protección, un solo sitio.
+  router.post('/clear', c => {
     const session = c.get('session');
     const r = borrarConversaciones(db, session?.userId);
     return c.json({ ok: true, ...r });
@@ -3068,7 +3071,7 @@ export function register(app, db) {
   // DE CONTEOS determinista de las MISMAS fuentes del motor (vencimientos de proveedor + stock
   // bajo) — sin detalle y sin ofrecer acciones — y se marca todo como VISTO (el badge pasa a gris;
   // el rojo solo vuelve si aparece algo nuevo). El detalle lo pide el dueño escribiendo después.
-  router.post('/alerts/open', adminAuth(db), c => {
+  router.post('/alerts/open', c => {
     try {
       // Un RESUMEN DE CONTEOS no descarta nada: ya NO marca los avisos como vistos. Antes pisaba la
       // huella entera y borraba los "no visto" que el usuario había marcado a propósito. Marcar es
@@ -3087,7 +3090,7 @@ export function register(app, db) {
   // stock ni compras: nada se guarda hasta que el usuario confirma en esa pantalla por el
   // servicio validado (confirm-first). No cuenta contra el límite mensual (no es un mensaje
   // de chat). Permiso de compras como en la propia pantalla de captura.
-  router.post('/attach', adminAuth(db), requirePerm('purchases.create'),
+  router.post('/attach', requirePerm('purchases.create'),
     bodyLimit({ maxSize: MAX_UPLOAD_BYTES, onError: c => c.json({ error: 'El archivo supera el máximo de 12 MB. Sube una foto o PDF más ligero.' }, 413) }),
     async c => {
       try {
@@ -3130,8 +3133,37 @@ export function register(app, db) {
       }
     });
 
-  app.route('/admin/disa', router);
-  app.route('/api/disa', router);
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  // LA PUERTA — auth y CSRF en la ENTRADA, como el resto del producto (AUD-006)
+  //
+  // DE DÓNDE SALE. El router de DISA se montaba directo y **no heredaba el `csrfProtect()` que sí
+  // llevan los routers del ERP**. Con la sesión de la víctima abierta en otra pestaña, una página
+  // ajena podía mandarle un mensaje a DISA en su nombre, renombrarle o fijarle conversaciones,
+  // cambiarle el agente y **subirle un adjunto que arranca la lectura por IA de una factura**
+  // —gastando cuota del negocio—. Nueve rutas de escritura sin ninguna protección.
+  //
+  // ESTO NO ES UN MECANISMO NUEVO: es el MISMO que monta `modules/erp/routes/index.js:124-126`,
+  //     const admin = new Hono();
+  //     admin.use('*', auth);      // adminAuth(db)
+  //     admin.use('*', csrf);      // csrfProtect()
+  //     admin.route('/products', ...);
+  // …con el mismo orden y por el mismo motivo. `csrfProtect()` lee `c.get('session')` y devuelve 401
+  // si no la encuentra, así que **el auth tiene que ir delante**: un `use('*', csrfProtect())` a
+  // secas correría antes del `adminAuth` de cada ruta y todas las escrituras darían 401.
+  //
+  // LO QUE GANA, y es el punto de la tarea: **una ruta nueva de DISA nace protegida** sin que nadie
+  // se acuerde de declararlo. Antes había DOS rutas con `csrfProtect()` escrito a mano en su línea
+  // —las que borran, del 3 sep— y eso protegía esas dos y ninguna más.
+  //
+  // Y no toca la lectura: `csrfProtect()` deja pasar GET, HEAD y OPTIONS, así que las seis rutas de
+  // solo lectura de DISA siguen exactamente igual.
+  const puerta = new Hono();
+  puerta.use('*', adminAuth(db));
+  puerta.use('*', csrfProtect());
+  puerta.route('/', router);
+
+  app.route('/admin/disa', puerta);
+  app.route('/api/disa', puerta);
 
   // ── LA COSTURA PARA PODER COMPROBAR LAS ACCIONES SIN EL MODELO (3 sep 2026) ────────────────────
   // `executeAction` es el único sitio donde una acción de DISA toca datos, y hasta hoy solo se podía

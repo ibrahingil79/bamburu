@@ -6126,6 +6126,30 @@ El pilar queda completo: multi-almacén + stock mínimo/punto de pedido + trazab
   parar y preguntar antes de destruir datos de un tenant, y el encargo no levantaba esa norma.**
   Queda a una orden. *(El arreglo de fondo —que cada gate revierta su asiento al limpiar— sigue
   pendiente y es lo que de verdad cierra esto.)*
+- ⬜ **EL SUPERADMIN SE PROTEGE CON UN MECANISMO PROPIO, NO CON EL COMÚN (censado el 3 sep 2026).**
+  Al hacer `disa-rutas-sin-csrf` se censó **todo lo que escribe fuera de DISA**, y esto es lo único
+  que aparece: `modules/superadmin/index.js` tiene sus **17 escrituras** protegidas por `saCsrf`, una
+  función propia que compara `x-csrf-token` contra la sesión de la cookie `sadm`. **NO es un agujero
+  —protege de verdad—**, y tiene un motivo legítimo: el superadmin usa **otra sesión**, así que no
+  puede reutilizar `csrfProtect()`, que lee la del ERP. Pero **es un mecanismo paralelo**, con su
+  propio código y sus propias excepciones (`index.js:148` declara una ruta que no pasa por él,
+  con su motivo escrito). La lección de este repo dice que una regla contada dos veces son dos reglas
+  en cuanto una se retoca. **Unificarlo NO se hizo aquí** —el encargo pedía cambios quirúrgicos— y
+  no es urgente: hoy funciona. Cuando se toque el superadmin, se mira.
+- ✅ **Y lo que SÍ está bien, para que nadie lo «arregle» sin mirar** (censado el mismo día): las
+  3 escrituras de `modules/portal/admin.js` **heredan** el `csrfProtect()` del ERP porque se montan
+  en `admin.route('/portal', …)`. Y las que **no llevan CSRF y no deben llevarlo**:
+  `POST /portal/:token/mensaje` (pública, se autentica por el token de la URL: **sin cookie
+  ambiental no hay ataque CSRF que montar**), las 3 del alta pública de `modules/registro/`
+  (antes de que exista sesión) y las 9 de `modules/store/`, que es **Capa 2 apagada** (`/store` →
+  404, medido). **Ponerles CSRF las rompería.**
+- ⬜ **`gate-disa-captura-chat` falla por algo que NO es de las tareas de hoy (comprobado el 3 sep 2026).**
+  Da **24 ✓ · 1 ✗** en la aserción *«dashboard: botón de adjuntar presente»*. **Comprobado guardando
+  mis cambios con `git stash` y volviéndolo a pasar: falla EXACTAMENTE igual sin ellos**, así que no
+  lo causó `disa-rutas-sin-csrf` ni ninguna de las de hoy. No sale en la lista de rojos del barrido
+  porque está **declarado FUERA** (`run-gates.mjs:206`, por depender del saldo del proveedor de IA),
+  y por eso nadie lo estaba mirando. **Se apunta y no se arregla de paso**, que es lo que pedía el
+  encargo; entra con la deuda del barrido.
 - ⬜ **`gate-disa-informes` afirma sobre un texto del código que ya no existe (medido el 3 sep 2026).**
   Su aserción *«y el bucle sabe despacharlas»* hace `grep` de `NOMBRES_INFORMES.has(toolUse.name)`
   sobre `modules/disa/index.js`, y **ese texto no está**: el despacho se reescribió para ir POR
@@ -9484,9 +9508,9 @@ escenarios y los dos casos incómodos, con relojes de prueba de Stripe) ·
 > los 90 días de descarga y la bóveda que no borra nada · y el rescate pagando un mes.
 >
 > ~~**La siguiente tarea de la cola es la primera del BLOQUE 2 — «QUE SEA SEGURO DE VERDAD»:**
-> `disa-borrado-global-conversaciones`.~~ **⚙️ CADUCADO EL 3 SEP 2026: van TRES del BLOQUE 2
-> hechas** — el borrado, el stock fuera del libro y el tope/plazo de las consultas. La siguiente es
-> `disa-rutas-sin-csrf`. Se tacha en vez de borrarse, que es lo que manda este
+> `disa-borrado-global-conversaciones`.~~ **⚙️ CADUCADO EL 3 SEP 2026: van CUATRO del BLOQUE 2
+> hechas** — el borrado, el stock fuera del libro, el tope/plazo de las consultas y la protección
+> anti-CSRF. La siguiente es `disa-confirmacion-textual-estricta`. Se tacha en vez de borrarse, que es lo que manda este
 > documento — y porque un puntero rancio manda al siguiente chat al sitio equivocado con toda la
 > confianza del mundo.
 
@@ -9499,8 +9523,8 @@ escenarios y los dos casos incómodos, con relojes de prueba de Stripe) ·
 > archivos que sube la gente, el enlace del portal, y que Bamburu no arranque si le falta una parte.
 >
 > ~~**De los ocho hallazgos críticos o altos de Codex, solo se han cerrado dos.** Los seis que
-> quedan están aquí.~~ **⚙️ ACTUALIZADO EL 3 SEP 2026 al cerrar AUD-002, AUD-004 y AUD-005: van
-> CINCO cerrados y quedan TRES**, los de aquí abajo que siguen sin el ✅.
+> quedan están aquí.~~ **⚙️ ACTUALIZADO EL 3 SEP 2026 al cerrar AUD-002, AUD-004, AUD-005 y
+> AUD-006: van SEIS cerrados y quedan DOS**, los de aquí abajo que siguen sin el ✅.
 
 
 ## ✅ TAREA — DISA puede borrar la conversación de todo el negocio
@@ -9762,19 +9786,76 @@ reglas**: un camino de consulta nuevo sin declarar, y un límite escrito a mano 
 `test-disa-clientes-t5` 30 · `gate-disa-borrado-conversaciones` 36 · `verify-disa-query-permisos` y
 `verify-disa-sin-pedidos` OK.
 
-## TAREA — Las rutas de DISA no pasan por la protección común
+## ✅ TAREA — Las rutas de DISA no pasan por la protección común
 
 - **id:** disa-rutas-sin-csrf
-- **estado:** pendiente
+- **estado:** ✅ HECHA — 3 sep 2026 · commit `PENDIENTE_HASH`
 - **origen:** Auditoría de Codex, 25 ago 2026 · AUD-006 — comprobado vivo el 2 sep
 
-El router de DISA se monta directo en `/admin/disa` y `/api/disa`, y **no hereda** el `csrfProtect()` que sí llevan los routers del ERP. Con la sesión de una víctima abierta, una página ajena puede ejecutar acciones de DISA en su nombre. Comprobado el 2 sep: `csrfProtect` solo aparece en el router del ERP.
+El router de DISA se montaba directo en `/admin/disa` y `/api/disa`, y **no heredaba** el `csrfProtect()` que sí llevan los routers del ERP. Con la sesión de una víctima abierta, una página ajena podía ejecutar acciones de DISA en su nombre.
 
 **Criterios de aceptación**
 
-- [ ] Todas las rutas de DISA que **escriben** pasan por la misma protección CSRF que el resto del producto.
-- [ ] Una petición sin la prueba correspondiente **se rechaza**, y se demuestra con una comprobación.
-- [ ] Las rutas de solo lectura siguen funcionando sin fricción añadida.
+- [x] Todas las rutas de DISA que **escriben** pasan por la misma protección CSRF que el resto del producto.
+      **Las 11**, y no ruta a ruta: por una **puerta en la entrada**, calcada del ERP. Una ruta nueva
+      de DISA **nace protegida** sin que nadie tenga que acordarse.
+- [x] Una petición sin la prueba correspondiente **se rechaza**, y se demuestra con una comprobación.
+      **8 de 8 rutas devuelven 403** ante la petición tal y como la mandaría una página ajena —misma
+      cookie de sesión, sin la cabecera—, y con la cabecera legítima **siguen pasando**.
+- [x] Las rutas de solo lectura siguen funcionando sin fricción añadida.
+      `csrfProtect()` deja pasar `GET`/`HEAD`/`OPTIONS`, así que **no se ha tocado ni una**: las
+      cuatro comprobadas responden **200 sin cabecera**.
+
+> ### 🚪 LA PUERTA ES LA DEL ERP, NO UNA INVENTADA PARA DISA
+>
+> `modules/erp/routes/index.js:124-126` ya hacía exactamente esto, y aquí se calca:
+> ```js
+> const puerta = new Hono();
+> puerta.use('*', adminAuth(db));   // primero el auth
+> puerta.use('*', csrfProtect());
+> puerta.route('/', router);
+> ```
+> **El orden no es un detalle:** `csrfProtect()` lee `c.get('session')` y devuelve **401** si no la
+> encuentra, así que un `use('*', csrfProtect())` a secas correría **antes** del `adminAuth` de cada
+> ruta y **todas las escrituras darían 401** — DISA inservible. Por eso el auth va delante, igual que
+> en el ERP, y se retiró el `adminAuth(db)` de las **17** líneas de ruta, que pasaba a ser redundante:
+> dejarlo habría significado **dos comprobaciones de sesión y dos consultas de permisos por cada
+> mensaje de chat**.
+>
+> **Las dos rutas que ya llevaban `csrfProtect()` escrito a mano** (`DELETE /threads/:id` y
+> `POST /clear`, de la tarea del borrado) **quedan integradas**: se retira su declaración suelta. Dos
+> protecciones para lo mismo no protegen el doble — solo hacen dudar de cuál manda.
+>
+> **No hay ninguna exención**, así que no hay nada que declarar: las 11 escrituras pasan por la puerta.
+
+> ### ⚠️ LO QUE PODÍA HACER UNA PÁGINA AJENA HASTA HOY
+>
+> Nueve rutas de escritura sin ninguna protección. Con tu sesión abierta en otra pestaña, otra página
+> podía **mandarle un mensaje a DISA en tu nombre** (`/message`), renombrarte o fijarte
+> conversaciones, cambiarte el agente, y **subirte un adjunto que arranca la lectura por IA de una
+> factura** (`/attach`, que además **gasta cuota de IA del negocio**). `rateLimit` y `requirePerm`
+> estaban ahí, pero **ninguno de los dos es una protección anti-CSRF**.
+
+> ### 📋 UNA CONSECUENCIA DE ORDEN, DICHA Y MEDIDA
+>
+> `/message` tenía `rateLimit(...)` **antes** de `adminAuth`. Con la puerta el orden pasa a ser
+> `auth → csrf → rateLimit`. **Para el usuario legítimo no cambia nada** y el gate lo comprueba:
+> con sesión y cabecera, pasarse de 15 mensajes por minuto **sigue dando 429**. Lo que cambia es que
+> una avalancha **sin sesión** recibe **401** en vez de 429 — que es el orden que ya tiene todo el
+> ERP, y deja de gastar el cupo del limitador en peticiones que iban a rechazarse igual.
+
+**Comprobaciones — 25 aserciones, 0 fallos, más el centinela:**
+`gate-disa-csrf` **25 ✓ · 0 ✗** — negocio propio que se tira al terminar; reproduce el ataque, prueba
+la vía legítima, las de lectura, el límite de velocidad, **y las pantallas reales con navegador**:
+abrir DISA, **crear una conversación**, **subir un adjunto** y **borrar una conversación**, con cero
+peticiones chocando contra un 403 y cero errores de JavaScript. *Que la protección no rompa el uso
+normal era la mitad de la tarea.*
+`censo-disa-csrf` **1 ✓ · 0 ✗**, con autoprueba de 5 muestras y **probado en rojo por sus tres
+reglas**: la avería original (router montado directo), el csrf puesto **antes** del auth —que dejaría
+DISA inservible— y un montaje nuevo por fuera de la puerta.
+**Regresión de DISA en verde:** `gate-disa-borrado-conversaciones` 36 · `gate-disa-stock-libro` 21 ·
+`gate-disa-sql-limites` 23 · `verify-permisos-disa` 14 · `test-disa-clientes-t5` 30 ·
+`verify-disa-herramientas-paralelo` 50 · `gate-disa-adjuntar` y `gate-nav-inicio-disa` OK.
 
 ## TAREA — La confirmación de DISA acepta demasiadas cosas por un «sí»
 

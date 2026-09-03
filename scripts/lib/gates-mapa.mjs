@@ -62,6 +62,9 @@ export const RAPIDO = new Map([
   // Y que ninguna consulta de DISA se quede sin tope ni reloj. Estático, <1 s: una consulta sin
   // tope se lleva una tabla entera al proveedor de IA, y una lenta bloqueaba el servidor de todos.
   ['censo-consultas-disa', 'una consulta de DISA sin tope ni plazo se lleva la tabla entera al proveedor (AUD-005)'],
+  // Y que la puerta de DISA siga puesta. Estático, <1 s: sin ella, una pagina ajena puede mandar a
+  // DISA en nombre del dueño — y el orden importa, porque el csrf delante del auth la deja inservible.
+  ['censo-disa-csrf', 'sin la puerta, una página ajena manda a DISA en tu nombre (AUD-006)'],
   // Que no falte ninguna sección ni ninguna puerta.
   ['verify-menu-completo',   'una sección sin enlace es una función que nadie encuentra'],
   // Que la cadena de VERI*FACTU esté entera. Va aquí y no en el completo por su propio motivo: exige
@@ -175,7 +178,9 @@ export const GRUPOS = {
     'censo-borrado-sin-filtro',
     'censo-stock-fuera-del-libro',
     'censo-consultas-disa',
+    'censo-disa-csrf',
     'gate-disa-borrado-conversaciones',
+    'gate-disa-csrf',
     'gate-disa-stock-libro',
     'gate-disa-sql-limites',
     'test-c2-captura',
@@ -328,7 +333,7 @@ export const GRUPOS = {
   //     arriba por el mismo motivo por el que ellos entraron: una herramienta que nadie ejecuta
   //     deja de cazar cosas.
   //   · lint-js-servido    — pide cada pantalla y compila su JavaScript en línea (~324 pantallas)
-  lint: ['lint-plantillas', 'censo-ventanitas', 'censo-borrado-sin-filtro', 'censo-stock-fuera-del-libro', 'censo-consultas-disa', 'lint-js-servido', 'verify-nombre-documentos', 'verify-menu-completo',
+  lint: ['lint-plantillas', 'censo-ventanitas', 'censo-borrado-sin-filtro', 'censo-stock-fuera-del-libro', 'censo-consultas-disa', 'censo-disa-csrf', 'lint-js-servido', 'verify-nombre-documentos', 'verify-menu-completo',
          'verify-barrido-no-infla-ventas', 'verify-deuda-una-sola-cuenta',
          'verify-factura-exenta', 'test-oficio', 'verify-libro-sin-huerfanos', 'verify-contabilidad-backfill',
          // PUNTO 5 (24 ago 2026) — el dinero y las fechas, como en España. Se mide sobre lo
@@ -417,6 +422,9 @@ export const EMPIEZAN_DE_CERO = new Set([
   // 3 sep 2026 — negocio propio: siembra 250 clientes para forzar el recorte y lanza una consulta
   // lenta a propósito. En el de desarrollo dejaría basura y ocuparía el servidor cinco segundos.
   'gate-disa-sql-limites',
+  // 3 sep 2026 — negocio propio: agota a propósito el límite de mensajes de DISA y sube un adjunto.
+  // En el de desarrollo dejaría el limitador gastado para los demás gates.
+  'gate-disa-csrf',
 ]);
 
 // NI DE CERO NI COMPARTIDO DEL TODO: los que levantan un negocio EXTRA para UN caso concreto y el
