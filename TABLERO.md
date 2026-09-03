@@ -6082,6 +6082,15 @@ El pilar queda completo: multi-almacén + stock mínimo/punto de pedido + trazab
 - **D6 · [a verificar] XSS en páginas públicas de la tienda** (HTML guardado por admin sin escapar). La tienda está apagada de forma reversible (D1); revisar antes de reabrir en Capa 2. *(El bug de fuga de stock de `cancel_order` ya quedó resuelto al archivar `sales_orders`, D4.)*
 
 ### Deuda técnica
+- ⚠️ **La tienda APAGADA canta dos líneas verdes en cada arranque (3 sep 2026, AUD-007).** `modules/store`
+  se importa y ejecuta su `register`, pero el montaje de `/store` y `/api/store` está comentado desde
+  D1 —a propósito y de forma reversible—, así que **no monta ni una ruta** y `/store` devuelve 404
+  (comprobado con `curl`). Aun así el arranque imprime `✅ Store: Tienda pública en /store` **y**
+  `✅ Módulo cargado: store`. Es la avería de siempre de este proyecto —un mensaje que dice que algo
+  está en pie cuando no lo está—, aquí en el arranque.
+  **Por qué no se arregló de paso:** la ficha de AUD-007 va de qué pasa cuando un módulo FALLA, no de
+  los mensajes de los que cargan bien, y el encargo pedía cambios quirúrgicos. Mitigado a medias: su
+  ficha en `MODULOS` (`core/loader.js`) ya deja escrito que hoy no monta nada.
 - 🔴 **`gate-disa-adjuntar` sale rojo EN EL BARRIDO y verde suelto (3 sep 2026) — declarado, no
   perseguido.** En la pasada del grupo `disa` falló con «NO se ha creado ninguna compra por adjuntar»
   y «NO se ha movido stock»; **suelto pasa 18 OK**. **Comprobado que NO es de la tarea de hoy:** pasa
@@ -8515,7 +8524,17 @@ La cadena de VERI*FACTU, sin tocar.
 > **⚙️ CORREGIDO EL 31 ago 2026 (noche).** Eso era cierto y era la avería: el orquestador cerró la
 > primera, se quedó **ocioso con estas cuatro escritas** y nadie le ponía el rótulo a la siguiente.
 > **Ahora manda el campo `estado:`, no la etiqueta**: coge la primera `pendiente` en orden de
-> documento y encadena solo. El rótulo sigue funcionando y ahora sirve para lo que quería servir:
+> documento y encadena solo.
+>
+> ⚙️ **PRECISIÓN AÑADIDA EL 3 SEP 2026, y me hizo tropezar a mí ese mismo día.** «Manda el campo
+> `estado:`» es cierto **pero está incompleto**, y la mitad que falta es la que muerde: el lector
+> (`orchestrator/reader.js`) descarta una ficha por su `estado:` con la expresión
+> `^(hecha|cerrada|apartada|…)`, **anclada al principio**, así que un `estado:` que empiece por `✅`
+> **NO casa** y la ficha sigue contando como pendiente. Lo que de verdad la saca de la cola es el
+> **`✅` en el ENCABEZADO** (`## ✅ TAREA — …`), porque `esEncabezadoDeTarea` deja de reconocerla.
+> **Cerrar una ficha son las dos cosas: el `✅` en el encabezado Y el `estado:`.** Cerré
+> `disa-prompt-injection-defensas` sin el primero y `node orchestrator/orq.js estado` siguió
+> ofreciéndola como siguiente tarea, con el recuento de pendientes inflado en una. El rótulo sigue funcionando y ahora sirve para lo que quería servir:
 > **saltarse el orden** cuando Ibrahin quiera otra antes. Diagnóstico y arreglo en
 > `docs/orquestador/paso-0-por-que-no-encadena.md`.
 >
@@ -9540,10 +9559,12 @@ escenarios y los dos casos incómodos, con relojes de prueba de Stripe) ·
 > anti-CSRF—, **y la quinta se cerró CON PRUEBA sin tocar nada** (la confirmación estricta: el
 > hallazgo no estaba vivo). La siguiente es `disa-prompt-injection-defensas`.~~ **⚙️ CADUCADO OTRA VEZ
 > EL 3 SEP 2026, MÁS TARDE: `disa-prompt-injection-defensas` también está HECHA.** Con ella van
-> **SEIS** cerradas hoy, **y con eso NO se cierra el BLOQUE 2**: el bloque tiene **16 fichas**, de las
-> que van **7 hechas** (las seis de hoy + `manifiesto-huellas-backups`) y **quedan 9 PENDIENTES**.
-> Contado sobre el documento, no de memoria. **La siguiente es `arranque-no-tolera-modulo-ausente`**
-> (AUD-007, comprobado vivo el 2 sep), que sigue siendo del BLOQUE 2.
+> **SEIS** cerradas hoy, **y con eso NO se cierra el BLOQUE 2**.
+> **⚙️ Y OTRA VEZ MÁS TARDE, EL MISMO DÍA: `arranque-no-tolera-modulo-ausente` también está HECHA —
+> van SIETE.** El bloque tiene **16 fichas**, de las que van **8 hechas** (las siete de hoy +
+> `manifiesto-huellas-backups`) y **quedan 8 PENDIENTES**. Contado sobre el documento con las marcas
+> de sección, no de memoria ni con números de línea. **La siguiente es
+> `copias-cifradas-con-entorno-y-certificados`**, que sigue siendo del BLOQUE 2.
 > Se tacha en vez de borrarse, que es lo que manda este
 > documento — y porque un puntero rancio manda al siguiente chat al sitio equivocado con toda la
 > confianza del mundo.
@@ -9967,7 +9988,7 @@ frases ambiguas **el cliente no cambia** y con un «sí» limpio **sí cambia**.
 `censo-disa-confirmacion` **1 ✓ · 0 ✗**. Regresión de DISA en verde: `gate-disa-csrf` 25 ·
 `gate-disa-borrado-conversaciones` 36 · `gate-disa-stock-libro` 21 · `gate-disa-sql-limites` 23.
 
-## TAREA — Prompt injection: qué defensas hay y cuáles faltan
+## ✅ TAREA — Prompt injection: qué defensas hay y cuáles faltan
 
 - **id:** disa-prompt-injection-defensas
 - **estado:** ✅ HECHA — 3 sep 2026 · commit `e03b4bc`
@@ -10028,20 +10049,69 @@ Texto que viene de fuera —una factura adjunta, el nombre de un producto, un me
 > **No tocado:** el cobro/suscripción (sigue en modo de prueba de Stripe), los datos de los 8
 > negocios reales, y los cerrojos ya construidos — **se han puesto a prueba, no se han rehecho**.
 
-## TAREA — Bamburu arranca aunque se le caiga un módulo entero
+## ✅ TAREA — Bamburu arranca aunque se le caiga un módulo entero
 
 - **id:** arranque-no-tolera-modulo-ausente
-- **estado:** pendiente
+- **estado:** ✅ HECHA — 3 sep 2026 · commit `PENDIENTE-HASH`
 - **origen:** Auditoría de Codex, 25 ago 2026 · AUD-007 — comprobado vivo el 2 sep
 
 Si falla la importación del ERP, la tienda, DISA o el portal, el cargador solo escribe un aviso en la consola **y sigue arrancando**. El servicio queda a medias y el primero en enterarse es un cliente, no quien opera. Comprobado el 2 sep en `core/loader.js`.
 
 **Criterios de aceptación**
 
-- [ ] Si un módulo **esencial** no carga, **Bamburu no arranca**: se para y lo dice con el motivo.
-- [ ] El fallo llega al aviso de Telegram, no solo a la consola.
-- [ ] Queda escrito **cuáles son esenciales** y cuáles pueden faltar sin impedir el arranque.
-- [ ] Una comprobación provoca el fallo de un módulo y demuestra que no arranca.
+- [x] Si un módulo **esencial** no carga, **Bamburu no arranca**: se para y lo dice con el motivo. → sale con código 1, con el módulo, el **error de origen** y su traza
+- [x] El fallo llega al aviso de Telegram, no solo a la consola. → `core/aviso-arranque.js`; **comprobado en vivo**: llegó
+- [x] Queda escrito **cuáles son esenciales** y cuáles pueden faltar sin impedir el arranque. → `MODULOS` en `core/loader.js`, con el **motivo de cada uno**
+- [x] Una comprobación provoca el fallo de un módulo y demuestra que no arranca. → `gate-arranque-modulos` **39 ✓**, en el barrido
+
+> ### 🚦 QUÉ SE HIZO — y lo que destapó el diagnóstico
+>
+> **El fallo, medido en el journal de esta máquina y no supuesto: pasó CINCO veces en 30 días, y
+> TRES de ellas se cayó el ERP entero** (19, 23 y 24 de agosto) — `/admin/*` devolviendo 404 mientras
+> el proceso decía `🚀 Bamburu listo` y respondía a todo lo demás. Duraron entre 17 y 89 segundos, y
+> **no las cazó ninguna alarma: las cazó que había una persona desplegando en ese momento.**
+>
+> **1 · Un TERCER modo de fallo que no estaba en la ficha.** El `if (typeof register === 'function')`
+> no tenía `else`: un módulo que importa bien pero **no exporta `register`** no se montaba y **no
+> imprimía absolutamente nada** — ni el aviso. No había línea que buscar: no existía.
+>
+> **2 · La clasificación, decidida por Ibrahin (3 sep 2026): esencial es SOLO el `erp`.** Sin panel
+> de administración no hay producto. `disa`, `portal` y `store` arrancan aunque fallen, **pero nunca
+> en silencio**. El motivo, en sus términos: el problema no es que falte una parte, es que nadie se
+> entera; y una caída total de los 8 negocios porque DISA no importa es peor que una degradación que
+> se oye — **CANON §3-bis pide que las dos puertas existan, no que la casa se caiga si falta una**.
+> Vive en un solo sitio, `MODULOS` en `core/loader.js`, **con el motivo de cada módulo escrito**.
+>
+> **3 · Dos módulos ya cumplían el criterio y no se han tocado:** `registro` y `superadmin` entran
+> por `import` estático, que mata el proceso antes de empezar. Meterlos en la lista habría sido
+> moverlos a un camino **más blando** del que ya tienen. Queda escrito por qué no están.
+>
+> **4 · El obstáculo real del aviso, que no era el código.** El token de Telegram vive en
+> `/etc/orquestador.env` y `bamburu.service` carga `/etc/bamburu.env`: **el proceso no podía mandar
+> un Telegram aunque quisiera**. Se resuelve leyendo ese fichero del disco (los dos son
+> `0600 ubuntu:ubuntu` y el servicio corre como `ubuntu`), **sin duplicar el secreto ni tocar `/etc`
+> ni la unit**. Se reutiliza el transporte del orquestador — que **sigue parado**: es una librería y
+> un chat, no se enciende nada.
+>
+> **5 · El freno del bucle.** El de *arranques* ya lo acotaba systemd (`StartLimitBurst=5` en 10 s →
+> `failed`); lo que faltaba era que no salieran **cinco Telegram idénticos en diez segundos**. Freno
+> de 10 min por módulo+motivo. **Medido en vivo: 8 intentos → 1 aviso enviado, 7 frenados.**
+>
+> **6 · Comprobado EN VIVO en el servidor**, que es lo que de verdad cierra esto: se rompió el `erp`
+> a propósito, **el servicio no levantó** (`activating`, el sitio sin responder), quedó escrito el
+> módulo con su motivo y **el aviso llegó**. Restaurado byte a byte y arrancando limpio. Corte: ~40 s.
+>
+> **7 · `gate-arranque-modulos`, 39 ✓ · 0 ✗**, en el barrido (`infra` + `lint` + RAPIDO, 0,3 s).
+> **Mide el estado real de un proceso** —lanza `node` y mira el código de salida—, no un registro.
+> **Probado en rojo cinco veces**: quitando lo esencial al ERP (13 fallos), devolviendo el `if` sin
+> `else` (6), dejando que avise pero no se muera (12), quitando un motivo (1) y dejando un módulo
+> sin clasificar (2).
+>
+> **No tocado:** la lógica de negocio de ningún módulo, el cobro/suscripción (sigue en modo de prueba
+> de Stripe) y los datos de los 8 negocios. El arranque normal imprime **las mismas líneas y en el
+> mismo orden** que antes.
+>
+> 📖 Diagnóstico y resultados: `docs/arranque/modulos-diagnostico.md`.
 
 ## TAREA — Las copias, cifradas y con todo lo que hace falta para volver
 

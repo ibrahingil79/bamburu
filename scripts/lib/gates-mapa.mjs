@@ -72,6 +72,9 @@ export const RAPIDO = new Map([
   // Y que el texto que no escribió el usuario siga llegando MARCADO. Estático, <1 s, y va en `lint`
   // porque una de sus cuatro vías —el extractor de facturas— NO despierta al grupo `disa`.
   ['censo-texto-ajeno', 'texto ajeno sin marcar: una orden dentro de un dato se lee como instrucción (AUD-016)'],
+  // Y que Bamburu ARRANQUE, que es la pregunta más básica de todas. Va en el rápido porque cuesta
+  // 0,3 s y porque un arranque a medias ya pasó CINCO veces en 30 días sin que nadie se enterara.
+  ['gate-arranque-modulos', '¿arranca Bamburu, o arranca a medias sin decirlo? (AUD-007)'],
   // Que no falte ninguna sección ni ninguna puerta.
   ['verify-menu-completo',   'una sección sin enlace es una función que nadie encuentra'],
   // Que la cadena de VERI*FACTU esté entera. Va aquí y no en el completo por su propio motivo: exige
@@ -311,7 +314,7 @@ export const GRUPOS = {
   // 25 ago 2026 · Las dos del correo. `verify-correo-freno` prueba que el freno para de verdad al
   // llegar al tope; `verify-comprobaciones-sin-correo-real` vigila la norma del dueño: ninguna
   // comprobación vuelve a escribir a una bandeja real. Ver docs/censo-correos.md.
-  infra: ['verify-correo-freno', 'verify-comprobaciones-sin-correo-real', 'verify-disco-perfiles', 'test-c6-secretos', 'gate-conciliacion-deshacer', 'verify-superadmin-escrituras', 'verify-tenant-lookup-readonly', 'verify-wal-acotado', 'verify-safe-error',
+  infra: ['gate-arranque-modulos', 'verify-correo-freno', 'verify-comprobaciones-sin-correo-real', 'verify-disco-perfiles', 'test-c6-secretos', 'gate-conciliacion-deshacer', 'verify-superadmin-escrituras', 'verify-tenant-lookup-readonly', 'verify-wal-acotado', 'verify-safe-error',
           'verify-xss-escape', 'gate-xss-escape', 'gate-csp-estricta',
           // PUNTO 2 (24 ago 2026) — dar de baja a alguien del equipo: borrar si no dejó rastro,
           // archivar si lo dejó, y decirlo ANTES de pulsar. Antes daba un 500 seco.
@@ -344,7 +347,7 @@ export const GRUPOS = {
   //     arriba por el mismo motivo por el que ellos entraron: una herramienta que nadie ejecuta
   //     deja de cazar cosas.
   //   · lint-js-servido    — pide cada pantalla y compila su JavaScript en línea (~324 pantallas)
-  lint: ['lint-plantillas', 'censo-ventanitas', 'censo-borrado-sin-filtro', 'censo-stock-fuera-del-libro', 'censo-consultas-disa', 'censo-disa-csrf', 'censo-disa-confirmacion', 'censo-texto-ajeno', 'lint-js-servido', 'verify-nombre-documentos', 'verify-menu-completo',
+  lint: ['lint-plantillas', 'censo-ventanitas', 'censo-borrado-sin-filtro', 'censo-stock-fuera-del-libro', 'censo-consultas-disa', 'censo-disa-csrf', 'censo-disa-confirmacion', 'censo-texto-ajeno', 'gate-arranque-modulos', 'lint-js-servido', 'verify-nombre-documentos', 'verify-menu-completo',
          'verify-barrido-no-infla-ventas', 'verify-deuda-una-sola-cuenta',
          'verify-factura-exenta', 'test-oficio', 'verify-libro-sin-huerfanos', 'verify-contabilidad-backfill',
          // PUNTO 5 (24 ago 2026) — el dinero y las fechas, como en España. Se mide sobre lo
