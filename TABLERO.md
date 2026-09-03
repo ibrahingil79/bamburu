@@ -9600,7 +9600,7 @@ huérfanos al borrar a una persona.
 ## ✅ TAREA — DISA cambia el stock saltándose el libro de movimientos
 
 - **id:** disa-stock-fuera-del-libro
-- **estado:** ✅ HECHA — 3 sep 2026 · commit `e043c37`
+- **estado:** ✅ HECHA — 3 sep 2026 · commit `c7528f6`
 - **origen:** Auditoría de Codex, 25 ago 2026 · AUD-004 — comprobado vivo el 2 sep
 
 `edit_product` escribía directamente en `products.stock`, y el propio fichero afirma tres líneas más arriba que el stock debe moverse por servicios validados y dejar rastro en `stock_movements`. El resultado son existencias y coste incorrectos, ventas sobre stock que no existe y analítica que no cuadra. Comprobado el 2 sep en `modules/disa/index.js:574`.
