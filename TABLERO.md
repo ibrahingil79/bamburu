@@ -5977,6 +5977,22 @@ El pilar queda completo: multi-almacén + stock mínimo/punto de pedido + trazab
   `test-disa-clientes-t5` (un test aparcado que no probaba nada). **El flujo humano no se tocó.** Gates:
   `verify-disa-sin-pedidos` (32/0, estructural) y `verify-disa-pedidos-modelo-real` (10/0, contra el modelo
   de verdad: pide crear/cancelar/facturar un pedido y DISA declina y redirige a `/admin/pedidos`).
+- ⬜ **DISA: el AGENTE elegido se lee sin filtrar por usuario (hallazgo del 3 sep 2026).**
+  `/select-agent` y `/agents` (`modules/disa/index.js`) escriben y leen el agente con
+  `UPDATE ... WHERE id=(SELECT MIN(id) FROM disa_conversations)` y
+  `SELECT agent_id FROM disa_conversations ORDER BY id ASC LIMIT 1`: **sobre toda la tabla del
+  negocio, sin `user_id`**. O sea, el agente que elige un empleado se lo lleva el dueño y al revés.
+  No rompe nada —va en `try/catch` con `1` por defecto— pero es una fuga entre personas del mismo
+  negocio. **Encontrado al hacer `disa-borrado-global-conversaciones` y NO arreglado allí**, porque
+  el encargo pedía cambios quirúrgicos y esto es otra cosa: la elección de agente, no el borrado.
+- ⬜ **`ejecutarBaja` deja mensajes de DISA huérfanos para siempre (hallazgo del 3 sep 2026).**
+  Al borrar del todo a una persona sin rastro en el negocio, la lista `SUYO` de
+  `modules/erp/usuarios-baja.js` borra sus `disa_conversation_threads` — y **nadie borra sus
+  `disa_conversations`**, que no tienen `user_id` por el que engancharlas. Sus mensajes se quedan en
+  la base, sin dueño y sin forma de llegar a ellos. La puerta buena ya existe
+  (`borrarConversaciones()` de `modules/disa/index.js`); es enchufarla. **No se tocó al cerrar
+  `disa-borrado-global-conversaciones`**: `usuarios-baja` es pieza cerrada y el encargo pedía
+  cambios quirúrgicos.
 - ⬜ **`modules/erp/routes/orders.js` está desmontado** (POS viejo, `routes/index.js:106` y `:159`) pero
   sigue en el árbol, con 6 `logActivity` que nunca se ejecutan. Retirarlo o revivirlo, no dejarlo a medias.
   *(Sus hermanos ya cayeron: `generateInvoice` de `invoices.js` sigue neutralizada desde D1 —lanza 410— y su
@@ -9291,8 +9307,11 @@ escenarios y los dos casos incómodos, con relojes de prueba de Stripe) ·
 > el cobro del día 5 con su aviso una semana antes · el impago con cinco avisos y corte a los 30 días ·
 > los 90 días de descarga y la bóveda que no borra nada · y el rescate pagando un mes.
 >
-> **La siguiente tarea de la cola es la primera del BLOQUE 2 — «QUE SEA SEGURO DE VERDAD»:**
-> `disa-borrado-global-conversaciones`.
+> ~~**La siguiente tarea de la cola es la primera del BLOQUE 2 — «QUE SEA SEGURO DE VERDAD»:**
+> `disa-borrado-global-conversaciones`.~~ **⚙️ CADUCADO EL 3 SEP 2026: esa tarea está HECHA.** La
+> siguiente es `disa-stock-fuera-del-libro`. Se tacha en vez de borrarse, que es lo que manda este
+> documento — y porque un puntero rancio manda al siguiente chat al sitio equivocado con toda la
+> confianza del mundo.
 
 
 ---
@@ -9302,23 +9321,97 @@ escenarios y los dos casos incómodos, con relojes de prueba de Stripe) ·
 > Los cuatro de DISA, las copias con la configuración y los certificados dentro y cifradas, los
 > archivos que sube la gente, el enlace del portal, y que Bamburu no arranque si le falta una parte.
 >
-> **De los ocho hallazgos críticos o altos de Codex, solo se han cerrado dos.** Los seis que
-> quedan están aquí.
+> ~~**De los ocho hallazgos críticos o altos de Codex, solo se han cerrado dos.** Los seis que
+> quedan están aquí.~~ **⚙️ ACTUALIZADO EL 3 SEP 2026 al cerrar AUD-002: van TRES cerrados y quedan
+> CINCO**, y son los cinco de aquí abajo que siguen sin el ✅.
 
 
-## TAREA — DISA puede borrar la conversación de todo el negocio
+## ✅ TAREA — DISA puede borrar la conversación de todo el negocio
 
 - **id:** disa-borrado-global-conversaciones
-- **estado:** pendiente
+- **estado:** ✅ HECHA — 3 sep 2026 · commit `ebcce96`
 - **origen:** Auditoría de Codex, 25 ago 2026 · AUD-002 — comprobado vivo el 2 sep
 
-`POST /api/disa/clear` ejecuta `DELETE FROM disa_conversations` **sin filtrar por usuario ni por hilo**: una sola llamada borra el historial de conversación del negocio entero, incluida la constancia de decisiones que se tomaron hablando con DISA. Comprobado el 2 sep 2026 en `modules/disa/index.js:2828`.
+`POST /api/disa/clear` ejecutaba `DELETE FROM disa_conversations` **sin filtrar por usuario ni por hilo**: una sola llamada borraba el historial de conversación del negocio entero, incluida la constancia de decisiones que se tomaron hablando con DISA. Comprobado el 2 sep 2026 en `modules/disa/index.js:2828`.
 
 **Criterios de aceptación**
 
-- [ ] Borrar una conversación **solo afecta a la del usuario que la pide**, nunca a la del negocio entero.
-- [ ] No queda ninguna ruta capaz de vaciar `disa_conversations` de golpe.
-- [ ] Existe una comprobación que **falla en rojo** si alguien vuelve a dejar un borrado sin filtro.
+- [x] Borrar una conversación **solo afecta a la del usuario que la pide**, nunca a la del negocio entero.
+      **SÍ**, y medido contando en la base con dos personas en el mismo negocio: el dueño borra sus 7
+      y las 5 de su compañera siguen **al número exacto**; pide el hilo de ella por su número y
+      recibe **404** sin que se mueva una fila.
+- [x] No queda ninguna ruta capaz de vaciar `disa_conversations` de golpe.
+      **Ninguna.** Las cuatro sentencias de borrado que quedan en el producto llevan el filtro por
+      `user_id` **escrito dentro del propio SQL**, y todas pasan por una sola puerta,
+      `borrarConversaciones()`. Era además el ÚNICO `DELETE FROM` sin `WHERE` de todo el producto.
+- [x] Existe una comprobación que **falla en rojo** si alguien vuelve a dejar un borrado sin filtro.
+      `scripts/censo-borrado-sin-filtro.mjs`, en el barrido (grupos `lint` y `disa`, y en el RÁPIDO).
+      **Demostrado que sabe ponerse rojo**, y de las dos formas: se volvió a meter el
+      `DELETE FROM disa_conversations` de AUD-002 en un fichero de `modules/disa/` y salió `1 ✗`
+      (retirado después); y **se prueba a sí mismo en cada pasada** con cuatro muestras —dos
+      envenenadas que tiene que cazar y dos buenas que tiene que respetar—, saliendo rojo sin llegar
+      a mirar el producto si falla una. *Un censo que dice cero sin ser cierto es peor que no
+      tenerlo, porque cierra la pregunta* (CLAUDE.md, 24 ago).
+
+> ### 🔍 «GLOBAL» ES GLOBAL PARA QUIEN PULSA, NO PARA EL NEGOCIO — y la contradicción se dijo antes
+>
+> El encargo pedía *«implementa el borrado global»* y a la vez que *«los criterios del TABLERO mandan
+> tal cual»*. El criterio 2 dice que **no puede quedar ninguna ruta capaz de vaciar la tabla de
+> golpe**. Las dos frases solo caben juntas de una forma: un botón de **«borrar todas MIS
+> conversaciones»**, que se lleva las de quien pulsa —todas, de una vez, de verdad y sin vuelta
+> atrás— y ninguna más. La otra lectura incumpliría el criterio que el propio encargo declara
+> intocable. **No se eligió la mitad conveniente: se eligió la única que no rebaja nada**, y quedó
+> escrito antes de tocar código en `docs/seguridad/disa-borrado-conversaciones-diagnostico.md` §5.
+
+> ### ⚠️ LA OTRA MITAD, QUE NO ESTABA EN LA FICHA: LA PAPELERA NO BORRABA NADA
+>
+> Al mirar de dónde salía AUD-002 apareció el fallo gemelo. El icono de papelera de cada conversación
+> hacía `UPDATE ... SET is_active=0`: **ocultaba el hilo y dejaba los mensajes enteros en la base,
+> para siempre**. Medido en `desarrollo-bamburu` el 3 sep 2026: **62 de las 105** filas de
+> `disa_conversations` colgaban de hilos ya «borrados», y el dueño tenía **58 hilos ocultos con sus
+> 61 conversaciones intactas**. Para él ese botón se había pulsado 58 veces sin borrar un mensaje.
+> Ahora borra de verdad, y el borrado global **se lleva también lo que ya estaba oculto** — si no,
+> «borrado real» sería mentira justo para las que el usuario cree borradas desde hace meses.
+>
+> **Y no había ninguna confirmación**: un clic en la papelera y la conversación desaparecía. Ahora
+> las dos acciones preguntan DENTRO de la página (`window.confirmarEnPagina`, nunca `confirm()`) y
+> dicen con todas las letras que **no se puede deshacer** — y también lo que NO se llevan, que es la
+> mitad que tranquiliza.
+
+> ### 🧨 Y UN TERCER FALLO, VIVO EN 86 DE 87 NEGOCIOS, QUE DESTAPÓ EL GATE
+>
+> La columna `pinned` se añadía dentro de `register(app, db)` de `modules/disa/index.js`. `register`
+> corre **una vez al arrancar** y el `db` que recibe es el **proxy por tenant** de `core/db.js`, que
+> fuera de una petición **lanza** — y un `catch {}` vacío se lo comía en cada arranque. **Ese ALTER
+> no se ejecutó nunca.** Como `GET /api/disa/threads` pide `t.pinned`, **la lista de conversaciones
+> de DISA daba HTTP 500 en todos los negocios menos `desarrollo-bamburu`**, donde la columna se había
+> añadido a mano — que es exactamente por lo que nadie lo veía. Medido: **86 de 87 bases sin la
+> columna**, `peluqueria-gil`, `duniya` y `rachibra` entre ellas. Movida a `runMigrations`
+> (`modules/erp/models.js`), que sí corre por negocio; aditiva, no toca un dato. Lo destapó pedir la
+> pantalla en un negocio **recién nacido**, que es el estado en el que vive todo el mundo menos el de
+> desarrollo.
+
+**Lo que NO se toca al borrar, y es a propósito:** la **cuota de IA del mes** (`disa_usage`,
+`disa_spend`) — si borrar la reseteara, borrar sería la forma de saltarse el tope —, el registro de
+acciones de DISA (`disa_action_audit`), el registro de actividad y los **adjuntos**, que cuelgan de
+la compra y no del chat. Cada tabla, con su motivo, en el diagnóstico.
+
+**Comprobaciones — 36 aserciones, 0 fallos, más los dos censos:**
+`gate-disa-borrado-conversaciones` **36 ✓ · 0 ✗** (dos negocios propios que se tiran al terminar;
+motor, HTTP y **navegador de verdad con las ventanitas silenciadas**: se pulsa el botón, se lee el
+aviso, se dice que **no** —y no se borra nada—, se dice que **sí**, y se miran las dos capturas) ·
+`censo-borrado-sin-filtro` **1 ✓ · 0 ✗** · `censo-ventanitas` **1 ✓ · 0 ✗** (idéntico antes y después
+de sacarle `soloCodigo` a una pieza compartida).
+
+**Sin CSRF no se borra.** Las dos rutas que borran de verdad llevan `csrfProtect()`, y se demuestra:
+la petición sin la cabecera sale **403** y no se lleva ni una fila. Hacer definitivo un borrado sobre
+una ruta que nadie protege habría **agravado** el agujero abierto de `disa-rutas-sin-csrf` — que
+**sigue pendiente y sigue teniendo que cubrir TODAS las rutas de escritura de DISA**: esto no la
+sustituye.
+
+**Dos hallazgos declarados y NO arreglados aquí** (cambios quirúrgicos), en §Deuda técnica:
+el agente elegido se lee con `MIN(id)` sin filtrar por usuario, y `ejecutarBaja` deja mensajes
+huérfanos al borrar a una persona.
 
 ## TAREA — DISA cambia el stock saltándose el libro de movimientos
 
