@@ -76,11 +76,24 @@ test('el identificador que viaja va filtrado a [a-z0-9-] y nada más', () => {
   if (r2.id) assert.match(r2.id, /^[a-z0-9-]+$/);
 });
 
+// ⚙️ 3 SEP 2026 — El bot de Telegram pasó a ser EXCLUSIVO de los avisos de Bamburu (decisión de
+// Ibrahin), y con ello el bloque `vigia.telegram` de la configuración de la fábrica quedó VACÍO:
+// ya no nombra ninguna variable. Estas pruebas sacaban de ahí el nombre de la variable del chat
+// autorizado, así que se quedaron sin chat y daban «no eres quien» a todo.
+//
+// Se les da un nombre PROPIO de prueba en vez de retirarlas: lo que comprueban —qué órdenes existen,
+// cuáles piden confirmación, qué se registra y que el token no sale nunca por el chat— **sigue
+// siendo cierto y hará falta el día que la fábrica tenga su propio bot**. Lo que NO hacen, ni pueden,
+// es hablar por el bot de Bamburu: eso lo cierran `vigia/bot-retirado.js` y `censo-bot-de-bamburu`.
+const VAR_CHAT_PRUEBA = 'PRUEBA_TELEGRAM_CHAT_ID';
+const VAR_TOKEN_PRUEBA = 'PRUEBA_TELEGRAM_TOKEN';
+
 function montarVigia(raiz, { chatId = '111', entornoExtra = {} } = {}) {
-  const cfg = configDe(raiz, { vigia: { activo: true } });
+  const cfg = configDe(raiz, { vigia: { activo: true,
+    telegram: { tokenEnv: VAR_TOKEN_PRUEBA, chatIdEnv: VAR_CHAT_PRUEBA, timeoutMs: 1000, maxPendientes: 50 } } });
   const almacen = new Almacen({ rutaEstado: cfg.rutasAbs.estado, rutaJournal: cfg.rutasAbs.journal, rutaHistorial: cfg.rutasAbs.historial });
-  const entorno = { ORQUESTADOR_TELEGRAM_TOKEN: '123456:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
-                    ORQUESTADOR_TELEGRAM_CHAT_ID: chatId, ...entornoExtra };
+  const entorno = { [VAR_TOKEN_PRUEBA]: '123456:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+                    [VAR_CHAT_PRUEBA]: chatId, ...entornoExtra };
   const enviados = [];
   const vig = { async consultar() { return { fiable: true, sesionPct: 30, semanaPct: 10, reinicioSesion: 'a las 2' }; } };
   const escucha = new Escucha({ config: cfg, almacen, vigilante: vig, logger: registroMudo(), entorno });

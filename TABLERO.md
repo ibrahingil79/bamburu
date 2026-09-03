@@ -6082,6 +6082,14 @@ El pilar queda completo: multi-almacén + stock mínimo/punto de pedido + trazab
 - **D6 · [a verificar] XSS en páginas públicas de la tienda** (HTML guardado por admin sin escapar). La tienda está apagada de forma reversible (D1); revisar antes de reabrir en Capa 2. *(El bug de fuga de stock de `cancel_order` ya quedó resuelto al archivar `sales_orders`, D4.)*
 
 ### Deuda técnica
+- ⚠️ **Los avisos de Bamburu siguen importando la tubería de Telegram de la fábrica (3 sep 2026).**
+  `core/telegram-servidor.js` ya tiene **sus propias credenciales** (`BAMBURU_TELEGRAM_*` en
+  `/etc/bamburu.env`) y **su propia configuración**, pero la función que hace el POST —`enviar`—
+  sigue viviendo en `orchestrator/vigia/telegram.js`. **No le da a la fábrica ninguna forma de
+  hablar** (es un fichero que no decide nada: recibe token, chat y texto; y sus llamantes están
+  cerrojados), pero **si alguien borrara esa carpeta, Bamburu se quedaría mudo**. Traerla a `core/`
+  es una tarea aparte y pequeña. Está dicho también en la cabecera del propio fichero, para que
+  nadie lea allí una independencia que todavía no es completa.
 - ⚠️ **319 copias antiguas siguen EN CLARO en Drive, y ya no caducan solas (3 sep 2026, AUD-008).**
   Al pasar el destino a cifrado, la retención de 14 días apunta al destino nuevo: **el histórico en
   claro del destino anterior (`gdrive:Bamburu-backup/daily`) no lo toca nadie ya**. Son copias reales
@@ -9587,6 +9595,28 @@ escenarios y los dos casos incómodos, con relojes de prueba de Stripe) ·
 
 
 ---
+
+> ### 📌 DECISIÓN CERRADA — EL BOT DE TELEGRAM ES SOLO DE BAMBURU (Ibrahin, 3 sep 2026)
+>
+> **El bot de Telegram queda dedicado EN EXCLUSIVA a los avisos de Bamburu** — arranque, copias y
+> lo que se sume. **La fábrica/orquestador no puede usarlo**, ni para hablar ni para escuchar.
+> **No se crea un bot nuevo para la fábrica:** está parada, y se creará el día que se encienda —
+> con sus propias credenciales, nunca con las de Bamburu.
+>
+> **Qué se hizo, y por qué hacía falta más que un buen propósito.** El vigía de la fábrica llevaba
+> **desde el 2 de septiembre a las 07:26 escuchando órdenes por ese bot**, con `Restart=always`, y
+> no solo hablaba: **ejecutaba órdenes en el servidor** (fue quien recibió el «PARAR» que paró la
+> fábrica). Se paró y se deshabilitó; sus credenciales salieron de `/etc/orquestador.env` —que
+> quedó vacío, con su motivo escrito dentro— y viven ahora en `/etc/bamburu.env` como
+> `BAMBURU_TELEGRAM_TOKEN` y `BAMBURU_TELEGRAM_CHAT_ID`; el bloque `vigia.telegram` de la
+> configuración de la fábrica quedó **sin nombres**; y se retiraron **55 líneas de `orq.js` que
+> pedían el token y lo escribían en disco** — un camino que en dos preguntas devolvía el bot a la
+> fábrica. El cerrojo de código está en `orchestrator/vigia/bot-retirado.js`.
+>
+> **Todo aviso de Bamburu empieza por `BAMBURU — <tema>`**, y la cabecera **la estampa la puerta
+> común** (`core/telegram-servidor.js`), no cada sitio que avisa: sin tema no se manda nada, porque
+> lo que depende de que alguien se acuerde un día se olvida. Lo vigila `censo-bot-de-bamburu`
+> (`lint` + `infra` + RAPIDO), con autoprueba.
 
 ## BLOQUE 2 — QUE SEA SEGURO DE VERDAD
 

@@ -24,6 +24,7 @@ import { tapar } from '../nucleo/secretos.js';
 import { guardarRespuesta } from '../tablero/respuestas.js';
 import { desfasados } from '../nucleo/despliegue.js';
 import { recibir, responderA, configurado, queFalta } from './telegram.js';
+import { botRetirado, escuchaRetirada } from './bot-retirado.js';   // 3 sep 2026: el bot es exclusivo de Bamburu
 import { redactar } from './parte.js';
 import {
   ORDENES, PIDEN_CONFIRMACION, VAN_AL_ORQUESTADOR,
@@ -311,6 +312,10 @@ export class Escucha {
    * Separada del bucle para poder probarla sin red ni temporizadores.
    */
   async unaVuelta({ recibidor = recibir } = {}) {
+    // ⛔ 3 SEP 2026 — EL BOT ES EXCLUSIVO DE BAMBURU (decisión de Ibrahin). La fábrica ni escucha
+    // ni contesta por él. Se corta en la PUERTA de la vuelta: así no hay ningún camino de aquí
+    // abajo que pueda mandar nada, y no hace falta acordarse de cada `responderA`.
+    return escuchaRetirada('vigía del orquestador');
     const r = await recibidor({
       config: this.config, entorno: this.entorno,
       offset: this.offset, esperaS: this.config.vigia.escucha.esperaLargaS,
@@ -338,7 +343,8 @@ export class Escucha {
       this.registrar({ chatId: m.chatId, de: m.de, texto: m.texto, autorizado: false,
                        orden: null, respuesta: NO_ERES_QUIEN });
       // A un desconocido NO se le manda el teclado: sería enseñarle el mando entero.
-      await responderA({ chatId: m.chatId, texto: NO_ERES_QUIEN, config: this.config, entorno: this.entorno });
+      botRetirado('respuesta del vigía a un chat no autorizado');   // no se contesta: el bot no es suyo
+      void responderA;
       return;
     }
 
@@ -352,8 +358,8 @@ export class Escucha {
     this.registrar({ chatId: m.chatId, de: m.de, texto: m.texto, autorizado: true, orden, id, respuesta });
     // El teclado viaja en CADA respuesta, no solo en la primera: así vuelve solo si Ibrahin lo
     // pliega desde el móvil, y un vigía recién arrancado no depende de que alguien lo reponga.
-    await responderA({ chatId: m.chatId, texto: respuesta, config: this.config, entorno: this.entorno,
-                       teclado: this.teclado });
+    botRetirado('respuesta del vigía');   // no se contesta: el bot no es suyo
+    void responderA; void respuesta;
   }
 
   async resolver(orden, id, m, o = {}) {

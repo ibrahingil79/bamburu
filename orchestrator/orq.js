@@ -306,59 +306,17 @@ async function forzarParte(cfg) {
  * escrito en el historial del terminal para siempre.
  */
 async function conectarTelegram(cfg) {
-  const readline = await import('node:readline/promises');
-  const fs = await import('node:fs');
-  const { FICHERO_SECRETOS } = await import('./nucleo/entorno.js');
-
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-  const salir = (c) => { rl.close(); return c; };
-
-  process.stdout.write([
-    '', '═'.repeat(64), '  CONECTAR TELEGRAM', '═'.repeat(64), '',
-    '  Te voy a pedir dos datos. Los guardo yo en su sitio seguro;',
-    '  no tienes que abrir ningún fichero.', '',
-    '  Si no los tienes todavía, los pasos para sacarlos están en el',
-    '  documento «encender-telegram» de la carpeta docs/orquestador.', '',
-  ].join('\n') + '\n');
-
-  const token = (await rl.question('  1. Pega el dato largo de BotFather (lleva dos puntos en medio):\n     ')).trim();
-  if (!token) { process.stdout.write('\n  No has pegado nada. No he cambiado nada.\n\n'); return salir(1); }
-  if (!/^\d{6,}:[A-Za-z0-9_-]{20,}$/.test(token)) {
-    process.stdout.write([
-      '', '  ⚠️  Ese dato no tiene la pinta que debería.',
-      '     Tiene que ser: unos números, dos puntos, y una ristra larga de letras.',
-      '     Ejemplo de la FORMA (no lo copies, es inventado):  8123456789:AAH-xxxxxxxxxxxxxxx',
-      '', '  No he cambiado nada. Vuelve a intentarlo cuando lo tengas entero.', '',
-    ].join('\n') + '\n');
-    return salir(1);
-  }
-
-  const chat = (await rl.question('\n  2. Pega el número de tu conversación (puede empezar por un guión):\n     ')).trim();
-  if (!/^-?\d{3,}$/.test(chat)) {
-    process.stdout.write('\n  ⚠️  Eso no es un número de conversación. No he cambiado nada.\n\n');
-    return salir(1);
-  }
-  rl.close();
-
-  let texto;
-  try { texto = fs.readFileSync(FICHERO_SECRETOS, 'utf8'); }
-  catch { texto = ''; }
-  const cabecera = texto.split(/^#?ORQUESTADOR_TELEGRAM_TOKEN=/m)[0];
-  const nuevo = `${cabecera.replace(/\s*$/, '')}\n\nORQUESTADOR_TELEGRAM_TOKEN=${token}\nORQUESTADOR_TELEGRAM_CHAT_ID=${chat}\n`;
-
-  try {
-    fs.writeFileSync(FICHERO_SECRETOS, nuevo, { mode: 0o600 });
-    fs.chmodSync(FICHERO_SECRETOS, 0o600);
-  } catch (e) {
-    process.stdout.write(`\n  ❌ No he podido guardarlo: ${e.code === 'EACCES' ? 'no tengo permiso' : e.message}\n`);
-    process.stdout.write('     Lánzalo como el usuario «ubuntu».\n\n');
-    return 1;
-  }
-
-  process.stdout.write('\n  ✅ Guardado. Ahora lo pruebo.\n');
-  process.env.ORQUESTADOR_TELEGRAM_TOKEN = token;
-  process.env.ORQUESTADOR_TELEGRAM_CHAT_ID = chat;
-  return probarTelegram(cfg);
+  // ⛔ 3 SEP 2026 — RETIRADO POR DECISIÓN DE IBRAHIN. Este camino pedía el token y lo ESCRIBÍA en
+  // el fichero de entorno de la fábrica. El bot de Telegram es ahora exclusivo de los avisos de
+  // Bamburu, así que darle a la fábrica una forma cómoda de guardarse unas credenciales de bot es
+  // exactamente lo que no puede existir: dos preguntas y ya volvería a hablar por el chat de
+  // Ibrahin. Se corta antes de pedir nada — un secreto que no se pide no se puede guardar mal.
+  //
+  // El día que la fábrica se encienda tendrá un bot PROPIO, y entonces esto se vuelve a abrir
+  // apuntando a SUS variables, nunca a las de Bamburu (`BAMBURU_TELEGRAM_*`).
+  const { MOTIVO } = await import('./vigia/bot-retirado.js');
+  process.stdout.write('\n  ⛔ CONECTAR TELEGRAM está retirado.\n     ' + MOTIVO + '\n\n');
+  return 1;
 }
 
 async function probarTelegram(cfg) {
@@ -416,12 +374,18 @@ async function probarTelegram(cfg) {
   // revisión no pasa se avisa aquí mismo, en vez de dejar a Ibrahin descubriéndolo a tientas.
   const rev = revisarTeclado(cfg.vigia?.teclado);
   if (!rev.ok) decir(`  ⚠️  El teclado NO se monta: ${rev.fallos.join(' · ')}`);
-  const env = await enviar({
+  // ⛔ 3 SEP 2026 — EL BOT ES EXCLUSIVO DE BAMBURU (decisión de Ibrahin). La prueba de aviso de la
+  // fábrica no manda nada: no tiene bot al que mandarlo.
+  const { botRetirado } = await import('./vigia/bot-retirado.js');
+  const env = botRetirado('prueba de aviso del orquestador');
+  void enviar;
+  const _envViejo = () => ({
     texto: `✅ <b>Prueba del orquestador</b>\n\nSi lees esto, el aviso está bien puesto.`
       + `${rev.ok ? '\n\nY abajo tienes los botones: toca uno.' : ''}\n\n<i>${cuando}</i>`,
     config: cfg,
     teclado: rev.ok ? rev.filas : null,
   });
+  void _envViejo;
   if (env.sinTeclado) decir(`  ⚠️  El mensaje salió SIN teclado: ${env.motivo}`);
 
   decir('');

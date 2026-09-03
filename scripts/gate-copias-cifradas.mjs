@@ -177,7 +177,7 @@ try {
   const tg = path.join(m3, 'telegram-falso.mjs');
   writeFileSync(tg, 'import fs from "node:fs";let t="";process.stdin.setEncoding("utf8");'
     + 'for await (const c of process.stdin) t+=c;'
-    + 'fs.writeFileSync(' + JSON.stringify(marca) + ', t);'
+    + 'fs.writeFileSync(' + JSON.stringify(marca) + ', "TEMA=" + (process.argv[2]||"") + "\\n" + t);'
     + 'console.log("aviso enviado (doble de prueba)");\n');
   rc('config', 'create', 'zzcif3', 'crypt', 'remote=' + path.join(m3, 'destino'),
      'password=' + rc('obscure', 'clave-3').trim(), 'password2=' + rc('obscure', 'sal-3').trim(),
@@ -192,8 +192,12 @@ try {
   ok(existsSync(marca), 'y el aviso a Telegram SE LLAMA — no se queda en un registro que no lee nadie');
   if (existsSync(marca)) {
     const texto = readFileSync(marca, 'utf8');
-    ok(/COPIA DE SEGURIDAD FALLIDA/.test(texto), '  con un titular que se entiende en el móvil');
+    ok(/ha FALLADO/.test(texto), '  con un titular que se entiende en el móvil');
     ok(/principal/.test(texto) && /Falló en/.test(texto), '  y con qué copia fue y en qué falló');
+    // 3 sep 2026 — el bot es exclusivo de Bamburu y todo aviso dice de qué va. La cabecera
+    // «BAMBURU — <tema>» la estampa la puerta común; lo que se comprueba aquí es que la copia
+    // le pasa SU tema, que es la mitad que puede olvidarse en el guion.
+    ok(/^TEMA=copias$/m.test(texto), '  y le dice a la puerta que el tema es «copias» (decisión del 3 sep 2026)');
   }
 
   // ═══════════════════════════════════════════════════════════════════════════════════════════════

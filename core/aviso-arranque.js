@@ -99,7 +99,7 @@ export async function avisarArranqueRoto({ modulo, esencial, error, raiz = proce
     return { enviado: false, motivo: 'no se repite: el mismo fallo ya se avisó hace menos de ' + (VENTANA_AVISO_MS / 60000) + ' min' };
   }
 
-  const r = await mandarTelegram({ texto: textoDeAviso({ modulo, esencial, error }), raiz });
+  const r = await mandarTelegram({ tema: 'arranque', texto: textoDeAviso({ modulo, esencial, error }) });
   if (r.ok) { anotarAviso(raiz, clave, ahora); return { enviado: true, motivo: r.motivo }; }
   return { enviado: false, motivo: r.motivo };
 }

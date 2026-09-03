@@ -6,6 +6,7 @@
 import { leerLineas, escribirAtomico } from '../nucleo/almacen.js';
 import { revisarTeclado } from './ordenes.js';
 import { enviar, configurado, queFalta } from './telegram.js';
+import { botRetirado } from './bot-retirado.js';   // 3 sep 2026: el bot es exclusivo de Bamburu
 import { alcanzaParaCiclo } from '../nucleo/maquina.js';
 
 const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -340,7 +341,10 @@ export async function entregar({ texto, config, entorno = process.env, logger })
     // El parte llega cada tres horas y a veces es lo ÚNICO que Ibrahin recibe en todo el día:
     // si no llevara el teclado, quien solo lea partes no lo vería aparecer nunca. Si la revisión
     // no pasa va `null`, y `enviar` manda el parte igual.
-    const r = await enviar({ texto: p.texto, config, entorno, teclado: tecladoDe(config) });
+    // ⛔ 3 SEP 2026 — EL BOT ES EXCLUSIVO DE BAMBURU (decisión de Ibrahin). La fábrica no manda
+    // partes por él. Se corta AQUÍ y no dentro de `enviar`, que es tubería que Bamburu comparte.
+    const r = botRetirado('parte del orquestador');
+    void enviar; void tecladoDe; void entorno;   // se dejan a la vista: el día que la fábrica tenga bot propio, aquí se vuelve
     if (r.ok) { enviados++; continue; }
     if (!r.reintentable) {
       logger?.error(`Telegram rechaza y no tiene arreglo solo: ${r.motivo}. Descarto ese parte.`);

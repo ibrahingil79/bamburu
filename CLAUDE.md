@@ -104,6 +104,20 @@
   argumento; solo ejecutan lo que el dueño prioriza.
 - **Fuente única de tareas: `TABLERO.md`.** Notion es solo panel; no dupliques tareas ni toques sus tablas.
 
+## 📌 El bot de Telegram es SOLO de los avisos de Bamburu (Ibrahin, 3 sep 2026)
+
+**Decisión cerrada.** El bot de Telegram avisa de cosas de Bamburu —arranque, copias y lo que se
+sume— y **la fábrica/orquestador no puede usarlo**, ni para hablar ni para escuchar. No se crea uno
+nuevo para la fábrica: está parada, y se creará el día que se encienda, con credenciales propias.
+
+- **Las credenciales viven en `/etc/bamburu.env`**: `BAMBURU_TELEGRAM_TOKEN` y
+  `BAMBURU_TELEGRAM_CHAT_ID`. `/etc/orquestador.env` quedó **vacío a propósito**.
+- **Una sola puerta:** `core/telegram-servidor.js`. Estampa `BAMBURU — <tema>` en cada aviso y
+  **sin `tema` no manda nada**. Desde bash: `printf '%s' "…" | node scripts/avisar-telegram.mjs <tema>`.
+- **El cerrojo de la fábrica:** `orchestrator/vigia/bot-retirado.js`, llamado desde `vigia/parte.js`,
+  `vigia/escucha.js` y `orq.js`. `orquestador-vigia.service` está **parado y deshabilitado**.
+- **Lo vigila `node scripts/censo-bot-de-bamburu.mjs`**, en `lint` + `infra` + RAPIDO, con autoprueba.
+
 ## Lo PRIMERO en cada sesión
 
 1. Lee `CANON.md` — qué es Bamburu, qué entra y qué NO (la estrategia).

@@ -7,11 +7,26 @@
 // plazos, dos formas de fallar, y el día que cambie el nombre de una variable, uno de los dos deja
 // de avisar sin que nadie se entere. Así que se extrae aquí y los dos lo usan.
 //
-// DE DÓNDE SALEN LAS CREDENCIALES. El token y el chat viven en `/etc/orquestador.env`
-// (`ORQUESTADOR_TELEGRAM_TOKEN` / `..._CHAT_ID`) y los servicios de Bamburu cargan
-// `/etc/bamburu.env`, que no los tiene. Los dos ficheros son `0600 ubuntu:ubuntu` y los servicios
-// corren como `ubuntu`, así que se leen del disco cuando no están en el entorno. **No se duplica el
-// secreto** ni hace falta tocar `/etc` ni ninguna unit.
+// DE DÓNDE SALEN LAS CREDENCIALES. ~~El token y el chat viven en `/etc/orquestador.env`
+// (`ORQUESTADOR_TELEGRAM_TOKEN` / `..._CHAT_ID`)...~~
+//
+// ⚙️ CAMBIADO EL 3 SEP 2026 — DECISIÓN DE IBRAHIN: **este bot es EXCLUSIVO de los avisos de
+// Bamburu.** La fábrica/orquestador no puede usarlo. Hasta hoy el token vivía en el fichero de
+// entorno DE LA FÁBRICA y los nombres de las variables salían de la configuración DE LA FÁBRICA:
+// Bamburu avisaba con prestado. Ahora el bot es suyo y vive en su casa:
+//
+//   `/etc/bamburu.env` → `BAMBURU_TELEGRAM_TOKEN` y `BAMBURU_TELEGRAM_CHAT_ID`
+//
+// que es el `EnvironmentFile` que ya cargan `bamburu.service` y sus temporizadores, así que en
+// producción llegan por `process.env` sin leer ningún disco. El respaldo de leer el fichero está
+// para los guiones que corren a mano.
+//
+// ⚠️ LO QUE SIGUE ATADO, Y SE DICE EN VEZ DE REDONDEARLO: la CREDENCIAL y la CONFIGURACIÓN ya no
+// dependen de la fábrica, pero la TUBERÍA (`enviar`, aquí debajo) todavía se importa de
+// `orchestrator/vigia/telegram.js`. Es un fichero que no decide nada —recibe token, chat y texto—,
+// así que no le da a la fábrica ninguna forma de hablar: eso lo cierran el cerrojo de sus llamantes
+// y que ya no tenga credenciales. Pero **si alguien borrara esa carpeta, Bamburu se quedaría mudo**.
+// Traerla a `core/` es una tarea aparte y está apuntada en `TABLERO.md` §Deuda técnica.
 //
 // ⚠️ LA REGLA QUE MANDA: **esto nunca lanza y nunca se queda colgado.** Quien avisa de una avería no
 // puede convertirse en la avería. Devuelve `{ ok, motivo }` y el que llama decide qué hacer — pero
@@ -21,11 +36,14 @@
 // (una librería que no lanza) y su canal (un chat).
 // ─────────────────────────────────────────────────────────────────────────────────────────────────
 import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { enviar } from '../orchestrator/vigia/telegram.js';
 
-const ENV_ORQUESTADOR = '/etc/orquestador.env';
-const CONFIG_ORQUESTADOR = 'orchestrator/orquestador.config.json';
+const ENV_BAMBURU = '/etc/bamburu.env';
+
+// Los nombres, aquí y no en un JSON de otro subsistema. Son dos cadenas: un fichero de
+// configuración ajeno para guardarlas era justo el hilo que ataba los avisos de Bamburu a la fábrica.
+export const VAR_TOKEN = 'BAMBURU_TELEGRAM_TOKEN';
+export const VAR_CHAT = 'BAMBURU_TELEGRAM_CHAT_ID';
 
 // Plazo corto a propósito: esto corre mientras algo se está muriendo (un arranque, una copia) y
 // nadie debe esperar veinte segundos a que Telegram conteste. El orquestador usa 20 s porque allí
@@ -50,32 +68,50 @@ export function leerEnvDeDisco(ruta) {
 }
 
 /**
- * Los NOMBRES de las variables salen de la configuración del orquestador, no se teclean aquí: si
- * alguien las renombra allí, esto lo sigue. Si el fichero no se puede leer, `null`.
+ * La configuración que espera el transporte, construida aquí con los nombres de Bamburu. Ya no se
+ * lee de ningún fichero de la fábrica: **antes bastaba con que alguien tocara aquel bloque para
+ * dejar a Bamburu mudo sin que nadie se enterara.**
  */
-export function configDeTelegram(raiz) {
-  try {
-    const c = JSON.parse(readFileSync(join(raiz, CONFIG_ORQUESTADOR), 'utf8'));
-    const t = c?.vigia?.telegram;
-    if (!t?.tokenEnv || !t?.chatIdEnv) return null;
-    return { vigia: { telegram: { ...t, timeoutMs: PLAZO_MS } } };
-  } catch { return null; }
+export function configDeTelegram() {
+  return { vigia: { telegram: { tokenEnv: VAR_TOKEN, chatIdEnv: VAR_CHAT, timeoutMs: PLAZO_MS } } };
 }
 
-/** @returns { ok:boolean, motivo:string } — nunca lanza, nunca tarda más de PLAZO_MS. */
-export async function mandarTelegram({ texto, raiz = process.cwd() }) {
-  const config = configDeTelegram(raiz);
-  if (!config) return { ok: false, motivo: 'sin configuración de Telegram (' + CONFIG_ORQUESTADOR + ' ilegible)' };
+/**
+ * LA CABECERA: quién habla y de qué. **3 sep 2026, encargo de Ibrahin:** «todo aviso de Bamburu
+ * debe empezar identificando origen y tema, para saber quién habla sin abrir el mensaje».
+ *
+ * Se estampa AQUÍ, en la puerta, y no en cada sitio que avisa. El motivo es el de siempre en este
+ * repo: lo que depende de que alguien se acuerde, un día se olvida — y el aviso que se olvide será
+ * justo el del día raro. Sin `tema` no se manda: **es preferible un aviso que no sale y lo dice a
+ * un aviso anónimo**, porque ahora este bot es de Bamburu y solo suyo.
+ */
+export function conCabecera(tema, texto) {
+  return '<b>BAMBURU — ' + String(tema).trim() + '</b>\n' + texto;
+}
 
-  // El entorno del proceso manda; el fichero del orquestador es el respaldo.
-  const entorno = { ...leerEnvDeDisco(ENV_ORQUESTADOR), ...process.env };
+/**
+ * @param tema  de qué va, en una o dos palabras: «arranque», «copias»…
+ * @returns { ok:boolean, motivo:string } — nunca lanza, nunca tarda más de PLAZO_MS.
+ */
+export async function mandarTelegram({ texto, tema }) {
+  if (!tema || !String(tema).trim()) {
+    return { ok: false, motivo: 'aviso sin tema: no se manda nada anónimo por el bot de Bamburu' };
+  }
+  const config = configDeTelegram();
+
+  // El entorno del proceso manda —en producción las trae `EnvironmentFile=/etc/bamburu.env`— y
+  // leer el fichero es el respaldo para los guiones que se lanzan a mano.
+  const entorno = { ...leerEnvDeDisco(ENV_BAMBURU), ...process.env };
+  if (!entorno[VAR_TOKEN] || !entorno[VAR_CHAT]) {
+    return { ok: false, motivo: 'sin credenciales del bot de Bamburu (' + VAR_TOKEN + ' / ' + VAR_CHAT + ')' };
+  }
 
   let r;
   try {
     // Doble cinturón: `enviar` ya trae su propio plazo, pero si algo lo dejara colgado, quien avisa
     // NO puede quedarse esperando.
     r = await Promise.race([
-      enviar({ texto, config, entorno }),
+      enviar({ texto: conCabecera(tema, texto), config, entorno }),
       new Promise((res) => setTimeout(() => res({ ok: false, motivo: 'plazo agotado esperando a Telegram' }), PLAZO_MS + 500)),
     ]);
   } catch (e) { r = { ok: false, motivo: 'el envío falló: ' + (e?.message || e) }; }

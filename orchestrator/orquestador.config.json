@@ -106,16 +106,17 @@
     "esperaBaseMs": 60000
   },
   "vigia": {
-    "activo": true,
+    "activo": false,
     "intervaloParteMs": 10800000,
     "telegram": {
-      "tokenEnv": "ORQUESTADOR_TELEGRAM_TOKEN",
-      "chatIdEnv": "ORQUESTADOR_TELEGRAM_CHAT_ID",
+      "$retirado": "3 sep 2026 — DECISION DE IBRAHIN: el bot de Telegram es EXCLUSIVO de los avisos de Bamburu. La fabrica no habla ni escucha por el. Aqui vivian tokenEnv y chatIdEnv; se han quitado a proposito, y sus variables salieron de /etc/orquestador.env. Si algun dia se enciende la fabrica, se le crea un bot PROPIO y se rellena esto con SUS nombres, nunca con los de Bamburu. El cerrojo de codigo esta en orchestrator/vigia/bot-retirado.js y lo vigila scripts/censo-bot-de-bamburu.mjs.",
+      "tokenEnv": "",
+      "chatIdEnv": "",
       "timeoutMs": 20000,
       "maxPendientes": 50
     },
     "escucha": {
-      "activa": true,
+      "activa": false,
       "esperaLargaS": 50,
       "esperaTrasFalloMs": 15000,
       "confirmacionMs": 120000,
@@ -124,14 +125,32 @@
     "$porqueTeclado": "1 sep 2026, encargo de Ibrahin: botones fijos bajo el teclado para no tener que acordarse de las palabras exactas de pie en la calle. Cada boton manda EL TEXTO de una orden que YA existe; no hay ordenes nuevas. FUERA quedan a proposito 'parar ya', 'saltar' y 'desapartar' (las de PIDEN_CONFIRMACION): pueden dejar algo a medias y no deben poder tocarse sin querer, asi que se siguen escribiendo a mano. El campo 'orden' NO se usa para ejecutar nada: es lo que se comprueba contra el interprete al arrancar, para que un boton no pueda prometer una cosa y mandar otra.",
     "teclado": [
       [
-        { "texto": "Parte", "orden": "PARTE" },
-        { "texto": "Qué hace", "orden": "ESTADO" },
-        { "texto": "Cuota", "orden": "CUOTA" }
+        {
+          "texto": "Parte",
+          "orden": "PARTE"
+        },
+        {
+          "texto": "Qué hace",
+          "orden": "ESTADO"
+        },
+        {
+          "texto": "Cuota",
+          "orden": "CUOTA"
+        }
       ],
       [
-        { "texto": "Preguntas", "orden": "PREGUNTAS" },
-        { "texto": "Arranca", "orden": "ARRANCAR" },
-        { "texto": "Para", "orden": "PARAR" }
+        {
+          "texto": "Preguntas",
+          "orden": "PREGUNTAS"
+        },
+        {
+          "texto": "Arranca",
+          "orden": "ARRANCAR"
+        },
+        {
+          "texto": "Para",
+          "orden": "PARAR"
+        }
       ]
     ]
   },
