@@ -39,6 +39,7 @@ import { provisionTenant } from '../core/tenant-provisioning.js';
 import { updateClientSvc } from '../modules/erp/routes/clients.js';
 import { direccionDeCliente, aceptaResultado } from '../modules/erp/mapa-cliente.js';
 
+import { soltarAtaduras } from './lib/tirar-negocio.mjs';
 const RID = randomBytes(3).toString('hex');
 const APP = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const dormir = ms => new Promise(r => setTimeout(r, ms));
@@ -61,6 +62,11 @@ function limpiar() {
   if (!slug) return;
   const t = getTenantBySlug(slug);
   if (t) controlDb.prepare('DELETE FROM tenant_sessions WHERE tenant_id=?').run(t.id);
+  // ⚙️ 3 SEP 2026 — SUELTA LAS ATADURAS ANTES DE BORRAR EL NEGOCIO. Desde el 2 de septiembre
+  // `createTenant` siembra la prueba de 15 días, así que todo negocio nuevo tiene fila en
+  // `tenant_suscripciones`: sin soltarla, el DELETE de abajo muere con FOREIGN KEY y el negocio de
+  // prueba se queda dentro de control.db para siempre. `soltarAtaduras` le pregunta al esquema.
+  soltarAtaduras(slug);
   controlDb.prepare('DELETE FROM tenants WHERE slug=?').run(slug);
   if (t) {
     const abs = path.isAbsolute(t.db_filename) ? t.db_filename : path.join(APP, t.db_filename);

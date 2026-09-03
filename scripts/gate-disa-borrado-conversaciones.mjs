@@ -33,6 +33,7 @@ import puppeteer from 'puppeteer-core';
 import { launchOpts, APP_DIR } from './lib/gate-env.mjs';
 import { provisionTenant } from '../core/tenant-provisioning.js';
 import { getTenantBySlug, controlDb } from '../core/control-db.js';
+import { tirarNegocio } from './lib/tirar-negocio.mjs';
 
 const RID = randomBytes(3).toString('hex');
 const SHOTS = path.join(process.env.HOME || '/home/ubuntu', 'borrado-shots');
@@ -52,29 +53,12 @@ const bases = {};
 let browser = null;
 function limpiar() {
   for (const s of Object.keys(bases)) { try { bases[s].close(); } catch {} }
-  for (const s of slugs) {
-    const t = getTenantBySlug(s);
-    // LA LIMPIEZA SIGUE EL GRAFO DE CLAVES AJENAS, no una lista escrita a mano. La primera versión
-    // soltaba solo `tenant_sessions` y el `DELETE FROM tenants` moría con FOREIGN KEY: los negocios
-    // de prueba se quedaban en `control.db` para siempre, con sus ficheros ya borrados — o sea, un
-    // negocio fantasma por pasada. La causa era `tenant_suscripciones`, una tabla que ni existía
-    // cuando se escribieron los gates de este estilo. Una lista a mano siempre se queda corta:
-    // se pregunta al esquema, que es quien sabe.
-    if (t) {
-      for (const tabla of controlDb.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map(x => x.name)) {
-        try {
-          for (const k of controlDb.prepare('PRAGMA foreign_key_list("' + tabla + '")').all().filter(k => k.table === 'tenants')) {
-            controlDb.prepare('DELETE FROM "' + tabla + '" WHERE "' + k.from + '"=?').run(t.id);
-          }
-        } catch {}
-      }
-    }
-    try { controlDb.prepare('DELETE FROM tenants WHERE slug=?').run(s); } catch (e) { console.error('  ⚠️ no se pudo borrar el negocio ' + s + ': ' + e.message); }
-    if (t) {
-      const abs = path.isAbsolute(t.db_filename) ? t.db_filename : path.join(APP_DIR, t.db_filename);
-      for (const f of [abs, abs + '-wal', abs + '-shm']) { try { unlinkSync(f); } catch {} }
-    }
-  }
+  // ⚙️ 3 SEP 2026 · esta limpieza nació AQUÍ, con su propio recorrido del grafo de claves ajenas, y
+  // el barrido completo demostró el mismo día que el problema no era de este gate sino de los 27:
+  // desde que `createTenant` siembra la prueba de 15 días, `tenant_suscripciones` mataba el
+  // `DELETE FROM tenants` de todos. Así que el recorrido se mudó a `lib/tirar-negocio.mjs` y aquí
+  // se LLAMA, en vez de tener una segunda copia que mañana se quede atrás.
+  for (const s of slugs) tirarNegocio(s);
 }
 
 async function nacerNegocio(nombre) {

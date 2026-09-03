@@ -128,7 +128,22 @@ Recorrido tabla por tabla, con la decisión que se toma sobre cada una:
 
 ---
 
-## 5. La contradicción del encargo, dicha en voz alta
+## 5. La contradicción del encargo, dicha en voz alta — y RESUELTA
+
+> ### ✅ YA NO ES UNA INTERPRETACIÓN: ES UNA DECISIÓN CERRADA
+>
+> **Ibrahin, 3 de septiembre de 2026:** *el borrado de conversaciones es **por persona** — cada
+> usuario borra las suyas, no las de sus compañeros.* Confirma la lectura que se razonaba abajo, y
+> **la cierra**: no se reinterpreta.
+>
+> **Un borrado del negocio entero, si algún día se pide, será OTRA tarea con sus propias
+> salvaguardas** (quién puede pedirlo, doble confirmación, rastro de quién lo hizo y cuándo). **No se
+> construye ahora.**
+>
+> Escrito también en `docs/contexto/decisiones.md` §DISA, en la ficha de `TABLERO.md` y en el propio
+> `modules/disa/index.js`. Lo que sigue debajo es **cómo se llegó a esa lectura**, que se conserva
+> porque el razonamiento es la parte que evita repetir la duda.
+
 
 El encargo dice *«implementa el borrado global»* y también *«los criterios del TABLERO mandan tal
 cual»*. Y el segundo criterio del TABLERO dice literalmente:

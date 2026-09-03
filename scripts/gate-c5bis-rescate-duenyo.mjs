@@ -22,6 +22,7 @@ import { TOTP, NobleCryptoPlugin, ScureBase32Plugin } from 'otplib';
 import { controlDb } from '../core/control-db.js';
 import { provisionTenant } from '../core/tenant-provisioning.js';
 
+import { soltarAtaduras } from './lib/tirar-negocio.mjs';
 // BASE se fija al crear el tenant: http://<slug>.localhost:3000. Mismo patrón que el resto de gates
 // del panel — *.localhost resuelve a loopback sin tocar /etc/hosts, y el middleware saca el negocio
 // de la primera etiqueta del host, igual que en producción con el subdominio real.
@@ -153,6 +154,11 @@ try {
   if (creado) {
     try {
       controlDb.prepare('DELETE FROM tenant_sessions WHERE tenant_id=(SELECT id FROM tenants WHERE slug=?)').run(creado.slug);
+      // ⚙️ 3 SEP 2026 — SUELTA LAS ATADURAS ANTES DE BORRAR EL NEGOCIO. Desde el 2 de septiembre
+      // `createTenant` siembra la prueba de 15 días, así que todo negocio nuevo tiene fila en
+      // `tenant_suscripciones`: sin soltarla, el DELETE de abajo muere con FOREIGN KEY y el negocio de
+      // prueba se queda dentro de control.db para siempre. `soltarAtaduras` le pregunta al esquema.
+      soltarAtaduras(creado.slug);
       controlDb.prepare('DELETE FROM tenants WHERE slug=?').run(creado.slug);
       const abs = join(APP_DIR, creado.db_filename);
       for (const f of [abs, abs + '-wal', abs + '-shm']) { try { unlinkSync(f); } catch {} }

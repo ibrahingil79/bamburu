@@ -31,12 +31,13 @@
 //   node scripts/gate-importador-csv.mjs
 import puppeteer from 'puppeteer';
 import path from 'path';
-import { writeFileSync, unlinkSync } from 'fs';
+import { writeFileSync, unlinkSync, chmodSync } from 'fs';
 import { randomBytes } from 'crypto';
 import Database from 'better-sqlite3';
 import { launchOpts } from './lib/gate-env.mjs';
 import { controlDb, getTenantBySlug } from '../core/control-db.js';
 import { provisionTenant } from '../core/tenant-provisioning.js';
+import { soltarAtaduras } from './lib/tirar-negocio.mjs';
 // 25 ago 2026 · Direcciones de dominio IMPOSIBLE (`.test`), no de dominios que existen de verdad.
 // `ej.com`, `minegocio.com` y `barpepe.com` son dominios reales de otra gente: un correo de
 // recuperación de contraseña dirigido ahí acaba en casa de un desconocido. `.test` está reservado
@@ -65,11 +66,18 @@ const CSV_ILEGIBLE = path.join(CSV_DIR, '.gate-imp-ilegible-' + randomBytes(3).t
 const tenants = [];
 function limpiar() {
   try { unlinkSync(CSV_BUENO); } catch {}
+  // Se le devuelven los permisos antes de borrarlo: un fichero en 000 no se borra solo.
+  try { chmodSync(CSV_ILEGIBLE, 0o644); } catch {}
   try { unlinkSync(CSV_ILEGIBLE); } catch {}
   for (const { slug, db } of tenants) {
     try { if (db) db.close(); } catch {}
     const t = getTenantBySlug(slug);
     if (t) controlDb.prepare('DELETE FROM tenant_sessions WHERE tenant_id=?').run(t.id);
+    // ⚙️ 3 SEP 2026 — SUELTA LAS ATADURAS ANTES DE BORRAR EL NEGOCIO. Desde el 2 de septiembre
+    // `createTenant` siembra la prueba de 15 días, así que todo negocio nuevo tiene fila en
+    // `tenant_suscripciones`: sin soltarla, el DELETE de abajo muere con FOREIGN KEY y el negocio de
+    // prueba se queda dentro de control.db para siempre. `soltarAtaduras` le pregunta al esquema.
+    soltarAtaduras(slug);
     controlDb.prepare('DELETE FROM tenants WHERE slug=?').run(slug);
     if (t) {
       const abs = path.isAbsolute(t.db_filename) ? t.db_filename : path.join(APP, t.db_filename);
@@ -216,10 +224,22 @@ try {
   // ── UN FICHERO QUE NO SE PUEDE LEER NO DEJA EL BOTÓN MUERTO ────────────────────────────────
   // Salió de un rojo de este mismo gate (23 ago 2026): el botón se ponía en «Leyendo…», el
   // `FileReader` fallaba y NADIE lo devolvía a su sitio. Se veía el aviso y detrás quedaba un mando
-  // deshabilitado para siempre, sin más salida que recargar. Se provoca de verdad —fichero oculto,
-  // que el confinamiento del snap deja ver pero no leer— porque un fallo simulado no habría
-  // recorrido el mismo camino.
+  // deshabilitado para siempre, sin más salida que recargar. Se provoca de verdad, porque un fallo
+  // simulado no habría recorrido el mismo camino.
+  //
+  // ⚙️ CORREGIDO EL 3 SEP 2026, y la lección es la de siempre: **ESTE GATE LLEVABA DOS DÍAS
+  // MIDIENDO OTRA COSA.** El fichero se hacía «ilegible» poniéndole un punto delante y confiando en
+  // que **el confinamiento del snap de Chromium lo dejara ver pero no leer**. El 1 de septiembre,
+  // `lib/gate-env.mjs` dejó de arrancar el envoltorio `/snap/bin/chromium` y pasó a ejecutar el ELF
+  // de DENTRO del snap **directamente, sin `snap-confine`** — o sea, **sin confinamiento**. Desde
+  // ese día el fichero se leía perfectamente, el `FileReader` no fallaba, la vista previa se abría
+  // (correctamente) y la aserción de abajo cantaba un fallo **del producto que no existía**.
+  //
+  // Ahora se hace ilegible **de verdad y a nivel del sistema** (`chmod 000`), que no depende de cómo
+  // se arranque el navegador. No se ablanda la aserción: se le devuelve el escenario que decía
+  // medir. Cambiar la aserción habría sido cambiar el termómetro para no tener fiebre.
   writeFileSync(CSV_ILEGIBLE, CSV, 'utf8');
+  chmodSync(CSV_ILEGIBLE, 0o000);
   await (await page.$('#impFichero')).uploadFile(CSV_ILEGIBLE);
   await dormir(300);
   await page.click('#impVer');

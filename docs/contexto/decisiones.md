@@ -37,6 +37,22 @@
 ## DISA
 - **`query_database` (SELECT arbitrario, tablas de sistema protegidas, máx. 4 llamadas/mensaje)** + esquema de BD inyectado, para responder consultas fuera del resumen. *Descartado:* un resumen fijo agregado (BUG #1).
 - **Operaciones genéricas `insert/update/delete_record` sobre una whitelist `WRITABLE_TABLES`.** *Descartado:* un `case` hardcodeado por entidad (BUG #2).
+- **El borrado de conversaciones de DISA es POR PERSONA, y es una decisión cerrada** (decisión de
+  Ibrahin, **2026-09-03**, confirmando la lectura aplicada al cerrar `disa-borrado-global-conversaciones`).
+  Cada usuario borra **las suyas** —todas de una vez si quiere, de verdad y sin vuelta atrás— y
+  **nunca las de sus compañeros**. El borrado real pasa por una sola puerta,
+  `borrarConversaciones()` en `modules/disa/index.js`, que **no sabe borrar sin dueño**: el filtro
+  por `user_id` va escrito dentro del propio SQL, y `scripts/censo-borrado-sin-filtro.mjs` sale en
+  rojo si alguien deja uno sin él.
+  *Por qué queda escrito aquí:* el encargo original pedía «borrado global» y el criterio del TABLERO
+  prohibía que quedara ninguna ruta capaz de vaciar `disa_conversations` de golpe. **Las dos frases
+  solo caben juntas de una forma —«global» es global PARA QUIEN PULSA, no para el negocio— e Ibrahin
+  la confirmó el 3 sep 2026.** No se reinterpreta: cualquier chat que vuelva a leer aquel criterio y
+  vea una ambigüedad, **ya no la hay**.
+  *Descartado, y no por descuido:* un borrado del **negocio entero**. Era justo la vulnerabilidad
+  AUD-002 que esta tarea cerró. **Si algún día se pide, será OTRA tarea, con sus propias
+  salvaguardas** (quién puede pedirlo, doble confirmación, rastro de quién lo hizo y cuándo). **No se
+  construye ahora, y nadie lo añade «de paso».**
 
 ## Plataforma / proceso
 - **PDF real con un generador Chromium compartido** (`core/pdf.js`) cableado a los 4 documentos. *Descartado:* un generador por documento.

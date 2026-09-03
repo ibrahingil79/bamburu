@@ -20,6 +20,7 @@ import { controlDb, getTenantBySlug } from '../core/control-db.js';
 import { provisionTenant } from '../core/tenant-provisioning.js';
 import { fijarOficio, vocabulario } from '../modules/erp/oficios.js';
 
+import { soltarAtaduras } from './lib/tirar-negocio.mjs';
 const RID = randomBytes(3).toString('hex');
 const APP_DIR = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const PASS = 'Gate.Menu.' + RID + '!';
@@ -119,6 +120,12 @@ const BASE_FIJAS  = [
   // ⚙️ 24 ago 2026 · dos de las catorce que estaban escondidas.
   ['Importar un fichero', '/admin/migracion/importar'],
   ['Avisos', '/admin/avisos'],
+  // ⚙️ 3 SEP 2026 · LA PUERTA QUE FALTABA EN ESTE INVENTARIO. «Mi suscripción» la puso la tarea
+  // `suscripcion-plan-y-alta` el 2 de septiembre, y este gate seguía esperando cuatro entradas al
+  // pie del rail: cantaba un fallo que no lo era —la pantalla existe y está bien— y de paso
+  // descuadraba el recuento total. Es exactamente el aviso que este fichero lleva escrito: **una
+  // lista a mano se queda corta en cuanto alguien añade una pantalla.**
+  ['Mi suscripción', '/admin/suscripcion'],
   ['Ayuda y soporte', '/docs'],
 ];
 const BASE_CUENTA = [['Perfil', '/admin/perfil'], ['Datos del negocio', '/admin/settings'],
@@ -138,8 +145,12 @@ const BASE_CUENTA = [['Perfil', '/admin/perfil'], ['Datos del negocio', '/admin/
 // de alta y verifica que aparece la 50ª. En ningún momento se comprueba «que salgan 50 cosas»: se
 // comprueban UNA A UNA por identidad (área » nombre » ruta), que es lo que detecta una amputación
 // disfrazada de entrada nueva.
-const N_TOTAL       = BASE_RAIL.length + BASE_CONFIG.length + 1 + BASE_FIJAS.length + BASE_CUENTA.length;   // 39+5+1+3+6 = 54
-const N_SIN_PUESTOS = N_TOTAL - 1;                                                                          // 53
+// ⚙️ 3 SEP 2026 · el comentario de esta línea decía «39+5+1+3+6 = 54» y llevaba tiempo sin
+// cuadrar con sus propias listas. Se corrige con el cuerpo que lo desarrolla, que es la norma de
+// la casa: hoy son 48 del rail + 5 de configuración + 1 (el pin de Inicio) + 6 fijas + 6 de
+// cuenta = 66, con «Mi suscripción» ya dentro.
+const N_TOTAL       = BASE_RAIL.length + BASE_CONFIG.length + 1 + BASE_FIJAS.length + BASE_CUENTA.length;   // 48+5+1+6+6 = 66
+const N_SIN_PUESTOS = N_TOTAL - 1;                                                                          // 65
 
 // Qué áreas se parten en DOS bloques, y qué entradas quedan bajo el rótulo «Ajustes de <Área>». No
 // cambia el inventario: solo dónde se pinta cada una dentro del MISMO desplegable.
@@ -172,6 +183,11 @@ function limpiar() {
   if (!slug) return;
   const t = getTenantBySlug(slug);
   if (t) controlDb.prepare('DELETE FROM tenant_sessions WHERE tenant_id=?').run(t.id);
+  // ⚙️ 3 SEP 2026 — SUELTA LAS ATADURAS ANTES DE BORRAR EL NEGOCIO. Desde el 2 de septiembre
+  // `createTenant` siembra la prueba de 15 días, así que todo negocio nuevo tiene fila en
+  // `tenant_suscripciones`: sin soltarla, el DELETE de abajo muere con FOREIGN KEY y el negocio de
+  // prueba se queda dentro de control.db para siempre. `soltarAtaduras` le pregunta al esquema.
+  soltarAtaduras(slug);
   controlDb.prepare('DELETE FROM tenants WHERE slug=?').run(slug);
   if (t) {
     const abs = path.isAbsolute(t.db_filename) ? t.db_filename : path.join(APP_DIR, t.db_filename);

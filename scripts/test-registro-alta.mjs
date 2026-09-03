@@ -8,6 +8,7 @@ import { parseSignup } from '../core/signup-schema.js';
 import { emailTaken, validateSignupDraft, createTenantSvc } from '../core/tenant-signup.js';
 import { provisionTenant } from '../core/tenant-provisioning.js';
 import { controlDb, getTenantBySlug } from '../core/control-db.js';
+import { soltarAtaduras } from './lib/tirar-negocio.mjs';
 // 25 ago 2026 · Los dominios de las direcciones de prueba pasan a `.test`, que está RESERVADO y no
 // puede existir (RFC 2606). Antes usaban dominios que sí existen —de otra gente—, así que un correo
 // del producto podía acabar en una bandeja ajena, y cada intento era un rebote contra bamburu.com.
@@ -27,6 +28,11 @@ function dropTenantFiles(db_filename) {
 }
 function deleteTenant(slug) {
   const t = getTenantBySlug(slug);
+  // ⚙️ 3 SEP 2026 — SUELTA LAS ATADURAS ANTES DE BORRAR EL NEGOCIO. Desde el 2 de septiembre
+  // `createTenant` siembra la prueba de 15 días, así que todo negocio nuevo tiene fila en
+  // `tenant_suscripciones`: sin soltarla, el DELETE de abajo muere con FOREIGN KEY y el negocio de
+  // prueba se queda dentro de control.db para siempre. `soltarAtaduras` le pregunta al esquema.
+  soltarAtaduras(slug);
   controlDb.prepare('DELETE FROM tenants WHERE slug=?').run(slug);
   if (t) dropTenantFiles(t.db_filename);
 }
@@ -126,6 +132,11 @@ try {
     check('NO quedó tenant nuevo registrado', tenantsCount() === before, `count ${before}`);
     check('el .db huérfano fue limpiado', !existsSync(abs));
     // limpieza del decoy
+    // ⚙️ 3 SEP 2026 — SUELTA LAS ATADURAS ANTES DE BORRAR EL NEGOCIO. Desde el 2 de septiembre
+    // `createTenant` siembra la prueba de 15 días, así que todo negocio nuevo tiene fila en
+    // `tenant_suscripciones`: sin soltarla, el DELETE de abajo muere con FOREIGN KEY y el negocio de
+    // prueba se queda dentro de control.db para siempre. `soltarAtaduras` le pregunta al esquema.
+    soltarAtaduras(decoySlug);
     controlDb.prepare('DELETE FROM tenants WHERE slug=?').run(decoySlug);
   }
 } finally {

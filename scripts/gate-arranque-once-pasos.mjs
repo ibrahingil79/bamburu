@@ -24,6 +24,7 @@ import { launchOpts, APP_DIR, autoAceptarPaneles } from './lib/gate-env.mjs';
 import { provisionTenant } from '../core/tenant-provisioning.js';
 import { estadoArranque, pasosDe } from '../modules/erp/arranque.js';
 
+import { soltarAtaduras } from './lib/tirar-negocio.mjs';
 const RID = randomBytes(3).toString('hex');
 const SHOTS = join(process.env.HOME || '/home/ubuntu', 'arranque-shots');
 try { mkdirSync(SHOTS, { recursive: true }); } catch {}
@@ -195,6 +196,11 @@ try {
   try { execSync('rm -f ' + JSON.stringify(DB_PATH) + '*'); } catch {}
   try {
     const cdb = new Database(join(APP_DIR, 'data', 'control.db'));
+    // ⚙️ 3 SEP 2026 — SUELTA LAS ATADURAS ANTES DE BORRAR EL NEGOCIO. Desde el 2 de septiembre
+    // `createTenant` siembra la prueba de 15 días, así que todo negocio nuevo tiene fila en
+    // `tenant_suscripciones`: sin soltarla, el DELETE de abajo muere con FOREIGN KEY y el negocio de
+    // prueba se queda dentro de control.db para siempre. `soltarAtaduras` le pregunta al esquema.
+    soltarAtaduras(alta.slug);
     cdb.prepare('DELETE FROM tenants WHERE slug=?').run(alta.slug);
     cdb.close();
   } catch {}

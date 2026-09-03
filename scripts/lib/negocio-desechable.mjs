@@ -21,6 +21,7 @@ import { unlinkSync } from 'fs';
 import path from 'path';
 import { provisionTenant } from '../../core/tenant-provisioning.js';
 import { controlDb, getTenantBySlug } from '../../core/control-db.js';
+import { tirarNegocio } from './tirar-negocio.mjs';
 import { APP_DIR } from './gate-env.mjs';
 import { correoDePrueba, ENTREGADO } from './correo-de-prueba.mjs';
 
@@ -66,16 +67,16 @@ export async function negocioDesechable(nombre, { oficio = null } = {}) {
     },
     // TIRAR EL NEGOCIO ENTERO. Es lo que hace que esto no deje nada: no se borran facturas —no se
     // puede— se borra el negocio en el que nacieron, que nunca existió fuera de esta comprobación.
+    // ⚙️ 3 SEP 2026 — ESTO SOLTABA `tenant_sessions` Y NADA MÁS, Y DESDE EL 2 DE SEPTIEMBRE NO
+    // BASTABA. `createTenant` siembra ahora la prueba de 15 días, así que todo negocio nuevo tiene
+    // una fila en `tenant_suscripciones` que también apunta a `tenants`: el `DELETE FROM tenants`
+    // moría con FOREIGN KEY, **el `catch` de aquí se lo tragaba** y el negocio de prueba se quedaba
+    // dentro de `control.db` para siempre. Un barrido completo dejó 43 fantasmas así, en silencio.
+    // Ahora lo hace `tirarNegocio`, que le pregunta al esquema quién apunta a `tenants` y que
+    // **avisa a gritos si no puede**, en vez de callarse.
     tirar() {
       try { db.close(); } catch (_) {}
-      try {
-        const t2 = getTenantBySlug(slug);
-        if (t2) controlDb.prepare('DELETE FROM tenant_sessions WHERE tenant_id=?').run(t2.id);
-        controlDb.prepare('DELETE FROM tenants WHERE slug=?').run(slug);
-        for (const f of [abs, abs + '-wal', abs + '-shm']) { try { unlinkSync(f); } catch (_) {} }
-      } catch (e) {
-        console.error('  ⚠️ NO SE PUDO TIRAR EL NEGOCIO «' + slug + '»: ' + e.message + '. Revísalo a mano.');
-      }
+      return tirarNegocio(slug);
     },
   };
 }

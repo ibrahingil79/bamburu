@@ -24,6 +24,7 @@ import Database from 'better-sqlite3';
 import { randomBytes } from 'crypto';
 import { join } from 'path';
 
+import { soltarAtaduras } from './lib/tirar-negocio.mjs';
 const DB_PATH = tenantDb('desarrollo-bamburu');
 const BASE = 'http://desarrollo-bamburu.localhost:3000';
 
@@ -206,6 +207,11 @@ try {
               + db.prepare("SELECT COUNT(*) c FROM warehouses WHERE name LIKE ?").get('%gate ' + rid + '%').c;
   // control.db es la BD de enrutado de TODA la plataforma: aquí no se deja residuo ni de broma.
   cdb.prepare('DELETE FROM superadmin_sessions WHERE token=?').run(saToken);
+  // ⚙️ 3 SEP 2026 — SUELTA LAS ATADURAS ANTES DE BORRAR EL NEGOCIO. Desde el 2 de septiembre
+  // `createTenant` siembra la prueba de 15 días, así que todo negocio nuevo tiene fila en
+  // `tenant_suscripciones`: sin soltarla, el DELETE de abajo muere con FOREIGN KEY y el negocio de
+  // prueba se queda dentro de control.db para siempre. `soltarAtaduras` le pregunta al esquema.
+  soltarAtaduras(saTenantId, { db: cdb });
   cdb.prepare('DELETE FROM tenants WHERE id=?').run(saTenantId);
   const restoCtl = cdb.prepare("SELECT COUNT(*) c FROM tenants WHERE slug LIKE ?").get('gate-xss-%').c;
   cdb.close();

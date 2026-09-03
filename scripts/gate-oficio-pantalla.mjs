@@ -15,6 +15,7 @@ import Database from 'better-sqlite3';
 import { join } from 'path';
 import { unlinkSync } from 'fs';
 
+import { soltarAtaduras } from './lib/tirar-negocio.mjs';
 const BASE = 'http://desarrollo-bamburu.localhost:3000', HOST = 'desarrollo-bamburu.localhost';
 let pass = 0, fail = 0;
 const ok = (c, m, e = '') => { (c ? pass++ : fail++); console.log((c ? '  ✓ ' : '  ✗ FALLO: ') + m + (e ? ' — ' + e : '')); };
@@ -302,6 +303,11 @@ try {
     try {
       const control = new Database(join(APP_DIR, 'data/control.db'));
       const t = control.prepare('SELECT db_filename FROM tenants WHERE slug=?').get(slugPropio);
+      // ⚙️ 3 SEP 2026 — SUELTA LAS ATADURAS ANTES DE BORRAR EL NEGOCIO. Desde el 2 de septiembre
+      // `createTenant` siembra la prueba de 15 días, así que todo negocio nuevo tiene fila en
+      // `tenant_suscripciones`: sin soltarla, el DELETE de abajo muere con FOREIGN KEY y el negocio de
+      // prueba se queda dentro de control.db para siempre. `soltarAtaduras` le pregunta al esquema.
+      soltarAtaduras(slugPropio);
       control.prepare('DELETE FROM tenants WHERE slug=?').run(slugPropio);
       control.close();
       if (t) for (const suf of ['', '-wal', '-shm']) {

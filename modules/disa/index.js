@@ -2952,10 +2952,17 @@ export function register(app, db) {
   // y el negocio entero se quedaba sin historial. Era además el ÚNICO `DELETE FROM` sin filtro de
   // todo el producto, y no la llamaba ninguna pantalla.
   //
-  // «Global» es global PARA QUIEN PULSA, no para el negocio — es la única lectura que cumple a la
-  // vez el encargo («borrado global», con confirmación y borrado real) y el criterio del TABLERO
-  // que dice que no puede quedar ninguna ruta capaz de vaciar la tabla de golpe. El razonamiento
-  // entero, en `docs/seguridad/disa-borrado-conversaciones-diagnostico.md` §5.
+  // ✅ DECISIÓN CERRADA DE IBRAHIN, 3 SEP 2026: **EL BORRADO ES POR PERSONA.** Cada usuario borra
+  // las suyas y nunca las de sus compañeros. «Global» es global PARA QUIEN PULSA, no para el
+  // negocio. No es una interpretación de quien escribió esto: se razonó al construir —era la única
+  // lectura que cumplía a la vez el encargo y el criterio del TABLERO de que no quede ninguna ruta
+  // capaz de vaciar la tabla de golpe— e Ibrahin la confirmó al día siguiente.
+  //
+  // **NO SE REINTERPRETA.** Un borrado del NEGOCIO ENTERO era justo la vulnerabilidad AUD-002 que
+  // esta tarea cerró; si algún día se pide, será OTRA tarea con sus propias salvaguardas (quién
+  // puede pedirlo, doble confirmación, y rastro de quién lo hizo y cuándo). **Nadie lo añade aquí
+  // «de paso».** Escrito también en `docs/contexto/decisiones.md` §DISA y en la ficha del TABLERO;
+  // el razonamiento entero, en `docs/seguridad/disa-borrado-conversaciones-diagnostico.md` §5.
   router.post('/clear', adminAuth(db), csrfProtect(), c => {
     const session = c.get('session');
     const r = borrarConversaciones(db, session?.userId);

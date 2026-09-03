@@ -332,6 +332,76 @@
 > **Inventario (Pilar 3) CERRADO (15 jul 2026):** multi-almacén (`da7871e`/`3af928f`), stock mínimo /
 > punto de pedido (`8b4fbe4`) y trazabilidad por lote / nº de serie (`f56ad84`). Ver el Backlog.
 
+## 🧹 BARRIDO COMPLETO DEL 3 SEP 2026 — y la regresión silenciosa que destapó
+
+> **Encargo de Ibrahin (3 sep 2026):** correr el barrido completo tras 21 commits y 57 ficheros
+> tocados, y arreglar lo que saliera en rojo.
+
+**Dos pasadas completas, 20-22 min cada una: de `150/210` a `167/210`**, y con los dos arreglos
+posteriores comprobados uno a uno, **169**. Lo que sigue es lo que se encontró, con su medida.
+
+### ⚠️ LA REGRESIÓN QUE NADIE VEÍA: 43 NEGOCIOS FANTASMA POR PASADA
+
+**El 2 de septiembre, la tarea de suscripción metió en `createTenant` —el ÚNICO sitio del repo donde
+nace un negocio— la siembra de la prueba de 15 días.** Desde entonces todo negocio nuevo tiene una
+fila en `tenant_suscripciones`, que apunta a `tenants` por clave ajena. **Las 27 comprobaciones que
+se traen su propio negocio lo borraban a mano soltando solo `tenant_sessions`**, así que su
+`DELETE FROM tenants` moría con `SQLITE_CONSTRAINT_FOREIGNKEY`.
+
+**Y tenía DOS caras, la segunda peor que la primera:**
+- La comprobación que **no** envolvía su limpieza salía en **ROJO con las aserciones en verde**:
+  parecía rota sin estarlo. Fueron **18 gates**.
+- La que **sí** la envolvía en `try {} catch {}` salía en **VERDE dejando el negocio dentro**, en
+  silencio. Es la avería de siempre de este repo: lo que se traga un error deja de avisar.
+
+**Medido: `control.db` pasó de 84 negocios a 133 en una sola pasada.** Cuarenta y tres fantasmas,
+varios con su `.db` ya borrado del disco —el `unlinkSync` iba DESPUÉS del DELETE que reventaba—, o
+sea filas de enrutado apuntando a ficheros que no existen. **En la base de enrutado de toda la
+plataforma.**
+
+**Arreglado en `scripts/lib/tirar-negocio.mjs`**, que **le pregunta al esquema** quién apunta a
+`tenants` y suelta lo que haya —no una lista escrita a mano, que es lo que se quedó corta— y que
+**avisa a gritos si no puede**, en vez de callarse. Lo usan `negocio-desechable.mjs` y las 26
+comprobaciones que lo hacían a mano. **No se tocó `control.db` ni la tabla del cobro:** poner
+`ON DELETE CASCADE` o un trigger habría hecho que borrar un negocio de VERDAD se llevara su historial
+de suscripción en silencio.
+
+**Limpieza hecha:** los **125 negocios de prueba** acumulados (los 43 de hoy más los de pasadas
+anteriores) retirados de `control.db` y del disco. Quedan **los 8 reales** y nada más;
+`data/tenants` bajó de **146 MB a 25 MB**. Y en la segunda pasada **`control.db` se quedó en 8
+durante todo el barrido**: la fuga está cerrada.
+
+### 🔧 DOS COMPROBACIONES QUE MEDÍAN OTRA COSA (arregladas, no ablandadas)
+
+- **`gate-importador-csv` llevaba dos días midiendo un escenario que ya no existía.** Fabricaba su
+  fichero «ilegible» poniéndole un punto delante y confiando en que **el confinamiento del snap de
+  Chromium lo dejara ver pero no leer**. El 1 de septiembre `lib/gate-env.mjs` pasó a ejecutar el ELF
+  de dentro del snap **sin `snap-confine`** — o sea, **sin confinamiento**: el fichero se leía, la
+  vista previa se abría (correctamente) y el gate cantaba un fallo **del producto que no existía**.
+  Ahora se hace ilegible de verdad (`chmod 000`), que no depende de cómo arranque el navegador.
+  **53 ✓ · 0 ✗.** No se tocó la aserción: se le devolvió el escenario que decía medir.
+- **`gate-menu-navegacion` no conocía «Mi suscripción».** La puerta la puso la tarea
+  `suscripcion-plan-y-alta` el 2 de septiembre y el inventario a mano de este gate seguía esperando
+  cuatro entradas al pie del rail. Añadida, y corregido de paso su recuento, que decía
+  «39+5+1+3+6 = 54» y llevaba tiempo sin cuadrar con sus propias listas (son **66**). **157 ✓ · 0 ✗.**
+
+### 📉 LO QUE SIGUE EN ROJO, Y NO SE HA TOCADO — con su motivo
+
+- **38 son DEUDA ANTERIOR**, ya catalogada el 1 sep 2026 en
+  `docs/barridos/2026-09-01-los-113-rojos.md` (aquel día eran 85; **se han arreglado 37 desde
+  entonces**, por otras tareas y por ésta). Son causas variadas —clasificación fiscal por línea desde
+  el Saneamiento 4/5, el empleado de prueba inactivo, gates que necesitan su propio negocio— y
+  **arreglarlas es un trabajo propio, no un remate de esta tarea**. Va a la cola como tarea.
+- **2 son RESIDUO CONTABLE, no un defecto del producto:** `verify-libro-sin-huerfanos` y
+  `verify-contabilidad-backfill` fallan por **222 asientos huérfanos** que los gates dejan en
+  `desarrollo-bamburu`. El remedio existe y el propio barrido lo imprime:
+  `node scripts/limpiar-residuo-gates.mjs --hazlo`. **NO se ha ejecutado**: borra asientos y
+  documentos de un negocio, y `CLAUDE.md` manda parar y preguntar antes de destruir datos de un
+  tenant. **Queda a una orden de Ibrahin.**
+- **1 es INTERMITENTE:** `verify-vigia` salió verde en la primera pasada y rojo en la segunda, y
+  **pasa en solitario (5 OK)**. Se declara en vez de silenciarse, que es la norma: *un rojo que sale
+  una vez de cada cuatro es peor que uno fijo, porque enseña a desconfiar del barrido.*
+
 <!-- BARRIDO:INICIO -->
 ## 🔁 EL BARRIDO — A DEMANDA
 
@@ -342,7 +412,7 @@
 > cuándo no se corre— y se espera un sí. Si dice que no, queda pendiente aquí y se vuelve a
 > proponer al abrir la siguiente sesión.
 
-- **Último barrido completo:** 2026-09-02 · `d2318c6` · **92/207** · 387 s
+- **Último barrido completo:** 2026-09-03 · `f677a6f` · **167/210** · 1203 s
 - **Estado:** ✅ al día
 
 <!-- BARRIDO:FIN -->
@@ -2891,8 +2961,13 @@ y se recogen en un catálogo único (`email-templates.js`). La ruta de envío no
   - **El barrido sigue siendo honesto**, verificado a propósito: una prueba que sale 0 **sin demostrar nada**
     sigue contando como **FALLO** (`SOSPECHOSO`).
 - 🌍 **Sin entorno aquí (anotado, no oculto).** No son deuda ni bugs; el runner los grita en cada pasada:
-  - **Tope de IA agotado** en el tenant de desarrollo este mes → `gate-c2-captura` y `gate-disa-captura-chat`
-    no se pueden correr **ni a mano** hasta que se renueve el mes o se suba `platform_limits.ai_cap_eur`.
+  - ~~**Tope de IA agotado** en el tenant de desarrollo este mes → `gate-c2-captura` y `gate-disa-captura-chat`
+    no se pueden correr **ni a mano** hasta que se renueve el mes o se suba `platform_limits.ai_cap_eur`.~~
+    **⚙️ CORREGIDO EL 3 SEP 2026: YA NO ES CIERTO, y se ha medido en la base, no supuesto.** El mes
+    cambió y el tope se subió: `desarrollo-bamburu` va por **0,000 € de un tope de 10 €** en
+    2026-09 (`disa_spend` + `platform_limits.ai_cap_eur`). **Los dos gates se pueden correr.** Se
+    tacha en vez de borrarse, que es lo que manda este documento — y porque esta línea llevaba días
+    excusando dos gates que ya no tenían excusa.
   - **Tailscale no está** en este servidor → `gate-registro-tailscale` solo corre donde lo haya (`tailscale up`).
   - `gate-pago-voz-avisos` y `verify-disa-pedidos-modelo-real` llaman al **modelo real**: fuera del barrido
     por naturaleza, a mano y a conciencia.
@@ -5977,6 +6052,29 @@ El pilar queda completo: multi-almacén + stock mínimo/punto de pedido + trazab
   `test-disa-clientes-t5` (un test aparcado que no probaba nada). **El flujo humano no se tocó.** Gates:
   `verify-disa-sin-pedidos` (32/0, estructural) y `verify-disa-pedidos-modelo-real` (10/0, contra el modelo
   de verdad: pide crear/cancelar/facturar un pedido y DISA declina y redirige a `/admin/pedidos`).
+- ⬜ **LOS 38 ROJOS DEL BARRIDO QUE VIENEN DE ANTES (medido el 3 sep 2026).** El barrido completo
+  da **169/210**; los 38 que siguen en rojo **ya lo estaban el 1 de septiembre** y están nombrados
+  uno a uno en `docs/barridos/2026-09-01-los-113-rojos.md`. **No son una sola avería**: hay al menos
+  tres familias —comprobaciones que emiten factura sin clasificación fiscal por línea (desde el
+  Saneamiento 4/5), las que exigen un 403 a un empleado de prueba que está INACTIVO, y las que
+  todavía siembran en el negocio de desarrollo en vez de traerse el suyo—. Aquel día eran 85 y **se
+  han cerrado 37**, así que la deuda baja, pero **no se cierra de remate en otra tarea**: es trabajo
+  propio, con su encargo. Mientras siga así, **el barrido completo NO puede usarse como semáforo de
+  «todo bien»**, y conviene saberlo antes de mirarlo.
+- ⬜ **`verify-vigia` es INTERMITENTE (3 sep 2026).** Verde en la primera pasada del barrido, rojo en
+  la segunda, y **verde en solitario (5 OK)**. Huele a concurrencia o a residuo de otra
+  comprobación. Se declara en vez de silenciarse: *un rojo que sale una vez de cada cuatro es peor
+  que uno fijo, porque enseña a desconfiar del barrido.* Si se confirma que es de concurrencia, su
+  sitio es `SOLOS` en `scripts/lib/gates-mapa.mjs`, con su motivo escrito.
+- ⬜ **222 ASIENTOS CONTABLES HUÉRFANOS en `desarrollo-bamburu` (medido el 3 sep 2026).** Los dejan
+  los gates: borran el documento y no su asiento. Tumban `verify-libro-sin-huerfanos` y
+  `verify-contabilidad-backfill`, que **no fallan por un defecto del producto sino por la basura**.
+  El remedio existe y el propio barrido lo imprime: `node scripts/limpiar-residuo-gates.mjs --hazlo`
+  (borra 222 asientos huérfanos, 5 asientos, 3 facturas de proveedor, 2 órdenes, 2 recepciones, 1
+  compra y 1 almacén, y desactiva 12 personas fantasma). **NO se ejecutó el 3 sep: `CLAUDE.md` manda
+  parar y preguntar antes de destruir datos de un tenant, y el encargo no levantaba esa norma.**
+  Queda a una orden. *(El arreglo de fondo —que cada gate revierta su asiento al limpiar— sigue
+  pendiente y es lo que de verdad cierra esto.)*
 - ⬜ **DISA: el AGENTE elegido se lee sin filtrar por usuario (hallazgo del 3 sep 2026).**
   `/select-agent` y `/agents` (`modules/disa/index.js`) escriben y leen el agente con
   `UPDATE ... WHERE id=(SELECT MIN(id) FROM disa_conversations)` y
@@ -9344,6 +9442,9 @@ escenarios y los dos casos incómodos, con relojes de prueba de Stripe) ·
       **Ninguna.** Las cuatro sentencias de borrado que quedan en el producto llevan el filtro por
       `user_id` **escrito dentro del propio SQL**, y todas pasan por una sola puerta,
       `borrarConversaciones()`. Era además el ÚNICO `DELETE FROM` sin `WHERE` de todo el producto.
+      ⚠️ **Este criterio NO admite una segunda lectura, y no hace falta volver a razonarla:**
+      Ibrahin cerró la decisión el **3 sep 2026** — el borrado es **por persona**, y un borrado del
+      negocio entero sería **otra tarea con sus propias salvaguardas**. Ver el recuadro de arriba.
 - [x] Existe una comprobación que **falla en rojo** si alguien vuelve a dejar un borrado sin filtro.
       `scripts/censo-borrado-sin-filtro.mjs`, en el barrido (grupos `lint` y `disa`, y en el RÁPIDO).
       **Demostrado que sabe ponerse rojo**, y de las dos formas: se volvió a meter el
@@ -9353,15 +9454,29 @@ escenarios y los dos casos incómodos, con relojes de prueba de Stripe) ·
       a mirar el producto si falla una. *Un censo que dice cero sin ser cierto es peor que no
       tenerlo, porque cierra la pregunta* (CLAUDE.md, 24 ago).
 
-> ### 🔍 «GLOBAL» ES GLOBAL PARA QUIEN PULSA, NO PARA EL NEGOCIO — y la contradicción se dijo antes
+> ### ✅ DECISIÓN CERRADA DE IBRAHIN — 3 SEP 2026: EL BORRADO ES **POR PERSONA**
 >
-> El encargo pedía *«implementa el borrado global»* y a la vez que *«los criterios del TABLERO mandan
-> tal cual»*. El criterio 2 dice que **no puede quedar ninguna ruta capaz de vaciar la tabla de
-> golpe**. Las dos frases solo caben juntas de una forma: un botón de **«borrar todas MIS
-> conversaciones»**, que se lleva las de quien pulsa —todas, de una vez, de verdad y sin vuelta
-> atrás— y ninguna más. La otra lectura incumpliría el criterio que el propio encargo declara
-> intocable. **No se eligió la mitad conveniente: se eligió la única que no rebaja nada**, y quedó
-> escrito antes de tocar código en `docs/seguridad/disa-borrado-conversaciones-diagnostico.md` §5.
+> **No es una interpretación: es una decisión de producto, tomada por Ibrahin el 3 de septiembre de
+> 2026, y confirma la lectura que se aplicó al construir.** Queda escrita aquí, en
+> `docs/contexto/decisiones.md` §DISA y en el propio código para que **ningún chat futuro la
+> reinterprete**.
+>
+> **Qué se decide, en una frase:** cada usuario borra **las suyas** —todas de una vez si quiere, de
+> verdad y sin vuelta atrás— y **jamás las de sus compañeros**.
+>
+> **De dónde venía la duda.** El encargo pedía *«implementa el borrado global»* y a la vez que *«los
+> criterios del TABLERO mandan tal cual»*, y el criterio 2 de abajo dice que **no puede quedar
+> ninguna ruta capaz de vaciar la tabla de golpe**. Las dos frases solo caben juntas de una forma:
+> **«global» es global PARA QUIEN PULSA, no para el negocio.** Se eligió esa —no la mitad
+> conveniente, sino **la única que no rebaja ningún criterio**— y quedó escrito antes de tocar
+> código en `docs/seguridad/disa-borrado-conversaciones-diagnostico.md` §5. **Ibrahin lo confirmó al
+> día siguiente. La ambigüedad ya no existe: si alguien vuelve a leer el criterio 2 y cree ver dos
+> lecturas, esta línea es la respuesta.**
+>
+> **Y lo que NO se construye ahora, dicho a propósito:** un borrado del **negocio entero**. Era justo
+> la vulnerabilidad AUD-002 que esta tarea cerró. **Si algún día se pide, será OTRA tarea con sus
+> propias salvaguardas** —quién puede pedirlo, doble confirmación, y rastro de quién lo hizo y
+> cuándo—. **No se añade «de paso» a ninguna otra.**
 
 > ### ⚠️ LA OTRA MITAD, QUE NO ESTABA EN LA FICHA: LA PAPELERA NO BORRABA NADA
 >
@@ -10791,6 +10906,12 @@ un 503 correcto y **escribe `console.error`**. Eso es todo: **no llega a `error_
 saldo, **DISA estaba caída para todo el mundo** —una llamada real devolvió `code:
 llm_provider_balance, status: 503`— y al buscar desde cuándo, `error_log` tenía **CERO** entradas.
 
+> ⚙️ **3 SEP 2026 — EL SALDO ESTÁ RECARGADO (decisión de Ibrahin) y DISA VUELVE A FUNCIONAR**,
+> comprobado con una llamada real al proveedor. **Esta tarea NO se cierra con eso, y conviene tenerlo
+> claro:** no iba de tener saldo, iba de que una caída **no deja rastro** en `error_log`. Ese ciego
+> sigue ahí igual que el 1 de septiembre. Lo único que cambia es que hoy la avería **no está
+> ocurriendo**; el día que vuelva, seguiríamos sin poder decir desde cuándo.
+
 **⚙️ Y AQUÍ ESTÁ LO QUE DE VERDAD JUSTIFICA ESTA TAREA.** Al principio se dijo «no se puede saber
 desde cuándo». **Sí se podía — pero no preguntándole al producto.** El panel de Notion lo tenía
 apuntado **a mano** desde el **24 de agosto de 2026**: *«se ha agotado el saldo de la API de IA.
@@ -11402,7 +11523,18 @@ negocio suspendido NO deja escribir— necesitan un negocio suspendido y tienen 
 
 - **BLOQUE 5 — LO QUE HACE QUE ESTO SE REPITA. Y una avería seria que salió por el camino.**
 
-  ### 🔴 DISA ESTÁ CAÍDA EN PRODUCCIÓN: EL PROVEEDOR DE IA NO TIENE SALDO
+  ### ~~🔴 DISA ESTÁ CAÍDA EN PRODUCCIÓN: EL PROVEEDOR DE IA NO TIENE SALDO~~ ✅ RESUELTO
+
+  > **⚙️ CORREGIDO EL 3 SEP 2026 — IBRAHIN RECARGÓ EL SALDO. DISA VUELVE A ESTAR OPERATIVA**, y con
+  > ella las otras tres piezas que llaman al modelo: el alta por chat, el constructor de
+  > `modules/registro` y la lectura de facturas de `purchases-capture`. **Comprobado con una llamada
+  > real al proveedor ese mismo día, no supuesto** — la misma llamada que abajo devolvía
+  > `llm_provider_balance 503` ahora responde. Todo lo que sigue en este bloque es **de qué pasó el
+  > 1 sep**, se conserva tachado y no describe el estado de hoy.
+  >
+  > **Lo que NO caduca con la recarga:** la tarea `caida-ia-deja-rastro` **sigue viva y pendiente**.
+  > No iba del saldo —eso es operación— sino de que una caída del proveedor **no deja rastro en
+  > `error_log`**, y eso sigue exactamente igual. Recargar la cuenta no arregla el ciego.
 
   Salió al investigar el 5.2 y es lo más grave del bloque. **Llamada real al proveedor, 1 sep 2026:**
 
