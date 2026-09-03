@@ -6126,6 +6126,15 @@ El pilar queda completo: multi-almacén + stock mínimo/punto de pedido + trazab
   parar y preguntar antes de destruir datos de un tenant, y el encargo no levantaba esa norma.**
   Queda a una orden. *(El arreglo de fondo —que cada gate revierta su asiento al limpiar— sigue
   pendiente y es lo que de verdad cierra esto.)*
+- ✅ **`dictar_compra` se ejecuta SIN el «¿confirmas?» del chat — y está bien (mirado el 3 sep 2026).**
+  Al comprobar AUD-015 se revisó si alguna acción que cambia datos se ejecuta sin confirmación
+  ninguna. **Solo una**, y es deliberada: `dictar_compra` está en `HANDOFF_ACTIONS`. **Qué escribe:**
+  una fila de `attachments` con la lectura de la compra — **un borrador**. **Qué NO hace:** no crea la
+  compra, **no mueve stock, no toca dinero, no emite nada**; devuelve un enlace a
+  `/admin/purchases/capture`, **donde está el confirm de verdad**, con los datos editables delante.
+  O sea que el confirm no desaparece: **se muda a la pantalla**, que es donde el dueño puede ver lo
+  que va a guardar. **No se toca** — y además, qué acciones piden confirmación es decisión de
+  producto, que el encargo dejaba explícitamente fuera. Se apunta por transparencia, no como defecto.
 - ⬜ **EL SUPERADMIN SE PROTEGE CON UN MECANISMO PROPIO, NO CON EL COMÚN (censado el 3 sep 2026).**
   Al hacer `disa-rutas-sin-csrf` se censó **todo lo que escribe fuera de DISA**, y esto es lo único
   que aparece: `modules/superadmin/index.js` tiene sus **17 escrituras** protegidas por `saCsrf`, una
@@ -9510,7 +9519,8 @@ escenarios y los dos casos incómodos, con relojes de prueba de Stripe) ·
 > ~~**La siguiente tarea de la cola es la primera del BLOQUE 2 — «QUE SEA SEGURO DE VERDAD»:**
 > `disa-borrado-global-conversaciones`.~~ **⚙️ CADUCADO EL 3 SEP 2026: van CUATRO del BLOQUE 2
 > hechas** — el borrado, el stock fuera del libro, el tope/plazo de las consultas y la protección
-> anti-CSRF. La siguiente es `disa-confirmacion-textual-estricta`. Se tacha en vez de borrarse, que es lo que manda este
+> anti-CSRF—, **y la quinta se cerró CON PRUEBA sin tocar nada** (la confirmación estricta: el
+> hallazgo no estaba vivo). La siguiente es `disa-prompt-injection-defensas`. Se tacha en vez de borrarse, que es lo que manda este
 > documento — y porque un puntero rancio manda al siguiente chat al sitio equivocado con toda la
 > confianza del mundo.
 
@@ -9523,8 +9533,8 @@ escenarios y los dos casos incómodos, con relojes de prueba de Stripe) ·
 > archivos que sube la gente, el enlace del portal, y que Bamburu no arranque si le falta una parte.
 >
 > ~~**De los ocho hallazgos críticos o altos de Codex, solo se han cerrado dos.** Los seis que
-> quedan están aquí.~~ **⚙️ ACTUALIZADO EL 3 SEP 2026 al cerrar AUD-002, AUD-004, AUD-005 y
-> AUD-006: van SEIS cerrados y quedan DOS**, los de aquí abajo que siguen sin el ✅.
+> quedan están aquí.~~ **⚙️ ACTUALIZADO EL 3 SEP 2026 al cerrar AUD-002, AUD-004, AUD-005, AUD-006
+> y AUD-015: van SIETE cerrados y queda UNO**, el de aquí abajo que sigue sin el ✅.
 
 
 ## ✅ TAREA — DISA puede borrar la conversación de todo el negocio
@@ -9857,22 +9867,81 @@ DISA inservible— y un montaje nuevo por fuera de la puerta.
 `gate-disa-sql-limites` 23 · `verify-permisos-disa` 14 · `test-disa-clientes-t5` 30 ·
 `verify-disa-herramientas-paralelo` 50 · `gate-disa-adjuntar` y `gate-nav-inicio-disa` OK.
 
-## TAREA — La confirmación de DISA acepta demasiadas cosas por un «sí»
+## ✅ TAREA — La confirmación de DISA acepta demasiadas cosas por un «sí»
 
 - **id:** disa-confirmacion-textual-estricta
-- **estado:** pendiente
+- **estado:** ✅ HECHA — 3 sep 2026 · commit `PENDIENTE_HASH` · **CERRADA CON PRUEBA: el hallazgo NO estaba vivo**
 - **origen:** Auditoría de Codex, 25 ago 2026 · AUD-015 — NO comprobado el 2 sep
 
-Codex encontró que la confirmación previa a una acción de DISA se da por buena con un texto demasiado permisivo. **No se ha comprobado si sigue vivo**: exige leer el flujo de confirmación entero, y se dijo así en vez de colocarlo en una columna sin mirarlo.
-
-La tarea empieza por comprobarlo. Si ya está bien, se cierra con la prueba escrita.
+Codex encontró que la confirmación previa a una acción de DISA se da por buena con un texto demasiado permisivo. **No se había comprobado si seguía vivo.**
 
 **Criterios de aceptación**
 
-- [ ] Se comprueba primero si el hallazgo **sigue vivo hoy**, y se deja escrito con su prueba.
-- [ ] Si lo está: una acción que cambia datos **solo se ejecuta con una confirmación inequívoca**, no con cualquier texto que se parezca a un sí.
-- [ ] Un «no», un silencio o una frase ambigua **nunca** ejecutan la acción.
-- [ ] Si el hallazgo ya no existe, se cierra con la prueba y no se toca nada.
+- [x] Se comprueba primero si el hallazgo **sigue vivo hoy**, y se deja escrito con su prueba.
+      **Comprobado, y NO lo está.** La prueba entera —qué se probó, con qué frases y qué pasó— en
+      `docs/seguridad/disa-confirmacion-diagnostico.md`.
+- [x] Un «no», un silencio o una frase ambigua **nunca** ejecutan la acción.
+      **Las once frases ambiguas cancelan**, probadas una a una contra la expresión viva.
+- [x] Si el hallazgo ya no existe, se cierra con la prueba y no se toca nada.
+      **No se ha cambiado una sola línea de comportamiento.** Lo único que se añade es la
+      comprobación que impide que vuelva.
+- [~] *(Si lo estuviera: una acción que cambia datos solo se ejecuta con confirmación inequívoca.)*
+      **No aplica: el hallazgo no estaba vivo.** Se deja marcado así, y no como `[x]`, para no
+      apuntarse un trabajo que no se hizo.
+
+> ### 🔒 POR QUÉ NO ESTÁ VIVO — cuatro cerrojos, cada uno tapando un agujero distinto
+>
+> **1 · Decide el SERVIDOR, no la IA.** `modules/disa/index.js:2913-2924` usa una expresión
+> **anclada** (`^…$`) contra una **lista cerrada** de once respuestas. El modelo solo puede
+> **proponer**; si vuelve a emitir su bloque de acción, eso crea una propuesta **nueva**, no ejecuta
+> la anterior. No hay ningún camino por el que el texto del modelo dispare una ejecución.
+>
+> **2 · El ancla es lo que para las frases ambiguas.** Un «sí» **dentro** de una frase no cuenta;
+> solo un «sí» que sea la frase entera. Probadas contra la expresión real: `sí, pero espera` ·
+> `sí a lo de antes` · `vale, ¿y si mejor no?` · `sí, aunque mejor no lo hagas` · `creo que sí` ·
+> `sí pero antes dime el precio` · `ok pero cambia la fecha` · `sí?` · `si te parece bien hazlo tú` ·
+> `exactamente eso, pero con 20 unidades` · `no, déjalo`. **Las once cancelan.** Y los diecisiete
+> «sí» limpios (con tildes, mayúsculas, punto, admiración y espacios) **siguen ejecutando**.
+>
+> **3 · La propuesta CADUCA sola al hablar de otra cosa**, y es elegante: se lee **solo del ÚLTIMO
+> mensaje del asistente**, y el `pending_action` **únicamente se adjunta cuando se propone algo
+> nuevo**. Así que un «sí» dado después de haber preguntado cualquier otra cosa **no encuentra nada
+> que confirmar**. No hay que acordarse de caducarla: no sobrevive.
+>
+> **4 · Una propuesta se confirma UNA vez, y solo por quien la recibió.** `claimConfirmation` exige
+> `status='proposed'` y `changes === 1`, así que un doble envío o un reintento no la ejecutan dos
+> veces. Y las **acciones de seguridad** (`disable_2fa_user`) no se confirman con «sí»: exigen
+> escribir literalmente `CONFIRMAR DESACTIVAR 2FA`, comparado con `===` — probado que ni en
+> minúsculas ni con texto detrás pasa.
+
+> ### 🧪 LA COMPROBACIÓN QUE IMPIDE QUE VUELVA, y por qué no valida una copia
+>
+> El hallazgo no está vivo **hoy**. Lo que lo mantiene así es un ancla y una lista de once palabras:
+> **quitar el ancla, añadir «quizá», cambiar el `test` por un `includes` o dejar que el modelo juzgue
+> son retoques de una línea, y ninguno se ve raro al leerlo.**
+>
+> `scripts/censo-disa-confirmacion.mjs` **saca la expresión DEL FICHERO y la EJECUTA** contra la
+> tabla de frases. No comprueba una copia suya: si alguien relaja la del producto, el censo prueba
+> **la relajada** y se pone rojo. *(Un censo que valida su propia copia es justo el que dice cero sin
+> ser cierto.)* Vigila seis reglas: el ancla, la lista exacta, las frases ambiguas, que los «sí»
+> limpios **sigan** pasando, que la decisión no mire la respuesta del modelo, la igualdad estricta de
+> las acciones de seguridad y el «un solo uso» de la confirmación.
+>
+> **Probado en ROJO contra el producto de verdad**, cuatro veces: quitando el ancla (**nueve frases
+> ambiguas pasaron a ejecutar** — el hallazgo original, reproducido), abriendo la lista con
+> «quizá/vale/claro», quitando el `===` de las acciones de seguridad y quitando el «un solo uso».
+> Más su autoprueba de 6 muestras en cada pasada.
+
+**Comprobaciones — 16 + 1, 0 fallos:**
+`gate-disa-confirmacion` **16 ✓ · 0 ✗** — negocio propio que se tira al terminar, con la **costura
+`executeAction`** (no depende del proveedor de IA). Prueba la **cadena entera**: saca la expresión del
+fichero, ejecuta la acción **solo si esa expresión dice que sí**, y comprueba en la base que con las
+frases ambiguas **el cliente no cambia** y con un «sí» limpio **sí cambia**. Y que confirmar hace
+**exactamente lo propuesto y nada más**: los campos que la propuesta no mencionaba quedan intactos.
+**También probado en rojo:** con el ancla quitada, el gate falla y enseña al cliente renombrado a
+«ZZ NO DEBERÍA» por un *«sí, pero espera»*.
+`censo-disa-confirmacion` **1 ✓ · 0 ✗**. Regresión de DISA en verde: `gate-disa-csrf` 25 ·
+`gate-disa-borrado-conversaciones` 36 · `gate-disa-stock-libro` 21 · `gate-disa-sql-limites` 23.
 
 ## TAREA — Prompt injection: qué defensas hay y cuáles faltan
 
