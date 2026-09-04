@@ -13432,7 +13432,7 @@ Y su propia limpieza no lo recogió: `cleanup(slug)` empieza con `if (!slug) ret
 ## TAREA — Migrar el ERP para quitarle el `unsafe-inline`
 
 - **id:** csp-erp-migrar-handlers
-- **estado:** pendiente
+- **estado:** pendiente · **EN CURSO — 1ª sesión hecha el 4 sep 2026 (commit `e99cb93`)**
 - **origen:** Desgajada de `csp-unsafe-inline` el 4 sep 2026, al medir el tamaño real. Es la pieza que el código llama **C4b-4**.
 
 **Medido el 4 sep 2026, no estimado:** `modules/erp` tiene **546 handlers de atributo** y **88
@@ -13453,3 +13453,64 @@ una vez**.
 - [ ] `style-src 'unsafe-inline'` **se queda**: es una decisión escrita, con 2.642 atributos `style=` detrás y un valor mucho menor. Quitarlo NO es parte de esto.
 
 **No se empieza sin encargo de Ibrahin:** es esfuerzo alto y toca todas las pantallas del panel.
+
+---
+
+### 📋 CENSO DEL 4 SEP 2026 — sobre el HTML SERVIDO, no sobre el código
+
+**La primera sorpresa, y reordena la tarea entera:** las 363 pantallas del panel tenían casi los
+**mismos** ~64 handlers. **No eran suyos: eran del armazón compartido** (`modules/erp/layout.js`),
+que los emite desde 21 sitios y sale en todas. La cifra «546» del código era el número de *sitios*;
+lo que llega al navegador es ese puñado multiplicado por 363.
+
+| | handlers | bloques sin nonce | pantallas limpias |
+|---|---|---|---|
+| **antes** | ~23.600 | ~2.300 | 0 |
+| **después de esta sesión** | **3.196** | **502** | **1 (endurecida)** |
+
+### ✅ LO CERRADO EN LA 1ª SESIÓN
+
+**El armazón compartido, entero** — 21 sitios de `layout.js` migrados a **un solo oyente por
+delegación** (`data-act`) más oyentes directos para los desplegables (`mouseenter` no burbujea, ahí
+no vale delegar). Sus **5 bloques** llevan ya `nonce`. Efecto medido, por pantalla:
+
+| pantalla | antes | ahora |
+|---|---|---|
+| `/admin` | 57 handlers · 6 bloques | **0 · 0** ✅ **ENDURECIDA** |
+| `/admin/albaranes` | 64 · 6 | 7 · 1 |
+| `/admin/citas` | 99 · 7 | 42 · 2 |
+| `/admin/clients` | 174 · 7 | 92 · 2 |
+
+**`/admin` cerrada de punta a punta:** censo → migración → **Report-Only con cero violaciones** →
+regla **EXACTA** `^/admin$` (un prefijo habría endurecido las 363 de golpe, que es justo lo que esta
+ficha prohíbe) → probada **pulsando** → **rojo provocado**.
+
+**⚠️ Y el primer rojo provocado SE QUEDÓ VERDE**, que es lo que más enseña: se le devolvió el handler
+de atributo al botón de un grupo del menú y el gate no se enteró, **porque probaba el desplegable con
+el ratón y la campana, pero nunca pulsaba ese botón**. Se le añadieron dos comprobaciones —pulsar un
+grupo, y exigir **cero** handlers de atributo en toda pantalla endurecida— y entonces sí cayó, con 4
+fallos. *Una reversión que no pone rojo no prueba nada.*
+
+**Guardianes:** `gate-csp-estricta` pasa de 36 a **44** (la sección 8 es `/admin`, y comprueba
+además que `/admin/clients` **sigue** con la política de siempre: la regla es exacta, no un prefijo).
+Nuevo `gate-armazon-sin-handlers` (**11 ✓**) vigila el armazón pulsándolo, con sus dos rojos
+probados. Y `scripts/censo-csp-erp.mjs` publica el censo cuando haga falta.
+
+### ▶️ POR DÓNDE SIGUE — la próxima sesión lo tiene servido
+
+**233 de las 362 pantallas que quedan tienen exactamente 7 handlers y 1 bloque, y son LOS MISMOS:
+el widget de DISA** (`modules/disa/widget.js` — cerrar, hilo nuevo, adjuntar, enviar y la caja de
+texto). **Migrar ese fichero UNA vez deja 233 pantallas en CERO** y listas para endurecer. Es, con
+diferencia, el siguiente movimiento de más palanca.
+
+Después, por orden de menos a más carga propia:
+`/admin/quotes/*` y `/admin/supplier-invoices/new` (~16) · `/admin/settings/plantillas` (17) ·
+`/admin/citas/servicios` (18) · `/admin/mostrador` (19) · `/admin/avisos` (20) · `/admin/crm` (26) ·
+`/admin/crm/cola` (27) · `/admin/citas` (42) · `/admin/proyectos` (50) · `/admin/products` (83) ·
+`/admin/clients` (92).
+
+**Lo que queda por tipo:** 2.033 `onclick` · 409 `onchange` · 368 `onmousedown` · 362 `onkeydown` ·
+20 `oninput` · 2 `onfocus` · 2 `onblur`.
+
+**`LEGADO` sigue en pie** y seguirá hasta que no quede ninguna pantalla fuera: cada una sale de ella
+individualmente, con su regla exacta.

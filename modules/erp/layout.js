@@ -45,8 +45,8 @@ export function rowMenu(items = [], opts = {}) {
     return `<button type="button" class="${cls}" onclick="closeRowMenus();${it.onclick || ''}">${it.label}</button>`;
   }).join('');
   const trig = opts.label
-    ? `<button type="button" class="rmenu-btn rmenu-btn-lbl" onclick="toggleRowMenu(this)">${opts.label} ▾</button>`
-    : `<button type="button" class="rmenu-btn" onclick="toggleRowMenu(this)" aria-label="Más acciones" title="Más acciones">⋯</button>`;
+    ? `<button type="button" class="rmenu-btn rmenu-btn-lbl" data-act="rowmenu">${opts.label} ▾</button>`
+    : `<button type="button" class="rmenu-btn" data-act="rowmenu" aria-label="Más acciones" title="Más acciones">⋯</button>`;
   return `<span class="rmenu">${trig}<div class="rmenu-pop">${body}</div></span>`;
 }
 
@@ -143,7 +143,7 @@ function flyItemHTML(i, ctx, bloque = 'diario') {
   // (D) ARRASTRABLE: la entrada se mueve de sitio dentro de SU área. `data-ord` es su clave y
   // `data-bloque` el lado de la línea en el que está — soltarla al otro lado la cambia de bloque.
   const arr = ` draggable="true" data-ord="${escHtml(i.key)}" data-area="${escHtml(i.areaId || '')}" data-bloque="${bloque}"`;
-  if (!i.href) return `<button type="button" class="fly-item${act}"${arr} onclick="${i.accion}">${ic}</button>`;
+  if (!i.href) return `<button type="button" class="fly-item${act}"${arr} data-act="${escHtml(i.accion)}">${ic}</button>`;
   return `<a href="${i.href}" class="fly-item${act}"${arr}>${ic}${pinBtn(i.key, ctx.anclado.has(i.key))}</a>`;
 }
 
@@ -183,10 +183,10 @@ function areaNavgHTML(a, ctx, { ancla = false } = {}) {
   const arr = ancla
     ? ` data-anc="${escHtml(clave)}" draggable="true"`
     : ` data-ord="area:${escHtml(a.id)}" data-area="__rail__" draggable="true"`;
-  return `<div class="navg${ancla ? ' anc' : ''}"${arr} onmouseenter="openFly(this)" onmouseleave="scheduleCloseFly()">`
-    + `<button type="button"${esDisa && !ancla ? ' id="disaRailBtn"' : ''} class="nav-item${groupActive ? ' active' : ''}" title="${escHtml(a.label)}" aria-label="${escHtml(a.label)}" onclick="toggleFly(this.closest('.navg'))">${ic}<span class="nav-label">${escHtml(a.label)}</span><i class="ti ti-chevron-right nav-chev"></i></button>`
+  return `<div class="navg${ancla ? ' anc' : ''}"${arr} data-navg="1">`
+    + `<button type="button"${esDisa && !ancla ? ' id="disaRailBtn"' : ''} class="nav-item${groupActive ? ' active' : ''}" title="${escHtml(a.label)}" aria-label="${escHtml(a.label)}" data-act="navfly">${ic}<span class="nav-label">${escHtml(a.label)}</span><i class="ti ti-chevron-right nav-chev"></i></button>`
     + pinBtn(clave, ctx.anclado.has(clave), 'nav-pin')
-    + `<div class="flyout" onmouseenter="cancelCloseFly()" onmouseleave="scheduleCloseFly()"><div class="flyout-h">${escHtml(a.label)}</div>${flyBloquesHTML(a, ctx)}</div>`
+    + `<div class="flyout"><div class="flyout-h">${escHtml(a.label)}</div>${flyBloquesHTML(a, ctx)}</div>`
     + `</div>`;
 }
 
@@ -218,7 +218,7 @@ export function railHTML(menu, anclas, ctx, fijasPie, hayPref) {
     // (D) Volver al menú de fábrica. Solo aparece si el usuario ha tocado algo: quien no ha movido
     // nada no tiene nada que restablecer, y un botón que no hace falta es ruido.
     + (hayPref
-        ? `<button type="button" class="nav-item rail-reset" id="railReset" title="Restablecer mi menú" aria-label="Restablecer mi menú" onclick="menuRestablecer()"><i class="ti ti-rotate"></i><span class="nav-label">Restablecer mi menú</span></button>`
+        ? `<button type="button" class="nav-item rail-reset" id="railReset" title="Restablecer mi menú" aria-label="Restablecer mi menú" data-act="menu-reset"><i class="ti ti-rotate"></i><span class="nav-label">Restablecer mi menú</span></button>`
         : '')
     + pie.map(f => `<a href="${f.href}"${f.target ? ` target="${f.target}"` : ''} class="nav-item${f.key && ctx.active === f.key ? ' active' : ''}" title="${escHtml(f.label)}"><i class="ti ${f.icon}"></i><span class="nav-label">${escHtml(f.label)}</span></a>`).join('');
 }
@@ -424,7 +424,7 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
   <!-- Iconos Tabler AUTO-HOSPEDADOS (DISEÑO §2.7 — prohibido depender de iconos de internet).
        CSS + webfont servidos desde /public/vendor/tabler (self-host); cero llamadas a CDN. -->
   <link rel="stylesheet" href="/public/vendor/tabler/tabler-icons.min.css">
-  <script>
+  <script nonce="${c?.get?.('cspNonce') || ''}">
     window.CSRF_TOKEN="${csrfToken}";
     window.USER_PERMS=${JSON.stringify(perms)};
     window.USER_IS_OWNER=${isOwner};
@@ -444,7 +444,7 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
     window.MENU_MAX_ANCLAS=${MAX_ANCLAS};
     window.MENU_ACTIVE=${jsonForScript(active || '')};
   </script>
-  <script>
+  <script nonce="${c?.get?.('cspNonce') || ''}">
     function openModal(id){document.getElementById(id).classList.add('open')}
     function closeModal(id){document.getElementById(id).classList.remove('open')}
     // FICHA D-bis — CERRAR CON ESCAPE Y PULSANDO FUERA. Ningun modal del producto lo hacia, y es lo
@@ -640,7 +640,7 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
       EMAIL:'No hemos podido enviar el email. Comprueba la dirección del destinatario e inténtalo más tarde.'
     };
     var _DUP={'categories.name':'Ya existe una categoría con ese nombre. Usa otro.','admin_users.email':'Ya hay un usuario con ese email.','discount_codes.code':'Ese código de descuento ya está en uso. Prueba con otro.','products.sku':'Ya existe un producto con ese SKU. Usa una referencia distinta.'};
-    // OJO: este bloque vive dentro de un template literal (el <script> de adminLayout), así que las
+    // OJO: este bloque vive dentro de un template literal (el <script nonce="${c?.get?.('cspNonce') || ''}"> de adminLayout), así que las
     // barras de las regex van DOBLADAS (\\s, \\., \\(, \\), \\d, \\b) para llegar intactas al navegador.
     window.cleanErrMsg=function(msg){
       var s=(msg==null?'':String(msg)).trim();
@@ -713,8 +713,8 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
         return '<button type="button" class="'+cls+'" onclick="closeRowMenus();'+(it.onclick||'')+'">'+it.label+'</button>';
       }).join('');
       var trig=opts.label
-        ? '<button type="button" class="rmenu-btn rmenu-btn-lbl" onclick="toggleRowMenu(this)">'+opts.label+' ▾</button>'
-        : '<button type="button" class="rmenu-btn" onclick="toggleRowMenu(this)" aria-label="Más acciones" title="Más acciones">⋯</button>';
+        ? '<button type="button" class="rmenu-btn rmenu-btn-lbl" data-act="rowmenu">'+opts.label+' ▾</button>'
+        : '<button type="button" class="rmenu-btn" data-act="rowmenu" aria-label="Más acciones" title="Más acciones">⋯</button>';
       return '<span class="rmenu">'+trig+'<div class="rmenu-pop">'+body+'</div></span>';
     };
     window.closeRowMenus=function(){document.querySelectorAll('.rmenu-pop.open').forEach(function(p){p.classList.remove('open');});};
@@ -769,7 +769,7 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
     // Come de window.MENU_DESTINOS: el menú de ESTE usuario, ya filtrado por permisos en el servidor.
     // No hay una segunda lista de destinos —se quedaría vieja y acabaría enseñando puertas que el menú
     // esconde—, así que lo que no está en el rail tampoco está aquí.
-    // OJO: este <script> vive en el <head>, así que al ejecutarse el topbar TODAVÍA NO EXISTE. Hay que
+    // OJO: este <script nonce="${c?.get?.('cspNonce') || ''}"> vive en el <head>, así que al ejecutarse el topbar TODAVÍA NO EXISTE. Hay que
     // esperar al DOM o los listeners no se enganchan a nada y el buscador queda mudo — sin error, sin
     // aviso, sin nada. (Las anclas de abajo no lo necesitan: van por delegación en document.)
     (function(){
@@ -1501,10 +1501,10 @@ ${ROOT_TOKENS}
     </a>
     <nav class="sb-nav" id="sbNav">${railInner}</nav>
   </aside>
-  <div class="nav-backdrop" onclick="closeNav()" aria-hidden="true"></div>
+  <div class="nav-backdrop" data-act="nav-close" aria-hidden="true"></div>
   <div class="wrap">
     <div class="topbar">
-      <button type="button" class="nav-toggle" aria-label="Abrir menú" aria-expanded="false" onclick="toggleNav()"><i class="ti ti-menu-2"></i></button>
+      <button type="button" class="nav-toggle" aria-label="Abrir menú" aria-expanded="false" data-act="nav-toggle"><i class="ti ti-menu-2"></i></button>
       <!-- (B) BUSCADOR QUE NAVEGA. Hasta hoy esto era DECORADO: un div con un <span> de texto fijo, sin
            input, sin JS y sin destino, cuyo reclamo («Buscar cliente, factura, producto…») prometía
            buscar DATOS. Ahora es un buscador de verdad, pero del MENÚ —áreas y entradas—, así que el
@@ -1520,20 +1520,20 @@ ${ROOT_TOKENS}
       </div>
       <div class="tb-bell-wrap">
         <button type="button" class="tb-bell" id="tbBell" title="${bellTitle}" aria-label="${bellTitle}"
-                aria-haspopup="true" aria-expanded="false" onclick="toggleBell(event)">
+                aria-haspopup="true" aria-expanded="false" data-act="bell">
           <i class="ti ti-bell"></i>${avisos.estado === 'apagado' ? '' : `<span class="dot${avisos.estado === 'visto' ? ' visto' : ''}"></span>`}
         </button>
         <div class="bell-panel" id="bellPanel">
           <div class="bell-head">
             <strong>Avisos</strong>
-            <button type="button" class="bell-all" id="bellAll" onclick="bellMarcarTodos(event)">Marcar todos como vistos</button>
+            <button type="button" class="bell-all" id="bellAll" data-act="bell-all">Marcar todos como vistos</button>
           </div>
           <div class="bell-list" id="bellList"><p class="bell-empty">Cargando…</p></div>
           <a class="bell-foot" href="/admin/avisos">Ver y resolver todos</a>
         </div>
       </div>
       <div class="acct">
-        <button class="acct-btn" id="acctBtn" type="button" aria-haspopup="true" aria-expanded="false" onclick="toggleAcct(event)" title="${escName}">
+        <button class="acct-btn" id="acctBtn" type="button" aria-haspopup="true" aria-expanded="false" data-act="acct" title="${escName}">
           ${avatarHTML}
         </button>
         <div class="acct-menu" id="acctMenu">${acctMenuHTML}</div>
@@ -1541,7 +1541,54 @@ ${ROOT_TOKENS}
     </div>
     <main class="content${active === 'disa' ? ' content-flush' : ''}">${roBanner}${content}</main>
   </div>
-  <script>
+  <script nonce="${c?.get?.('cspNonce') || ''}">
+    // ── 4 SEP 2026 (csp-erp-migrar-handlers) — UN SOLO OYENTE PARA TODO EL ARMAZON ────────────────
+    // Antes cada control del armazon llevaba su codigo escrito en el propio atributo. Eso son ~60
+    // handlers en CADA UNA de las 363 pantallas del panel, puestos desde 21 sitios de este fichero,
+    // y un nonce NO los cubre: al endurecer la cabecera se quedarian MUDOS sin avisar. No fallan al
+    // cargar, fallan al pulsar.
+    //
+    // Ahora cada control dice QUE hace con data-act y aqui se despacha. Un oyente en lugar de
+    // sesenta, y los controles que se pintan despues (una fila nueva, un menu recargado) funcionan
+    // solos: la delegacion no necesita volver a enganchar nada.
+    //
+    // Sin acentos graves en este comentario A PROPOSITO: vive dentro de una plantilla de texto y uno
+    // solo la cerraria en seco. Esta escrito en CLAUDE.md y ya ha mordido dos veces.
+    document.addEventListener('click',function(e){
+      var el=e.target.closest('[data-act]'); if(!el) return;
+      switch(el.getAttribute('data-act')){
+        case 'nav-toggle':     window.toggleNav&&window.toggleNav(); break;
+        case 'nav-close':      window.closeNav&&window.closeNav(); break;
+        case 'bell':           window.toggleBell&&window.toggleBell(e); break;
+        case 'bell-all':       window.bellMarcarTodos&&window.bellMarcarTodos(e); break;
+        case 'acct':           window.toggleAcct&&window.toggleAcct(e); break;
+        case 'disa-abrir':     { if(window.closeFly)window.closeFly();
+                                 if(window.disaOpen){window.disaOpen();} else {location.href='/admin/disa';} break; }
+        case 'navfly':         { var g=el.closest('[data-navg]'); if(g&&window.toggleFly)window.toggleFly(g); break; }
+        case 'rowmenu':        window.toggleRowMenu&&window.toggleRowMenu(el); break;
+        case 'menu-reset':     window.menuRestablecer&&window.menuRestablecer(); break;
+        case 'cerrar-acceso':  { var m=document.getElementById('accessDeniedModal'); if(m)m.style.display='none'; break; }
+      }
+    });
+
+    // Los desplegables del menu lateral. El evento mouseenter NO burbujea, asi que aqui no vale delegar:
+    // se enganchan a los grupos, que se pintan en el servidor y ya estan cuando esto corre.
+    (function(){
+      function enganchar(){
+        document.querySelectorAll('[data-navg]').forEach(function(g){
+          if(g.__fly) return; g.__fly=1;
+          g.addEventListener('mouseenter',function(){ window.openFly&&window.openFly(g); });
+          g.addEventListener('mouseleave',function(){ window.scheduleCloseFly&&window.scheduleCloseFly(); });
+          var f=g.querySelector('.flyout');
+          if(f){ f.addEventListener('mouseenter',function(){ window.cancelCloseFly&&window.cancelCloseFly(); });
+                 f.addEventListener('mouseleave',function(){ window.scheduleCloseFly&&window.scheduleCloseFly(); }); }
+        });
+      }
+      if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',enganchar); else enganchar();
+      // El menu se puede repintar (al anclar o restablecer): se vuelve a enganchar lo nuevo.
+      window.engancharMenuLateral=enganchar;
+    })();
+
     document.addEventListener('click',e=>{if(e.target.classList.contains('modal-overlay'))e.target.classList.remove('open')});
     // ── Menú lateral en móvil: drawer que abre la hamburguesa del topbar (en escritorio, sin efecto) ──
     window.toggleNav=function(){var sb=document.querySelector('.sidebar');if(!sb)return;var open=sb.classList.toggle('open');document.body.classList.toggle('nav-open',open);var b=document.querySelector('.nav-toggle');if(b)b.setAttribute('aria-expanded',open?'true':'false');};
@@ -1717,7 +1764,7 @@ ${hideDisaSidebar ? '' : getDisaWidget()}
       <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#A6453F" stroke-width="2" style="margin-bottom:16px"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
       <h3 style="color:#23262C;margin:0 0 8px">Acceso no permitido</h3>
       <p style="color:#828B9B;font-size:13px;margin:0 0 20px">${ERR.PERM}</p>
-      <button onclick="document.getElementById('accessDeniedModal').style.display='none'" style="background:#3A4150;border:none;color:#fff;padding:8px 24px;border-radius:9px;cursor:pointer;font-weight:500">Entendido</button>
+      <button data-act="cerrar-acceso" style="background:#3A4150;border:none;color:#fff;padding:8px 24px;border-radius:9px;cursor:pointer;font-weight:500">Entendido</button>
     </div>
   </div>
 </body>

@@ -167,7 +167,9 @@ export const MENU = [
     // Sin ruta: abre el MISMO chat flotante de siempre. Se puede BUSCAR (Enter lo abre), no se puede
     // anclar —el rail ancla destinos, y esto no es un destino.
     { label: 'Hablar con DISA', key: 'disa-chat', icon: 'ti-message-2',
-      accion: "closeFly();if(window.disaOpen){disaOpen();}else{location.href='/admin/disa';}" },
+      // 4 SEP 2026 (csp-erp-migrar-handlers) — ya no viaja codigo, viaja un NOMBRE. Lo despacha el
+      // oyente unico del armazon (layout.js). Un nonce no cubre el codigo escrito en un atributo.
+      accion: 'disa-abrir' },
   ]},
   { id: 'ventas', label: 'Ventas', icon: 'ti-shopping-cart', items: [
     { href: '/admin/invoices', label: 'Facturas', key: 'invoices', icon: 'ti-file-invoice' },

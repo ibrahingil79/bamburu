@@ -23,7 +23,7 @@
 // CERO CIFRA PROPIA. Esta pantalla no calcula nada: pide /api/erp/inicio/cuadro, que ya trae cada
 // número de su motor y solo las secciones que este usuario puede ver. Lo que viene null se pinta
 // «—», nunca un 0.
-export function disaHomeHtml({ userName, simbolo = '€' }) {
+export function disaHomeHtml({ userName, simbolo = '€', nonce = '' }) {
   const sym = simbolo || '€';
 
   // Fecha de hoy en español (presentación; server-side, no toca datos del tenant).
@@ -342,7 +342,7 @@ export function disaHomeHtml({ userName, simbolo = '€' }) {
     <script src="/public/vendor/chartjs/chart.umd.min.js"></script>
     <script src="/public/js/grafico-constructor.js"></script>
     <script src="/public/vendor/sortablejs/Sortable.min.js"></script>
-    <script>
+    <script nonce="${nonce}">
       // El token CSRF para las llamadas que MUTAN (guardar el layout, plegar el panel). Vivía en el
       // bloque del chat; se conserva aquí porque la rejilla y el panel de arranque lo usan.
       function dhGetCsrf() {

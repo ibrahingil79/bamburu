@@ -50,6 +50,13 @@ const portalClienteId = pdb.prepare(
   'INSERT INTO clients (name,email,active) VALUES (?,?,1)').run(MARCA, 'delivered@resend.dev').lastInsertRowid;
 const portalToken = createToken(pdb, portalClienteId, 1);
 
+// ⚙️ 4 SEP 2026 — la primera pantalla del PANEL ya endurecida. Necesita sesión de dueño.
+const ERP_BASE = 'http://desarrollo-bamburu.localhost:3000';
+const erpTok = 'gate-csp-erp-' + randomBytes(12).toString('hex');
+const erpOwner = pdb.prepare("SELECT id FROM admin_users WHERE role='owner' AND active=1 ORDER BY id LIMIT 1").get();
+pdb.prepare('INSERT INTO admin_sessions (token,user_id,created_at,expires_at,csrf_token) VALUES (?,?,?,?,?)')
+  .run(erpTok, erpOwner.id, now, now + 1800, randomBytes(12).toString('hex'));
+
 const browser = await puppeteer.launch({ ...launchOpts() });
 
 // Apunta TODA violación de CSP que declare el navegador. Es la red que caza un handler olvidado.
@@ -191,7 +198,59 @@ try {
   ok(llego, 'y el mensaje LLEGÓ a la base: no se perdió por el camino');
   ok((await violaciones(p7)).length === 0, 'y el envío no genera violaciones');
 
+  // ── 8 · /admin: la PRIMERA pantalla del panel con la cabecera estricta ──
+  console.log('\n[8] /admin — la primera del panel, y sus controles del armazón responden');
+  const p8 = await nuevaPagina();
+  await p8.setCookie({ name: 'asess', value: erpTok, domain: 'desarrollo-bamburu.localhost', path: '/' });
+  const r8 = await p8.goto(ERP_BASE + '/admin', { waitUntil: 'networkidle0' });
+  ok(/script-src[^;]*'nonce-/.test(cabecera(r8)) && !/script-src[^;]*'unsafe-inline'/.test(cabecera(r8)),
+     '/admin — nonce sí, unsafe-inline no');
+  // Y LA REGLA NO ARRASTRA A LAS DEMÁS: eso es la mitad del valor de esta ficha.
+  const r8b = await p8.goto(ERP_BASE + '/admin/clients', { waitUntil: 'networkidle0' });
+  ok(/script-src[^;]*'unsafe-inline'/.test(cabecera(r8b)),
+     '  y /admin/clients SIGUE con la política de siempre: la regla es exacta, no un prefijo');
+  await p8.goto(ERP_BASE + '/admin', { waitUntil: 'networkidle0' });
+  ok((await violaciones(p8)).length === 0, 'ninguna violación de CSP al cargar /admin');
+  // SE PULSA EL ARMAZÓN: es lo que se quedó mudo si la migración fallara.
+  const fly8 = await p8.evaluate(async () => {
+    const g = document.querySelector('[data-navg]'); if (!g) return 'sin grupos';
+    g.dispatchEvent(new MouseEvent('mouseenter', { bubbles: false }));
+    await new Promise(r => setTimeout(r, 250));
+    return g.querySelector('.flyout')?.classList.contains('open') ? 'ok' : 'el desplegable no abrió';
+  });
+  ok(fly8 === 'ok', 'el menú lateral abre su desplegable con la cabecera estricta puesta', fly8);
+  const bell8 = await p8.evaluate(async () => {
+    const b = document.querySelector('[data-act="bell"]'); if (!b) return 'sin campana';
+    const antes = b.getAttribute('aria-expanded'); b.click();
+    await new Promise(r => setTimeout(r, 250));
+    return b.getAttribute('aria-expanded') !== antes ? 'ok' : 'no reacciona';
+  });
+  ok(bell8 === 'ok', 'la campana responde al clic', bell8);
+  // EL BOTÓN DE UN GRUPO DEL MENÚ, PULSADO. Se añadió el 4 sep 2026 porque el rojo provocado de esa
+  // tanda SE QUEDÓ VERDE: se le devolvió el handler de atributo a ESTE botón y el gate no se enteró,
+  // porque probaba el desplegable por el ratón y la campana, pero nunca pulsaba un grupo. Una
+  // reversión que no pone rojo no prueba nada.
+  const grupo8 = await p8.evaluate(async () => {
+    const b = document.querySelector('[data-navg] .nav-item'); if (!b) return 'sin botón de grupo';
+    const g = b.closest('[data-navg]');
+    document.querySelectorAll('.flyout.open').forEach(f => f.classList.remove('open'));
+    b.click();
+    await new Promise(r => setTimeout(r, 300));
+    return g.querySelector('.flyout')?.classList.contains('open') ? 'ok' : 'el grupo no abrió al pulsarlo';
+  });
+  ok(grupo8 === 'ok', 'PULSAR un grupo del menú abre su desplegable', grupo8);
+  // Y LA RED DE SEGURIDAD, barata y directa: en una pantalla ENDURECIDA no puede quedar ni un
+  // handler de atributo. Cualquiera que vuelva, aunque este gate no lo pulse, cae aquí.
+  const sueltos8 = await p8.evaluate(() => {
+    const h = document.documentElement.outerHTML.replace(/<script[\s\S]*?<\/script>/gi, '');
+    return (h.match(/\son[a-z]+\s*=\s*["']/gi) || []).length;
+  });
+  ok(sueltos8 === 0, 'y NO queda ni un handler de atributo en la pantalla endurecida',
+     sueltos8 ? 'quedan ' + sueltos8 : '0');
+  ok((await violaciones(p8)).length === 0, 'y tras pulsar, sigue sin violaciones');
+
   const todas = [...(await violaciones(p3)), ...(await violaciones(p4)),
+                 ...(await violaciones(p8)),
                  ...(await violaciones(p5)), ...(await violaciones(p6)), ...(await violaciones(p7))];
   ok(todas.length === 0, 'CERO violaciones de CSP en toda la pasada' + (todas.length ? ': ' + todas[0] : ''));
 } finally {
@@ -204,6 +263,7 @@ try {
     pdb.prepare('DELETE FROM portal_sesiones WHERE client_id IN (SELECT id FROM clients WHERE name LIKE ?)').run('ZZ CSP %');
     pdb.prepare('DELETE FROM portal_tokens   WHERE client_id IN (SELECT id FROM clients WHERE name LIKE ?)').run('ZZ CSP %');
     pdb.prepare('DELETE FROM clients WHERE name LIKE ?').run('ZZ CSP %');
+    pdb.prepare("DELETE FROM admin_sessions WHERE token LIKE 'gate-csp-erp-%'").run();
   } catch (e) { console.error('  ⚠️  limpieza incompleta: ' + (e?.message || e)); }
   pdb.close();
 }

@@ -38,7 +38,7 @@ export function createDashboardRoutes(db) {
     } catch {}
 
     const simbolo = db.prepare('SELECT currency_symbol s FROM company_config WHERE id=1').get()?.s || '€';
-    return c.html(adminLayout('Inicio', disaHomeHtml({ userName, simbolo }), 'dashboard',
+    return c.html(adminLayout('Inicio', disaHomeHtml({ userName, simbolo, nonce: c.get('cspNonce') }), 'dashboard',
                               session?.csrfToken || '', c, true));
   });
 

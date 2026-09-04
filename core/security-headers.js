@@ -35,6 +35,12 @@ const SUPERFICIES_ESTRICTAS = [
   /^\/portal(\/|$)/,
   /^\/acceso(\/|$)/,
   /^\/$/,
+  // ⚙️ 4 SEP 2026 (csp-erp-migrar-handlers) — LA PRIMERA PANTALLA DEL PANEL.
+  // LA REGLA ES EXACTA (^/admin$) Y NO UN PREFIJO. `/^\\/admin/` endurecería las 363 pantallas de
+  // golpe, y a casi todas les quedan handlers de atributo: se quedarían con los botones MUDOS sin
+  // avisar. Es literalmente lo que esta ficha existe para impedir. Cada pantalla entra aquí sola,
+  // y solo cuando su censo da CERO handlers y CERO bloques sin nonce.
+  /^\/admin$/,
 ];
 
 export function securityHeaders() {
