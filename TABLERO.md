@@ -10469,7 +10469,7 @@ Dos cosas de la misma familia. La primera: el tipo de un fichero subido se decid
 ## ✅ TAREA — Retiradas las dos bases fantasma
 
 - **id:** bases-fantasma-retiradas
-- **estado:** ✅ HECHA — 4 sep 2026 · commit `184d212`
+- **estado:** ✅ HECHA — 4 sep 2026 · commit `7600044`
 - **origen:** **Decisión de Ibrahin, 4 de septiembre de 2026**, tras el censo del negocio `null` de esa misma mañana.
 
 **Nada se ha destruido.** `null.db` y `desarrollo.db` se han **apartado**, no borrado, a
