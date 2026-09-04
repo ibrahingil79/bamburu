@@ -566,7 +566,7 @@ export function createQuoteRoutes(db) {
         <hr style="margin:1.25rem 0;border:none;border-top:1px solid var(--border)">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
           <h3 style="font-size:.9rem;font-weight:600;margin:0">Líneas</h3>
-          <button class="btn btn-secondary btn-sm" onclick="addLine()">+ Añadir línea</button>
+          <button class="btn btn-secondary btn-sm" data-act="add-line">+ Añadir línea</button>
         </div>
         <div class="table-wrap"><table>
           <thead><tr><th>Descripción</th><th style="width:80px">Cant.</th><th style="width:120px">P. unit.</th><th style="width:100px;text-align:right">Subtotal</th><th style="width:36px"></th></tr></thead>
@@ -574,7 +574,7 @@ export function createQuoteRoutes(db) {
           <tfoot id="totals-foot"></tfoot>
         </table></div>
         <div class="form-group" style="margin-top:1.25rem"><label class="form-label">Notas (opcional)</label><textarea id="f-notes" class="form-control" rows="2">${isEdit ? esc(existing.notes || '') : ''}</textarea></div>
-        <div style="text-align:right;margin-top:1rem"><button class="btn btn-primary" id="btn-save" onclick="saveQuote()">Guardar borrador</button></div>
+        <div style="text-align:right;margin-top:1rem"><button class="btn btn-primary" id="btn-save">Guardar borrador</button></div>
       </div></div>
       <script nonce="${c.get('cspNonce')}">
       const SYM='${sym}', SHOW_IRPF=${showIrpf}, IRPF_DEFAULT=${irpfDefault};
@@ -597,7 +597,7 @@ export function createQuoteRoutes(db) {
           + '<td><input type="number" class="form-control line-qty" step="0.01" min="0.01" value="'+(pre?pre.quantity:1)+'"></td>'
           + '<td><input type="number" class="form-control line-price" step="0.01" min="0" value="'+(pre?Number(pre.unit_price).toFixed(2):'0')+'"></td>'
           + '<td style="text-align:right;padding:.7rem 1rem"><span class="line-subtotal">'+SYM+'0.00</span></td>'
-          + '<td><button class="btn btn-danger btn-sm" onclick="this.closest(\\'tr\\').remove();scheduleRecalc()">✕</button></td>';
+          + '<td><button class="btn btn-danger btn-sm" data-act="quitar-fila">✕</button></td>';
         row.cells[0].insertAdjacentHTML('beforeend','<input type="hidden" class="line-tax" value="21">');
         tbody.appendChild(row);
         if (pre){
@@ -661,7 +661,16 @@ export function createQuoteRoutes(db) {
         } catch(e){ toast(e.message||'Error guardando','err'); btn.disabled=false; }
       }
       loadAll();
-      </script>`;
+      
+      // 5 SEP 2026 (csp-erp-migrar-handlers) — los fijos van directos; la fila de quitar se pinta
+      // DESPUES, asi que va por delegacion: sin ella, cada linea nueva naceria con el boton muerto.
+      document.getElementById('btn-save')?.addEventListener('click', () => saveQuote());
+      document.querySelector('[data-act="add-line"]')?.addEventListener('click', () => addLine());
+      document.addEventListener('click', (e) => {
+        const q = e.target.closest('[data-act="quitar-fila"]'); if (!q) return;
+        q.closest('tr').remove(); scheduleRecalc();
+      });
+</script>`;
     return c.html(adminLayout(isEdit ? 'Editar presupuesto' : 'Nuevo presupuesto', content, 'quotes', csrfToken, c));
   };
   views.get('/new', requirePerm('quotes.create'), c => formView(c, null));
@@ -714,19 +723,19 @@ export function createQuoteRoutes(db) {
   <div class="dp-actions" style="margin-top:14px;display:flex;flex-direction:column;gap:.5rem">
     <button data-act="imprimir" class="btn btn-secondary">Imprimir</button>
     <a href="/admin/quotes/${id}/pdf" class="btn btn-secondary">Descargar PDF</a>
-    ${isBorrador && can(c, 'quotes.edit') ? `<a href="/admin/quotes/${id}/edit" class="btn btn-secondary">Editar</a><button onclick="emitir()" class="btn btn-primary">Emitir presupuesto</button>` : ''}
+    ${isBorrador && can(c, 'quotes.edit') ? `<a href="/admin/quotes/${id}/edit" class="btn btn-secondary">Editar</a><button data-act="emitir" class="btn btn-primary">Emitir presupuesto</button>` : ''}
     ${isEmitido && can(c, 'quotes.edit') ? `
-      <button onclick="emailQuote()" class="btn btn-secondary">Enviar por email</button>
-      ${hasOrderLink ? '' : '<button onclick="crearPedido()" class="btn btn-primary">Crear pedido</button>'}
-      <button onclick="convertir('invoice')" class="btn btn-primary">Convertir a factura</button>
+      <button data-act="email" class="btn btn-secondary">Enviar por email</button>
+      ${hasOrderLink ? '' : '<button data-act="crear-pedido" class="btn btn-primary">Crear pedido</button>'}
+      <button data-act="convertir-factura" class="btn btn-primary">Convertir a factura</button>
       <button class="btn btn-secondary" disabled title="Se construye con la pieza de TPV (mostrador)">Convertir a ticket (próximamente)</button>
       <div style="display:flex;gap:.4rem;margin-top:.3rem">
-        <button onclick="seguimiento('aceptado')" class="btn btn-secondary btn-sm" style="flex:1">Aceptado</button>
-        <button onclick="seguimiento('rechazado')" class="btn btn-secondary btn-sm" style="flex:1">Rechazado</button>
-        <button onclick="seguimiento('caducado')" class="btn btn-secondary btn-sm" style="flex:1">Caducado</button>
+        <button data-act="seg-aceptado" class="btn btn-secondary btn-sm" style="flex:1">Aceptado</button>
+        <button data-act="seg-rechazado" class="btn btn-secondary btn-sm" style="flex:1">Rechazado</button>
+        <button data-act="seg-caducado" class="btn btn-secondary btn-sm" style="flex:1">Caducado</button>
       </div>
-      <button onclick="anular()" class="btn btn-danger">Anular</button>
-      <button onclick="anularYRehacer()" class="btn btn-secondary">Anular y rehacer</button>` : ''}
+      <button data-act="anular" class="btn btn-danger">Anular</button>
+      <button data-act="anular-rehacer" class="btn btn-secondary">Anular y rehacer</button>` : ''}
     <a href="/admin/quotes" class="btn btn-secondary">Volver al listado</a>
   </div>
 </div></div>
@@ -783,6 +792,20 @@ export function createQuoteRoutes(db) {
       validar:v2 => !String(v2.m||'').trim() ? { campo:'m', mensaje:'El motivo es obligatorio.' } : null });
     if(!v) return;
     try{ const d=await call('/anular-y-rehacer',{motivo:String(v.m).trim()}); location.href='/admin/quotes/'+d.id+'/edit'; }catch(e){ toast(e.message,'err'); } }
+
+      // 5 SEP 2026 — TODOS ESTOS SON CONDICIONALES y dependen del estado del presupuesto: Emitir
+      // solo en borrador; el resto solo si esta emitido, y Crear pedido solo si no lo tiene ya. El
+      // enganche tolera que no existan, y esta pantalla se prueba en sus DOS estados.
+      const _eng = (act, fn) => document.querySelector('[data-act="' + act + '"]')?.addEventListener('click', fn);
+      _eng('emitir', () => emitir());
+      _eng('email', () => emailQuote());
+      _eng('crear-pedido', () => crearPedido());
+      _eng('convertir-factura', () => convertir('invoice'));
+      _eng('seg-aceptado', () => seguimiento('aceptado'));
+      _eng('seg-rechazado', () => seguimiento('rechazado'));
+      _eng('seg-caducado', () => seguimiento('caducado'));
+      _eng('anular', () => anular());
+      _eng('anular-rehacer', () => anularYRehacer());
 </script>`;
     return c.html(adminLayout('Presupuesto ' + (q.quote_number || ('#' + id)), docShell(paper, panel), 'quotes', csrfToken, c));
   });

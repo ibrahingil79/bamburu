@@ -15,7 +15,7 @@
 // celda (p. ej. product_id / variante en el pedido) sin duplicar el markup.
 export function lineSearchCellHtml(extraInner = '') {
   return '<td style="position:relative">' +
-    '<input type="text" class="form-control line-desc" autocomplete="off" placeholder="Buscar en el catálogo o escribir libremente" oninput="onDescInput(this)" onfocus="onDescInput(this)" onblur="hideSuggest(this)">' +
+    '<input type="text" class="form-control line-desc" autocomplete="off" placeholder="Buscar en el catálogo o escribir libremente">' +
     '<div class="line-suggest" style="display:none;position:absolute;z-index:30;left:0;right:0;top:100%;background:var(--card);border:1px solid var(--border);border-radius:6px;max-height:240px;overflow:auto;box-shadow:0 6px 16px rgba(0,0,0,.25)"></div>' +
     extraInner +
   '</td>';
@@ -39,7 +39,7 @@ export function lineSearchScript() {
         if (!matches.length) { box.style.display='none'; box.innerHTML=''; return; }
         box.innerHTML = matches.map(p =>
           '<div class="suggest-item" style="padding:.5rem .7rem;cursor:pointer;border-bottom:1px solid var(--border)" ' +
-          'onmousedown="event.preventDefault();pickProduct(this,'+p.id+')">' +
+          'data-pid="'+p.id+'">' +
             '<strong>'+escHtml(p.name)+'</strong>' +
             (p.sku ? ' <span style="color:var(--muted);font-size:.8rem">['+escHtml(p.sku)+']</span>' : '') +
             ' <span style="float:right;color:var(--muted)">'+dineroEs(p.price||0, SYM)+'</span>' +
@@ -62,6 +62,33 @@ export function lineSearchScript() {
       function hideSuggest(input){
         const box = input.parentElement.querySelector('.line-suggest');
         setTimeout(function(){ box.style.display='none'; }, 150);
+      }
+
+      // ── 4 SEP 2026 (csp-erp-migrar-handlers) — ENGANCHE POR DELEGACION ──────────────────────
+      // Las lineas se pintan DESPUES de cargar la pagina, asi que los oyentes van en el documento.
+      // Tres avisos que costaron caro y conviene dejar escritos aqui:
+      //   · 'focus' y 'blur' NO burbujean; sus primos focusin/focusout, si.
+      //   · pickProduct compara el id con ===, y el valor de un atributo es TEXTO: hay que
+      //     devolverlo a numero o no encontraria el producto nunca.
+      //   · el mousedown de la sugerencia necesita preventDefault, o el blur del campo cierra la
+      //     lista antes de que llegue el clic.
+      // El pestillo evita duplicar oyentes si una pantalla inyecta el componente mas de una vez.
+      if (!window.__lineSearchDeleg) {
+        window.__lineSearchDeleg = true;
+        document.addEventListener('input', function(e){
+          const i = e.target.closest('.line-desc'); if (i) onDescInput(i);
+        });
+        document.addEventListener('focusin', function(e){
+          const i = e.target.closest('.line-desc'); if (i) onDescInput(i);
+        });
+        document.addEventListener('focusout', function(e){
+          const i = e.target.closest('.line-desc'); if (i) hideSuggest(i);
+        });
+        document.addEventListener('mousedown', function(e){
+          const s = e.target.closest('.suggest-item'); if (!s) return;
+          e.preventDefault();
+          pickProduct(s, Number(s.getAttribute('data-pid')));
+        });
       }
   `;
 }

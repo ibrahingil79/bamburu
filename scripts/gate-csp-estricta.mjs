@@ -270,12 +270,17 @@ try {
   const r9 = await p9.goto(ERP_BASE + '/admin/albaranes', { waitUntil: 'networkidle0' });
   ok(/script-src[^;]*'nonce-/.test(cabecera(r9)) && !/script-src[^;]*'unsafe-inline'/.test(cabecera(r9)),
      '/admin/albaranes — endurecida: nonce sí, unsafe-inline no');
-  // LA REGLA ANCLADA, comprobada por su parte peligrosa: la ficha de un presupuesto NO entra.
+  // LA REGLA ANCLADA, comprobada por su parte peligrosa: una vecina que NO está migrada no entra.
+  // ⚙️ 4 SEP 2026 — antes se probaba con `/admin/quotes/9`, y dejó de valer el día que esa ficha se
+  // endureció: una comprobación de anclaje solo prueba algo si su ruta SIGUE en legado. Se cambia a
+  // `/admin/purchases` (la lista), que está pegada a dos reglas nuevas —`/admin/purchases/\d+` y
+  // `/admin/purchases/new`— y no puede endurecerse todavía: sus dos handlers vienen del componente
+  // compartido de listados (`routes/listados.js`), que no es de esta cola.
   const r9b = await p9.goto(ERP_BASE + '/admin/quotes', { waitUntil: 'networkidle0' });
   ok(/script-src[^;]*'nonce-/.test(cabecera(r9b)), '/admin/quotes (la lista) — endurecida');
-  const r9c = await p9.goto(ERP_BASE + '/admin/quotes/9', { waitUntil: 'networkidle0' });
+  const r9c = await p9.goto(ERP_BASE + '/admin/purchases', { waitUntil: 'networkidle0' });
   ok(/script-src[^;]*'unsafe-inline'/.test(cabecera(r9c)),
-     '  y /admin/quotes/9 (la ficha) NO: el ancla $ impide que la regla la arrastre');
+     '  y /admin/purchases (la lista, sin migrar) NO: el ancla $ impide que la regla la arrastre');
 
   await p9.goto(ERP_BASE + '/admin/albaranes', { waitUntil: 'networkidle0' });
   ok((await violaciones(p9)).length === 0, 'ninguna violación de CSP al cargar');
@@ -399,8 +404,85 @@ try {
        document.documentElement.outerHTML.replace(/<script[\s\S]*?<\/script>/gi, ''))),
      '  y no trae ni un handler de atributo');
 
+
+  // ── 12 · PRESUPUESTO, ORDEN DE COMPRA Y COMPRA: condicional pulsado en cada forma ──
+  console.log('\n[12] Las tres formas nuevas: un botón CONDICIONAL pulsado en cada una');
+  // POR QUE UN CONDICIONAL Y NO UNO CUALQUIERA. Un boton fijo lo pinta cualquier documento y prueba
+  // poco: el que se queda mudo al endurecer es el que solo aparece en cierto estado, porque nadie
+  // navega hasta el estado que lo pinta. Los tres que se pulsan aqui abren ANTES una confirmacion
+  // en la propia pagina, asi que la prueba llega al dialogo y lo cierra: no emite, no anula, no
+  // cancela nada.
+  const p12 = await nuevaPagina();
+  await p12.setCookie({ name: 'asess', value: erpTok, domain: 'desarrollo-bamburu.localhost', path: '/' });
+  const FORMAS = [
+    { forma: 'presupuesto',      base: '/admin/quotes/',          ids: [31, 3, 1, 2],  act: 'emitir',   mote: 'Emitir' },
+    { forma: 'presupuesto',      base: '/admin/quotes/',          ids: [3, 1, 2, 31],  act: 'anular',   mote: 'Anular' },
+    { forma: 'orden de compra',  base: '/admin/purchase-orders/', ids: [5, 3, 1, 6],   act: 'enviar',   mote: 'Enviar' },
+    { forma: 'compra directa',   base: '/admin/purchases/',       ids: [4, 1, 5, 8],   act: 'cancelar', mote: 'Cancelar' },
+  ];
+  for (const f of FORMAS) {
+    const halla = await (async () => {
+      for (const id of f.ids) {
+        const r = await p12.goto(ERP_BASE + f.base + id, { waitUntil: 'networkidle0' });
+        if (r.status() !== 200) continue;
+        if (await p12.evaluate(a => !!document.querySelector('[data-act="' + a + '"]'), f.act)) return { id, r };
+      }
+      return null;
+    })();
+    ok(halla !== null, 'hay un/a ' + f.forma + ' en estado que SÍ pinta ' + f.mote, halla ? 'id ' + halla.id : 'ninguno');
+    if (!halla) continue;
+    ok(/script-src[^;]*'nonce-/.test(cabecera(halla.r)), '  y esa ficha va con la política estricta');
+    const abrio = await p12.evaluate(async (a) => {
+      document.querySelector('[data-act="' + a + '"]').click();
+      await new Promise(r => setTimeout(r, 600));
+      const ov = document.querySelector('.modal-overlay.open');
+      if (ov) ov.remove();                       // se cierra: no se ejecuta la acción
+      return !!ov;
+    }, f.act);
+    ok(abrio, '  PULSAR ' + f.mote + ' abre su confirmación → el condicional está vivo');
+    ok((await violaciones(p12)).length === 0, '  y sin una sola violación de CSP');
+  }
+
+  // ── 12b · EL BUSCADOR DE LÍNEA: el que se pintaba DESDE JavaScript y quedó mudo ──
+  console.log('\n[12b] El buscador de catálogo de las pantallas de alta responde al teclear');
+  // ESTE ES EL GUARDIA DEL FALLO DE HOY. `views/line-search.js` pinta su campo DESDE JavaScript, asi
+  // que sus handlers de atributo NO salen en el HTML servido y el censo daba las pantallas por
+  // limpias. `/admin/pedidos/new` y `/admin/albaranes/new` se endurecieron el 5 sep con esa medida y
+  // su buscador llevaba mudo desde entonces, sin error a la vista. Aqui se TECLEA y se exige que
+  // aparezcan sugerencias: cargar la pagina no habria dicho nada.
+  const ALTAS = ['/admin/quotes/new', '/admin/purchase-orders/new', '/admin/pedidos/new'];
+  for (const ruta of ALTAS) {
+    const r = await p12.goto(ERP_BASE + ruta, { waitUntil: 'networkidle0' });
+    ok(/script-src[^;]*'nonce-/.test(cabecera(r)), ruta + ' va con la política estricta');
+    const vivo = await p12.evaluate(async () => {
+      const inp = document.querySelector('.line-desc'); if (!inp) return 'sin buscador';
+      inp.focus(); inp.value = 'a'; inp.dispatchEvent(new Event('input', { bubbles: true }));
+      await new Promise(r => setTimeout(r, 400));
+      const box = inp.parentElement.querySelector('.line-suggest');
+      return (box && box.style.display !== 'none' && box.innerHTML) ? 'ok' : 'MUDO';
+    });
+    ok(vivo === 'ok', '  y teclear en el buscador de línea SACA sugerencias', vivo);
+    ok(await p12.evaluate(() => !/\son[a-z]+\s*=\s*"/i.test(
+         document.documentElement.outerHTML.replace(/<script[\s\S]*?<\/script>/gi, '')
+           .replace(/&lt;[^&]*&gt;/g, ''))),           // lo escapado es texto, no un handler
+       '  y el DOM ya montado no trae ni un handler de atributo');
+  }
+  // La compra directa tiene buscador PROPIO (no comparte el de linea): se prueba el suyo.
+  await p12.goto(ERP_BASE + '/admin/purchases/new', { waitUntil: 'networkidle0' });
+  const vivoCompra = await p12.evaluate(async () => {
+    document.querySelector('[data-act="add-line"]').click();
+    await new Promise(r => setTimeout(r, 200));
+    const inp = document.querySelector('[data-rol="buscar"]'); if (!inp) return 'sin buscador';
+    inp.focus(); inp.value = 'a'; inp.dispatchEvent(new Event('input', { bubbles: true }));
+    await new Promise(r => setTimeout(r, 400));
+    const box = inp.parentElement.querySelector('div[id^="suggest-"]');
+    return (box && box.style.display !== 'none' && box.innerHTML) ? 'ok' : 'MUDO';
+  });
+  ok(vivoCompra === 'ok', 'en la compra directa, Añadir línea pinta la fila y su buscador responde', vivoCompra);
+  ok((await violaciones(p12)).length === 0, '  y todo el recorrido, sin una violación de CSP');
+
   const todas = [...(await violaciones(p3)), ...(await violaciones(p4)),
-                 ...(await violaciones(p11)),
+                 ...(await violaciones(p11)), ...(await violaciones(p12)),
                  ...(await violaciones(p9)),
                  ...(await violaciones(p8)),
                  ...(await violaciones(p5)), ...(await violaciones(p6)), ...(await violaciones(p7))];

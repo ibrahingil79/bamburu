@@ -13,8 +13,14 @@
 // que su HTML servido no traiga NI UN handler de atributo ni un bloque sin nonce. No mide el código:
 // mide lo que sale por el cable, que es donde vivía la trampa.
 //
-// LO QUE NO PUEDE VER, y hay que decirlo: un documento en un estado que no exista hoy en el negocio
-// de desarrollo. Por eso la regla que acompaña a esto está escrita en `core/security-headers.js`:
+// LO QUE NO PUEDE VER, y hay que decirlo. Dos cosas:
+//   · un documento en un estado que no exista hoy en el negocio de desarrollo;
+//   · y —lección del 4 sep 2026— **un handler que se pinte DESDE JavaScript**. El buscador de línea
+//     (`views/line-search.js`) monta su campo con `insertAdjacentHTML`, así que sus `oninput=` NO
+//     salían por el cable: este gate daba verde y `/admin/pedidos/new` llevaba con el buscador MUDO
+//     desde que se endureció. Eso solo lo ve un navegador de verdad mirando el DOM ya montado, y
+//     por eso vive en `gate-csp-estricta.mjs` [12b], que TECLEA y exige sugerencias.
+// Por eso la regla que acompaña a esto está escrita en `core/security-headers.js`:
 // **una regla POR FORMA solo vale si TODAS las pantallas de esa forma están limpias EN TODOS SUS
 // ESTADOS.** Mientras una plantilla tenga handlers condicionales, sus fichas van de una en una.
 //
@@ -56,6 +62,14 @@ for (const [tabla, ruta] of [['clients','clients'], ['invoices','invoices'], ['q
   ['purchases','purchases'], ['supplier_returns','supplier-returns'], ['stock_transfers','stock-transfers'],
   ['portal_mensajes','portal/mensajes']]) {
   for (const r of uno(`SELECT id FROM ${tabla} ORDER BY id LIMIT 40`)) meter(`/admin/${ruta}/${r.id}`);
+}
+// Y las pantallas de ALTA y EDICIÓN, que tienen reglas propias desde el 4 sep 2026 y no cuelgan del
+// menú: sin esto quedarían endurecidas y sin vigilar.
+for (const ruta of ['quotes', 'pedidos', 'albaranes', 'supplier-returns', 'purchase-orders', 'purchases']) {
+  meter(`/admin/${ruta}/new`);
+}
+for (const [tabla, ruta] of [['quotes','quotes'], ['purchase_orders','purchase-orders']]) {
+  for (const r of uno(`SELECT id FROM ${tabla} ORDER BY id LIMIT 8`)) meter(`/admin/${ruta}/${r.id}/edit`);
 }
 
 const cookie = 'asess=' + tok;

@@ -584,7 +584,7 @@ export function createPurchaseOrderRoutes(db) {
         </div>
       </div>
       <div class="card" style="margin-bottom:1rem">
-        <div class="card-head"><h3>Líneas</h3><button class="btn btn-secondary" onclick="addLine()">+ Añadir línea</button></div>
+        <div class="card-head"><h3>Líneas</h3><button class="btn btn-secondary" data-act="add-line">+ Añadir línea</button></div>
         <!-- overflow:visible: el desplegable del buscador es position:absolute y el
              overflow-x:auto de .table-wrap lo recortaría (mismo arreglo que en Compras). -->
         <div class="table-wrap" style="overflow:visible"><table>
@@ -595,7 +595,7 @@ export function createPurchaseOrderRoutes(db) {
       </div>
       <div style="display:flex;justify-content:flex-end;gap:.5rem">
         <a href="${isEdit ? '/admin/purchase-orders/' + existing.id : '/admin/purchase-orders'}" class="btn btn-secondary">Cancelar</a>
-        <button class="btn btn-primary" id="btn-save" onclick="saveOrder()">${isEdit ? 'Guardar cambios' : 'Guardar borrador'}</button>
+        <button class="btn btn-primary" id="btn-save">${isEdit ? 'Guardar cambios' : 'Guardar borrador'}</button>
       </div>
       <script nonce="${c.get('cspNonce')}">
       const SYM = '${sym}';
@@ -638,7 +638,7 @@ export function createPurchaseOrderRoutes(db) {
           '<td><input type="number" class="form-control line-cost" min="0" step="0.01" value="" style="width:120px"></td>' +
           '<td><span class="line-taxlbl" style="color:var(--text3)">—</span></td>' +
           '<td style="text-align:right;padding:.7rem 1rem"><span class="line-subtotal">' + SYM + '0.00</span></td>' +
-          '<td><button class="btn btn-danger btn-sm" onclick="this.closest(\\'tr\\').remove();recalc()">✕</button></td>';
+          '<td><button class="btn btn-danger btn-sm" data-act="quitar-fila">✕</button></td>';
         tbody.appendChild(row);
         row.querySelectorAll('.line-qty, .line-cost').forEach(i => i.addEventListener('input', recalc));
         // Cambiar el texto a mano invalida la selección previa (igual que en Compras).
@@ -727,7 +727,16 @@ export function createPurchaseOrderRoutes(db) {
       }
 
       if (SEED && SEED.items && SEED.items.length){ SEED.items.forEach(it => addLine(it)); } else { addLine(); }
-      </script>`;
+      
+      // 4 SEP 2026 (csp-erp-migrar-handlers) — fijos directos; la fila de quitar se pinta DESPUES,
+      // asi que va por delegacion: sin ella cada linea nueva naceria con el boton muerto.
+      document.getElementById('btn-save')?.addEventListener('click', () => saveOrder());
+      document.querySelector('[data-act="add-line"]')?.addEventListener('click', () => addLine());
+      document.addEventListener('click', (e) => {
+        const q = e.target.closest('[data-act="quitar-fila"]'); if (!q) return;
+        q.closest('tr').remove(); recalc();
+      });
+</script>`;
     return c.html(adminLayout(isEdit ? 'Editar borrador' : 'Nueva orden de compra', content, 'purchase-orders', csrfToken, c));
   };
 
@@ -782,10 +791,10 @@ export function createPurchaseOrderRoutes(db) {
         <td style="text-align:right">${l.recibido}</td>
         <td style="text-align:right;font-weight:600">${l.pendiente}</td>
         <td>
-          <input class="form-control r-qty" type="number" min="0" value="${l.pendiente}" style="width:90px" oninput="recalcR()">
+          <input class="form-control r-qty" type="number" min="0" value="${l.pendiente}" style="width:90px">
           <div class="r-warn" style="display:none;color:var(--warn);font-size:.74rem;margin-top:4px;max-width:170px"></div>
         </td>
-        <td><input class="form-control r-cost" type="number" min="0" step="0.01" value="${Number(l.unit_cost).toFixed(2)}" style="width:120px" oninput="recalcR()"></td>
+        <td><input class="form-control r-cost" type="number" min="0" step="0.01" value="${Number(l.unit_cost).toFixed(2)}" style="width:120px"></td>
         <td style="text-align:right"><span class="r-sub">0.00 ${sym}</span></td>
       </tr>`).join('');
 
@@ -812,7 +821,7 @@ export function createPurchaseOrderRoutes(db) {
       </div>
       <div style="display:flex;justify-content:flex-end;gap:.5rem">
         <a href="/admin/purchase-orders/${id}" class="btn btn-secondary">Cancelar</a>
-        <button class="btn btn-primary" id="btn-confirm" onclick="confirmReceipt()">Confirmar recepción</button>
+        <button class="btn btn-primary" id="btn-confirm">Confirmar recepción</button>
       </div>
       <script nonce="${c.get('cspNonce')}">
       const SYM = '${sym}';
@@ -902,7 +911,14 @@ export function createPurchaseOrderRoutes(db) {
         } catch(e){ toast(e.message || 'Error registrando la recepción','err'); btn.disabled = false; }
       }
       recalcR();
-      </script>`;
+      
+      // 4 SEP 2026 — las casillas de cantidad y coste se pintan con las lineas pendientes, de modo
+      // que su recalculo tambien va por delegacion. 'input' burbujea, asi que un solo oyente basta.
+      document.getElementById('btn-confirm')?.addEventListener('click', () => confirmReceipt());
+      document.addEventListener('input', (e) => {
+        if (e.target.closest('.r-qty, .r-cost')) recalcR();
+      });
+</script>`;
     return c.html(adminLayout('Registrar recepción', content, 'purchase-orders', csrfToken, c));
   });
 
@@ -993,15 +1009,15 @@ export function createPurchaseOrderRoutes(db) {
     const actions =
       (o.status === 'borrador' ? (
         (canEdit ? `<a href="/admin/purchase-orders/${id}/edit" class="btn btn-secondary">Editar</a>` : '') +
-        (canEdit ? `<button onclick="enviarOrden()" class="btn btn-secondary">Enviar</button>` : '')
+        (canEdit ? `<button data-act="enviar" class="btn btn-secondary">Enviar</button>` : '')
       ) : '') +
       (o.status === 'enviada' ? (
-        (canEdit ? `<button onclick="emailOrden()" class="btn btn-secondary">Enviar por email</button>` : '') +
-        (canEdit && canClose ? `<button onclick="cerrarOrden()" class="btn btn-secondary">Cerrar orden</button>` : '') +
+        (canEdit ? `<button data-act="email" class="btn btn-secondary">Enviar por email</button>` : '') +
+        (canEdit && canClose ? `<button data-act="cerrar" class="btn btn-secondary">Cerrar orden</button>` : '') +
         // Con recepciones confirmadas la orden no se puede anular (su stock ya se
         // movió): primero se anulan las recepciones. Se ocultan los botones.
-        (canEdit && !hasConfirmedReceipts ? `<button onclick="anularOrden()" class="btn btn-danger">Anular</button>` : '') +
-        (canCreate && !hasConfirmedReceipts ? `<button onclick="anularYRehacer()" class="btn btn-secondary">Anular y rehacer</button>` : '')
+        (canEdit && !hasConfirmedReceipts ? `<button data-act="anular" class="btn btn-danger">Anular</button>` : '') +
+        (canCreate && !hasConfirmedReceipts ? `<button data-act="anular-rehacer" class="btn btn-secondary">Anular y rehacer</button>` : '')
       ) : '');
 
     const receiptStatusBadge = s => s === 'confirmada'
@@ -1110,6 +1126,16 @@ ${receptionBlock}`;
     try { await post('/api/erp/purchase-orders/${id}/close', { motivo: String(v.motivo).trim() }); location.reload(); }
     catch(e){ toast(e.message,'err'); }
   }
+
+      // 4 SEP 2026 — TODOS CONDICIONALES: Enviar y Cerrar dependen del estado; Anular y Anular y
+      // rehacer desaparecen en cuanto hay una recepcion confirmada. El enganche tolera que falten,
+      // y la pantalla se prueba en los estados que SI los pintan.
+      const _eng = (act, fn) => document.querySelector('[data-act="' + act + '"]')?.addEventListener('click', fn);
+      _eng('enviar', () => enviarOrden());
+      _eng('email', () => emailOrden());
+      _eng('cerrar', () => cerrarOrden());
+      _eng('anular', () => anularOrden());
+      _eng('anular-rehacer', () => anularYRehacer());
 </script>`;
     return c.html(adminLayout('Orden de compra ' + (o.order_number ? esc(o.order_number) : '(borrador)'), docShell(paper, panel), 'purchase-orders', csrfToken, c));
   });

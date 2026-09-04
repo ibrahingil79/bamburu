@@ -101,6 +101,25 @@ const SUPERFICIES_ESTRICTAS = [
   /^\/admin\/albaranes\/new$/,
   /^\/admin\/supplier-returns\/\d+$/,
   /^\/admin\/supplier-returns\/new$/,
+  // ⚙️ 4 SEP 2026, 5ª tanda — PRESUPUESTO, ORDEN DE COMPRA Y COMPRA DIRECTA, con el mismo criterio:
+  // `routes/quotes.js`, `purchase-orders.js` y `purchases.js` tienen CERO handlers de atributo, así
+  // que ningún estado del documento puede pintar uno. Aquí entran también las pantallas de ALTA y
+  // EDICIÓN, y eso obligó a arreglar algo que el censo no podía ver:
+  //
+  //   el buscador de línea (`views/line-search.js`) se pinta DESDE JavaScript, así que sus handlers
+  //   NO aparecen en el HTML servido. El censo daba `/admin/pedidos/new` y `/admin/albaranes/new`
+  //   por limpias, se endurecieron el 5 sep… y su buscador de catálogo llevaba desde entonces MUDO
+  //   en producción, sin error visible. Lo cazó el modo aviso en un navegador de verdad, que es el
+  //   único que mira el DOM ya montado. Migrado el componente, las dos vuelven a responder.
+  /^\/admin\/quotes\/\d+$/,
+  /^\/admin\/quotes\/new$/,
+  /^\/admin\/quotes\/\d+\/edit$/,
+  /^\/admin\/purchase-orders\/\d+$/,
+  /^\/admin\/purchase-orders\/new$/,
+  /^\/admin\/purchase-orders\/\d+\/edit$/,
+  /^\/admin\/purchase-orders\/\d+\/receipts\/new$/,
+  /^\/admin\/purchases\/\d+$/,
+  /^\/admin\/purchases\/new$/,
 ];
 
 export function securityHeaders() {

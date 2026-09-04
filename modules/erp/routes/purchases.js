@@ -147,7 +147,7 @@ export function createPurchaseRoutes(db, cfg = {}) {
       <!-- C6 · los tres verbos, del mismo sitio que los otros siete listados. -->
       <div style="margin:-.5rem 0 1rem">${botonesListado('compras', '')}</div>
       <div class="card">
-        <div class="card-head"><h3>Registro de compras</h3><input class="search" id="searchBox" placeholder="Buscar..." oninput="renderPurchases()"></div>
+        <div class="card-head"><h3>Registro de compras</h3><input class="search" id="searchBox" placeholder="Buscar..."></div>
         <div class="table-wrap"><table>
           <thead><tr><th>#</th><th>Proveedor</th><th>Referencia</th><th>Fecha</th><th>Estado</th><th>Total</th><th></th></tr></thead>
           <tbody id="purchBody">${skeletonRows(7)}</tbody>
@@ -174,7 +174,9 @@ export function createPurchaseRoutes(db, cfg = {}) {
         }).join(''):(q?window.emptyRow(7,'No se encontraron compras con ese filtro.',{icon:'ti-search'}):window.emptyRow(7,'Todavía no hay compras registradas. ¿Anotamos la primera?',window.canDo('purchases.create')?{cta:'Nueva compra',href:'/admin/purchases/new'}:{}));
       }
       loadPurchases();
-      </script>`;
+      
+      document.getElementById('searchBox')?.addEventListener('input', function(){ renderPurchases(); });
+</script>`;
     return c.html(adminLayout('Compras', content, 'purchases', c.get('session')?.csrfToken||'', c));
   });
 
@@ -232,7 +234,7 @@ export function createPurchaseRoutes(db, cfg = {}) {
         </div>
       </div>
       <div class="card" style="margin-bottom:1rem">
-        <div class="card-head"><h3>Líneas de compra</h3><button class="btn btn-secondary" onclick="addLine()">+ Añadir línea</button></div>
+        <div class="card-head"><h3>Líneas de compra</h3><button class="btn btn-secondary" data-act="add-line">+ Añadir línea</button></div>
         <!-- overflow:visible aquí (no en .table-wrap global): el desplegable de sugerencias del
              buscador es position:absolute y .table-wrap{overflow-x:auto} fuerza overflow-y:auto,
              que lo recortaba e impedía verlo. Esta tabla no necesita scroll horizontal. -->
@@ -244,7 +246,7 @@ export function createPurchaseRoutes(db, cfg = {}) {
       </div>
       <div style="display:flex;justify-content:flex-end;gap:.5rem">
         <a href="/admin/purchases" class="btn btn-secondary">Cancelar</a>
-        <button class="btn btn-primary" onclick="submitPurchase()">Registrar compra</button>
+        <button class="btn btn-primary" data-act="registrar">Registrar compra</button>
       </div>
       <script nonce="${c.get('cspNonce')}">
       var PRODUCTS=${productsJson};
@@ -261,14 +263,14 @@ export function createPurchaseRoutes(db, cfg = {}) {
         if(empty)empty.remove();
         var html='<tr id="line-'+id+'">'
           +'<td style="position:relative">'
-            +'<input class="form-control" type="text" id="prodsearch-'+id+'" autocomplete="off" placeholder="Buscar producto..." oninput="onProdInput('+id+')" onfocus="onProdInput('+id+')" onblur="hideProdSuggest('+id+')" style="min-width:200px">'
+            +'<input class="form-control" type="text" id="prodsearch-'+id+'" data-lin="'+id+'" data-rol="buscar" autocomplete="off" placeholder="Buscar producto..." style="min-width:200px">'
             +'<input type="hidden" id="prod-'+id+'">'
             +'<div id="suggest-'+id+'" style="display:none;position:absolute;z-index:30;left:0;right:0;top:100%;background:var(--card);border:1px solid var(--border);border-radius:6px;max-height:240px;overflow:auto;box-shadow:0 6px 16px rgba(0,0,0,.25)"></div>'
           +'</td>'
-          +'<td><input class="form-control" type="number" id="qty-'+id+'" min="1" value="1" style="width:80px" oninput="calcTotal()"></td>'
-          +'<td><input class="form-control" type="number" id="cost-'+id+'" min="0" step="0.01" value="0.00" style="width:110px" oninput="calcTotal()"></td>'
+          +'<td><input class="form-control" type="number" id="qty-'+id+'" data-lin="'+id+'" min="1" value="1" style="width:80px"></td>'
+          +'<td><input class="form-control" type="number" id="cost-'+id+'" data-lin="'+id+'" min="0" step="0.01" value="0.00" style="width:110px"></td>'
           +'<td id="sub-'+id+'" style="font-weight:600">0,00 ${sym}</td>'
-          +'<td><button class="btn btn-danger btn-sm" onclick="removeLine('+id+')">Eliminar</button></td>'
+          +'<td><button class="btn btn-danger btn-sm" data-act="quitar-linea" data-lin="'+id+'">Eliminar</button></td>'
           +'</tr>';
         document.getElementById('linesBody').insertAdjacentHTML('beforeend',html);
         calcTotal();
@@ -294,7 +296,7 @@ export function createPurchaseRoutes(db, cfg = {}) {
         }).slice(0,8);
         if(!matches.length){box.style.display='none';box.innerHTML='';return;}
         box.innerHTML=matches.map(function(p){
-          return '<div style="padding:.5rem .7rem;cursor:pointer;border-bottom:1px solid var(--border)" onmousedown="event.preventDefault();pickProd('+id+','+p.id+')">'
+          return '<div style="padding:.5rem .7rem;cursor:pointer;border-bottom:1px solid var(--border)" data-lin="'+id+'" data-sug="'+p.id+'">'
             +'<strong>'+escHtml(p.name)+'</strong>'
             +(p.sku?' <span style="color:var(--muted);font-size:.8rem">['+escHtml(p.sku)+']</span>':'')
             +' <span style="float:right;color:var(--muted)">'+Number(p.price||0).toFixed(2)+' ${sym}</span>'
@@ -361,7 +363,36 @@ export function createPurchaseRoutes(db, cfg = {}) {
         }catch(e){toast(e.message,'err');}
       }
       addLine();
-      </script>`;
+      
+      // 4 SEP 2026 (csp-erp-migrar-handlers) — la fila de compra se pinta ENTERA en caliente, asi
+      // que todo lo suyo va por delegacion. Dos avisos aprendidos aqui: 'focus' y 'blur' no
+      // burbujean (van sus primos focusin/focusout), y pickProd compara el id del producto con ===,
+      // de modo que el valor del atributo, que es texto, tiene que volver a numero o no elegiria nada.
+      document.querySelector('[data-act="add-line"]')?.addEventListener('click', function(){ addLine(); });
+      document.querySelector('[data-act="registrar"]')?.addEventListener('click', function(){ submitPurchase(); });
+      document.addEventListener('input', function(e){
+        var el = e.target.closest('[data-lin]'); if (!el) return;
+        if (el.getAttribute('data-rol') === 'buscar') onProdInput(el.getAttribute('data-lin'));
+        else calcTotal();
+      });
+      document.addEventListener('focusin', function(e){
+        var el = e.target.closest('[data-rol="buscar"]'); if (!el) return;
+        onProdInput(el.getAttribute('data-lin'));
+      });
+      document.addEventListener('focusout', function(e){
+        var el = e.target.closest('[data-rol="buscar"]'); if (!el) return;
+        hideProdSuggest(el.getAttribute('data-lin'));
+      });
+      document.addEventListener('click', function(e){
+        var b = e.target.closest('[data-act="quitar-linea"]'); if (!b) return;
+        removeLine(b.getAttribute('data-lin'));
+      });
+      document.addEventListener('mousedown', function(e){
+        var sg = e.target.closest('[data-sug]'); if (!sg) return;
+        e.preventDefault();   // lo hacia el atributo: sin esto el blur cierra la lista antes del clic
+        pickProd(sg.getAttribute('data-lin'), Number(sg.getAttribute('data-sug')));
+      });
+</script>`;
     return c.html(adminLayout('Nueva compra', content, 'purchases', csrfToken, c));
   });
 
@@ -387,8 +418,8 @@ export function createPurchaseRoutes(db, cfg = {}) {
 
     const canEdit = can(c, 'purchases.create');
     const actionBtns = canEdit ? (
-      (purchase.status === 'pending' ? `<button class="btn btn-primary" onclick="receivePurchase()">Recibir</button> ` : '') +
-      (purchase.status !== 'cancelled' ? `<button class="btn btn-danger" onclick="cancelPurchase()">Cancelar</button> ` : '')
+      (purchase.status === 'pending' ? `<button class="btn btn-primary" data-act="recibir">Recibir</button> ` : '') +
+      (purchase.status !== 'cancelled' ? `<button class="btn btn-danger" data-act="cancelar">Cancelar</button> ` : '')
     ) : '';
 
     const paper = `
@@ -437,7 +468,12 @@ export function createPurchaseRoutes(db, cfg = {}) {
         try{ var r=await api('POST','/api/erp/purchases/${purchase.id}/cancel',{}); toast(r.reverted?'Compra cancelada y stock revertido':'Compra cancelada'); location.reload(); }
         catch(e){ toast(e.message||'Error','err'); }
       }
-      </script>`;
+      
+      // 4 SEP 2026 — CONDICIONALES: Recibir solo si esta pendiente, Cancelar si no esta ya cancelada.
+      const _eng = (act, fn) => document.querySelector('[data-act="' + act + '"]')?.addEventListener('click', fn);
+      _eng('recibir', () => receivePurchase());
+      _eng('cancelar', () => cancelPurchase());
+</script>`;
     return c.html(adminLayout('Compra #'+purchase.id, docShell(paper, panel), 'purchases', c.get('session')?.csrfToken||'', c));
   });
 
