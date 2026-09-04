@@ -6082,7 +6082,12 @@ El pilar queda completo: multi-almacén + stock mínimo/punto de pedido + trazab
 - **D6 · [a verificar] XSS en páginas públicas de la tienda** (HTML guardado por admin sin escapar). La tienda está apagada de forma reversible (D1); revisar antes de reabrir en Capa 2. *(El bug de fuga de stock de `cancel_order` ya quedó resuelto al archivar `sales_orders`, D4.)*
 
 ### Deuda técnica
-- ⚠️ **DOS ficheros de negocio HUÉRFANOS en `data/tenants/`, esperando decisión de Ibrahin (4 sep 2026).**
+- ~~⚠️ **DOS ficheros de negocio HUÉRFANOS en `data/tenants/`, esperando decisión de Ibrahin (4 sep 2026).**~~
+  **⚙️ CERRADO EL MISMO DÍA — RETIRADAS POR DECISIÓN DE IBRAHIN, 4 sep 2026.** Ver la ficha
+  `bases-fantasma-retiradas`. **No se han borrado: se han apartado** a
+  `/home/ubuntu/bases-retiradas/2026-09-04/`, fuera del repositorio y fuera de `data/`.
+  Lo que sigue es el texto original de la deuda, tachado:
+- ~~**DOS ficheros de negocio HUÉRFANOS en `data/tenants/` (4 sep 2026).**
   No están en el índice de negocios (`control.db`), así que **ninguna ruta del programa los alcanza**
   y nada los usa. Pero `data/tenants/*.db` se copia **con comodín**, así que **viajan cada noche a
   las dos cuentas de Drive**, cifrados — que es como se vieron.
@@ -10460,6 +10465,62 @@ Dos cosas de la misma familia. La primera: el tipo de un fichero subido se decid
 > tipo pintable, así que la regla no las toca — pero sí se saneó su extensión, que en `migracion`
 > salía del **nombre que escribe el cliente**: bastaba llamar al fichero `datos.php` para dejar un
 > `.php` en la carpeta de adjuntos.
+
+## ✅ TAREA — Retiradas las dos bases fantasma
+
+- **id:** bases-fantasma-retiradas
+- **estado:** ✅ HECHA — 4 sep 2026 · commit `184d212`
+- **origen:** **Decisión de Ibrahin, 4 de septiembre de 2026**, tras el censo del negocio `null` de esa misma mañana.
+
+**Nada se ha destruido.** `null.db` y `desarrollo.db` se han **apartado**, no borrado, a
+`/home/ubuntu/bases-retiradas/2026-09-04/` (permisos 700; las bases siguen en 600), con un
+`LEEME.txt` que cuenta qué son, de dónde salieron y sus huellas `sha256`. Si dentro de un tiempo se
+confirma que nada las echa de menos, se borran de verdad — **y esa segunda decisión también es de
+Ibrahin**.
+
+**Las dos comprobaciones previas, hechas antes de mover nada:**
+
+- [x] **Siguen vacías.** Cero clientes, facturas, productos, pedidos, proveedores, citas, albaranes,
+  movimientos de stock, cobros y adjuntos — **en las dos**. Solo el andamiaje de las migraciones
+  (67 permisos, 20 cuentas contables, 4 agentes de DISA, «Mi Empresa» y la semilla
+  `admin@bamburu.com`) y un `resumen_envios` cuyas filas dicen todas «sin_nada_que_contar,
+  enviado: 0» — el aviso diario las visitaba y **nunca mandó nada**.
+- [x] **No están en `control.db`.** Cero filas, ni por `slug` ni por `db_filename`. Los 11 negocios
+  del índice son los 11 ficheros que quedan en la carpeta.
+- [x] **Nadie las nombra.** Las cuatro coincidencias en el código son **comentarios** o una búsqueda
+  de texto; `verify-dibujo.mjs` abre `desarrollo-bamburu.db`, que es un negocio real. Ningún proceso
+  las tenía abiertas, y no había ficheros `-wal`/`-shm`.
+
+**Pero sí las abría algo, y por eso molestaban.** Las **cinco tareas de reloj** (avisos, propuestas,
+cola de Verifactu, caducar reservas y recordatorios de cita) recorren `data/tenants/` **con
+comodín**, no el índice: las abrían y les escribían todos los días. Y la copia nocturna hace lo
+mismo (`DBS=("$DATA_DIR/control.db" "$DATA_DIR"/tenants/*.db)`), así que viajaban cada noche a las
+dos cuentas de Drive. Al sacarlas de esa carpeta, las dos cosas se acaban solas.
+
+> ### 📦 LA COMPROBACIÓN QUE CIERRA
+>
+> **Se lanzó la copia de seguridad de verdad, como de noche.** Anoche subió **16 artefactos**, con
+> `null-2026-09-04.db` y `desarrollo-2026-09-04.db` entre ellos. La de después de retirarlas subió
+> **14**: los 11 negocios del índice más `desarrollo-bamburu`, los adjuntos y la configuración.
+> **Éxito, destino CIFRADO**, con descarga y **comparación byte a byte** e `integrity_check` de cada
+> base, y el manifiesto del histórico registrando los 14. 460 segundos.
+>
+> **Las huellas antes y después de mover son idénticas** (`sha256`), y las dos bases abren sin
+> problema desde su sitio nuevo (`integrity_check: ok`, 132 y 137 tablas).
+>
+> ### 🗓️ LAS COPIAS QUE YA ESTÁN EN DRIVE — NO HACE FALTA HACER NADA
+>
+> **No se han tocado**, como pedía el encargo. Contienen esas dos bases en **4 objetos por cuenta**,
+> y solo de dos días —el cifrado se encendió el 3 de septiembre, así que no hay nada anterior—:
+>
+> | | principal (`ibrahingil`) | secundaria (`gilibrahin`) | se borra sola el |
+> |---|---|---|---|
+> | `desarrollo-2026-09-03.db` · `null-2026-09-03.db` | sí | sí | **17/09/2026** |
+> | `desarrollo-2026-09-04.db` · `null-2026-09-04.db` | sí | sí | **18/09/2026** |
+>
+> **La retención de 14 días las hará desaparecer sola** (`rclone delete --min-age 14d`, en cada
+> pasada de la copia). **El 18 de septiembre de 2026 no quedará ninguna copia con esas dos bases
+> dentro, sin que nadie haga nada.**
 
 ## ✅ TAREA — Fuera todo el bot antiguo
 
