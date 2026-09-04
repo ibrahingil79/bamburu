@@ -6082,6 +6082,19 @@ El pilar queda completo: multi-almacén + stock mínimo/punto de pedido + trazab
 - **D6 · [a verificar] XSS en páginas públicas de la tienda** (HTML guardado por admin sin escapar). La tienda está apagada de forma reversible (D1); revisar antes de reabrir en Capa 2. *(El bug de fuga de stock de `cancel_order` ya quedó resuelto al archivar `sales_orders`, D4.)*
 
 ### Deuda técnica
+- ⚠️ **DOS ficheros de negocio HUÉRFANOS en `data/tenants/`, esperando decisión de Ibrahin (4 sep 2026).**
+  No están en el índice de negocios (`control.db`), así que **ninguna ruta del programa los alcanza**
+  y nada los usa. Pero `data/tenants/*.db` se copia **con comodín**, así que **viajan cada noche a
+  las dos cuentas de Drive**, cifrados — que es como se vieron.
+  · **`null.db`** — nacido el 3 sep 2026 a las 07:48:09, creado por `gate-registro-alta` con un slug
+    nulo (ver la ficha `gates-no-crean-bases-fantasma`). Contiene **solo el esqueleto**: 132 tablas,
+    12 con datos, y todos de migración (67 permisos, 20 cuentas contables, 4 agentes de DISA, la
+    semilla `admin@bamburu.com` y «Mi Empresa»). **Cero clientes, cero facturas, cero productos.**
+    No hay ni un dato de negocio real dentro.
+  · **`desarrollo.db`** — nacido el 21 ago 2026 a las 17:39:41, mismo caso: fuera del índice.
+  **NO SE HAN BORRADO**, y no se borran sin que Ibrahin lo diga: la regla permanente del proyecto es
+  archivar, no destruir. Cuando lo decida, lo que corresponde es **sacarlos de `data/tenants/`**
+  (moverlos, no `rm`), y con eso dejan de entrar en las copias.
 - ⚠️ **Hay DOS frenos de avisos repetidos donde debería haber uno (4 sep 2026).** El nuevo,
   `core/freno-avisos.js`, es genérico y lo usa `scripts/avisar-telegram.mjs` (copias). El viejo vive
   **dentro** de `core/aviso-arranque.js`, con su ventana de 10 min y su propio fichero
@@ -13217,3 +13230,46 @@ existe registro de actividad por usuario.
 
 **Comparte cimiento con el historial de cambios del cliente y con el aviso de edición simultánea:**
 las tres necesitan que quede rastro de quién cambió qué. Se decide una vez y sirve a las tres.
+
+## TAREA — Un negocio no puede nacer sin nombre utilizable
+
+- **id:** negocio-sin-slug-utilizable
+- **estado:** pendiente
+- **origen:** Censo del negocio `null` (Ibrahin, 4 sep 2026). **Registrada, NO arreglada** — el encargo pedía mirar, no tocar.
+
+**El hueco, comprobado ejecutándolo.** `parseSignup` exige que el nombre del negocio no esté vacío, y eso funciona: `""`, `"   "`, `null` y `undefined` se rechazan con «Necesito el nombre del negocio». Pero **`"!!!"` se acepta**. Y entonces `toSlug()` lo convierte en la **cadena vacía**, porque su regla es «todo lo que no sea letra o número, fuera»:
+
+| nombre del negocio | slug que sale | fichero que se crea |
+|---|---|---|
+| `Panadería García` | `panaderia-garcia` | `data/tenants/panaderia-garcia.db` |
+| `!!!` · `---` · `###` · `...` · `¿?` | `` (vacío) | **`data/tenants/.db`** ← fichero OCULTO |
+
+**Por qué importa, y no es cosmético:**
+- El negocio se enruta **por subdominio**, y no existe un subdominio vacío: ese negocio **no sería alcanzable**.
+- Su base sería un **fichero oculto** (`.db`), que no aparece en un `ls` normal.
+- `control.db` no lo impide: la columna es `slug TEXT UNIQUE NOT NULL`, y **`NOT NULL` no es lo mismo que «no vacío»** — una cadena vacía pasa.
+- El segundo negocio así llamado no choca (se le pone `-<marca de tiempo>`), así que el fallo **no se delata**: se acumulan negocios rotos en silencio.
+
+**Criterios de aceptación**
+
+- [ ] Un nombre de negocio que **no deje ni una letra ni un número** se rechaza al darse de alta, con un mensaje en cristiano.
+- [ ] Ningún camino del programa puede escribir un `slug` vacío en `control.db` (la base también lo impide, no solo la pantalla).
+- [ ] Hay una comprobación que **intenta** dar de alta `!!!` y demuestra que no entra — probada en rojo.
+
+## TAREA — Un gate no puede crear una base de datos de negocio por accidente
+
+- **id:** gates-no-crean-bases-fantasma
+- **estado:** pendiente
+- **origen:** Censo del negocio `null` (Ibrahin, 4 sep 2026). **Registrada, NO arreglada.**
+
+**De dónde sale, con fecha y hora.** El fichero `data/tenants/null.db` nació el **3 sep 2026 a las 07:48:09**, dentro de un barrido completo lanzado a las 07:44. Lo creó **`scripts/gate-registro-alta.mjs`**: el alta que ese gate estaba probando **falló**, así que en la línea 113 `createdSlug = t?.slug || null` se quedó en `null`… y **el gate siguió adelante igualmente**, construyendo en la línea 132 `data/tenants/null.db` y abriéndolo en la 133 con `new Database(abs)` **sin `fileMustExist`**. SQLite **crea** el fichero que no existe, y las migraciones lo llenaron con el esqueleto de un negocio (132 tablas y la semilla `admin@bamburu.com`).
+
+Y su propia limpieza no lo recogió: `cleanup(slug)` empieza con `if (!slug) return;`.
+
+**Es el MISMO fallo que ya se arregló una vez** en `core/control-db.js` (la búsqueda por email creaba una `.db` fantasma por cada tenant descuadrado, y se cortó con `fileMustExist: true`). Vive todavía en **una veintena de guiones** que hacen `new Database(\`data/tenants/${slug}.db\`)` sin ese cerrojo.
+
+**Criterios de aceptación**
+
+- [ ] Ningún guion de `scripts/` puede **crear** una base de datos de negocio: abrir una que no existe falla, no la inventa.
+- [ ] Un gate cuyo montaje falle **se para y lo dice**, en vez de seguir con un `slug` nulo.
+- [ ] Hay un centinela que falla si aparece un `new Database` sobre `data/tenants/` sin `fileMustExist`, probado en rojo.
