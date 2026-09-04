@@ -10257,7 +10257,7 @@ Hoy los datos son de prueba y no expone nada real. **Con un cliente dentro, expo
 ## ✅ TAREA — La prueba de restauración no levanta el sistema, solo abre las bases
 
 - **id:** restauracion-prueba-el-sistema-entero
-- **estado:** ✅ HECHA — 4 sep 2026 · commit `PENDIENTE-HASH`
+- **estado:** ✅ HECHA — 4 sep 2026 · commit `54ca748`
 - **origen:** Auditoría de Codex, 25 ago 2026 · AUD-020 — a medias el 2 sep
 
 La prueba de hoy es **mejor de lo que Codex vio**: descarga la copia, la compara byte a byte y comprueba que las bases abren. Lo que sigue sin probarse es **levantar el sistema completo** desde cero: el entorno, los certificados y el servicio arrancando.
