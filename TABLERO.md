@@ -13450,7 +13450,7 @@ Y su propia limpieza no lo recogió: `cleanup(slug)` empieza con `if (!slug) ret
 ## TAREA — Migrar el ERP para quitarle el `unsafe-inline`
 
 - **id:** csp-erp-migrar-handlers
-- **estado:** pendiente · **EN CURSO — 5 sesiones: 4 sep (`fca9551`) y 5 sep (`552bccc`, `ee1453e`, `904ceae`, `fffdbfc`)**
+- **estado:** pendiente · **EN CURSO — 6 sesiones: 4 sep (`fca9551`), 5 sep (`552bccc`, `ee1453e`, `904ceae`, `fffdbfc`) y 4 sep (`e85e076`, `0052e98`, `4b70ece`, `223c51b`)**
 - **origen:** Desgajada de `csp-unsafe-inline` el 4 sep 2026, al medir el tamaño real. Es la pieza que el código llama **C4b-4**.
 
 **Medido el 4 sep 2026, no estimado:** `modules/erp` tiene **546 handlers de atributo** y **88
@@ -13735,3 +13735,158 @@ y desbloquean ~50 fichas de golpe). Después la cola larga: `/admin/clients` (85
 `/admin/avisos` (13), `/admin/mostrador` (12).
 
 **`LEGADO` sigue en pie.**
+
+---
+
+### 📋 6ª SESIÓN — 4 sep 2026 · LAS TRES PLANTILLAS, LA COLA ENTERA… Y EL ARMAZÓN OTRA VEZ
+
+**Cerrada la cola que quedaba, entera.** Nueve pantallas más, cada una migrada antes de endurecerse
+y comprobada **pulsando**: las tres plantillas de documento (`quotes.js` 12, `purchase-orders.js` 11,
+`purchases.js` 12) con sus formas completas —ficha, alta y edición—, y después
+`/admin/citas/servicios`, `/admin/mostrador`, `/admin/avisos`, `/admin/crm`, `/admin/crm/cola` y
+`/admin/citas`. **48 superficies estrictas.**
+
+**⚠️ EL HALLAZGO DE LA SESIÓN, Y ES GRAVE: hay código que NINGÚN censo podía ver.** Tres piezas
+compartidas pintan sus handlers **desde JavaScript**, así que **no salen en el HTML servido** y el
+censo las daba por limpias:
+
+- **`views/line-search.js`** — el buscador de catálogo de las líneas. `/admin/pedidos/new` y
+  `/admin/albaranes/new` se endurecieron el 5 sep con esa medida, y **su buscador llevaba MUDO en
+  producción desde entonces**, sin error a la vista. Defecto vivo, arreglado hoy.
+- **`window.rowMenu`** — el menú «···» de una fila, que solo pinta sus botones **al abrirlo**.
+- **`window.emptyState` / `emptyRow`** — el botón del estado vacío.
+
+Los dos últimos **no habían roto nada** (ninguna pantalla endurecida los usaba), pero la primera que
+se hubiera endurecido con un menú de fila se habría quedado muda. Los tres tienen ahora una forma sin
+atributo: `line-search` por delegación, y `rowMenu`/`emptyState` con la clave **`act`**, que pinta un
+NOMBRE en vez de código — el armazón cierra el menú y dispara `rowmenu:act`, y cada pantalla despacha
+lo suyo. **La clave `onclick` sigue intacta**, así que las diez pantallas en legado que la usan no
+cambian.
+
+> **La regla que sale de aquí, y manda desde hoy:** el censo mide el HTML **servido**; hay handlers
+> que solo existen **en el DOM montado**. Una pantalla no está medida hasta que un navegador de
+> verdad la abre, **pulsa y teclea**. Por eso `gate-csp-estricta` teclea en el buscador de línea y
+> abre los menús.
+
+**Dos lecciones más, ya escritas dentro del gate:**
+
+- **Un gate que REVIENTA no dice «ha fallado», dice «no he podido probarlo».** Un rojo provocado
+  tumbó la sección del mostrador con una traza y **ni un veredicto**. Todos sus pasos van ahora
+  con `?.`.
+- **Contar cuántas cosas funcionan tolera que UNA esté muerta.** La aserción de `/admin/avisos`
+  decía «al menos dos ventanas abren» y el rojo provocado **siguió verde**. Ahora exige que
+  **ninguno** de los botones presentes se quede mudo.
+
+**El gate siembra su propia oportunidad de CRM** (con marca, borrada en el `finally`): las tres del
+negocio de desarrollo están archivadas o perdidas, el tablero salía vacío y **un gate que no puede
+pulsar no verifica nada**.
+
+`gate-csp-estricta` pasa de 65 a **141 OK / 0 fallos**, con **cinco rojos provocados**, cada uno
+sobre el elemento exacto. `gate-csp-superficies-limpias` amplía a las pantallas de alta y edición:
+**160 endurecidas vigiladas**. `gate-menu-navegacion` **157 OK** (su selector buscaba un botón por su
+`onclick`; ahora lo busca por lo que ES).
+
+| | handlers | bloques | limpias | endurecidas |
+|---|---|---|---|---|
+| tras la 5ª | 580 | 49 | 240 | 236 |
+| **tras la 6ª** | **332** | **43** | **289** | **289** |
+
+### ▶️ QUÉ QUEDA
+
+**50 pantallas con algo que migrar**, y **CERO limpias sin endurecer**: todo lo que está limpio, está
+endurecido.
+
+**Lo siguiente, de menos a más** (handlers · bloques sin nonce):
+
+- **De 1 a 2:** `/admin/clients/1` (0·1), `/admin/purchase-order-receipts/1`, `/admin/recurrentes`,
+  `/admin/stock-transfers/{1,2,3}`, `/admin/citas/ajustes`, `/admin/cobros`, `/admin/conciliacion`,
+  `/admin/invoices/{21,27,29}`, `/admin/pagos`, `/admin/propuestas`, `/admin/purchases` (la lista),
+  `/admin/settings/situacion-fiscal`, `/admin/tags`, `/admin/activity`, `/admin/citas/cola`,
+  las siete de `/admin/contabilidad/*`, `/admin/inventory`, `/admin/supplier-invoices/5`.
+- **De 3 a 6:** `/admin/contabilidad/bienes`, `/admin/facturar-horas`, `/admin/invoices/new`,
+  `/admin/perfil`, `/admin/stock-transfers/new`, `/admin/citas/publica`, `/admin/invoices`,
+  `/admin/settings`, `/admin/supplier-invoices`, `/admin/categories`, `/admin/clients/groups`,
+  `/admin/purchases/capture`, `/admin/suppliers`, `/admin/tiempo`, `/admin/users`,
+  `/admin/warehouses`.
+- **De 8 a 10:** `/admin/citas/horarios` (8), `/admin/supplier-invoices/new` (9),
+  `/admin/settings/plantillas` (10).
+- **La cola larga, y ya es la última:** `/admin/proyectos` (43), `/admin/products` (70),
+  `/admin/clients` (83).
+
+**Dos apuntes para quien siga:**
+
+- **`/admin/purchases` (la lista)** tiene 2 handlers que **no son suyos**: vienen del componente
+  compartido de listados (`routes/listados.js`), que los pinta en varias listas. Migrarlo desbloquea
+  a todas de golpe.
+- **`/admin/cobros`, `/admin/pagos`, `/admin/inventory`, `/admin/invoices`, `/admin/products`…**
+  ya no arrastran las ventanas de cobro/pago/stock: **esas tres se migraron esta sesión**. Lo que les
+  queda es suyo.
+
+**`LEGADO` sigue en pie.**
+
+
+## TAREA — El buscador de catálogo de `/admin/albaranes/new` no ofrece nada
+
+- **id:** albaranes-alta-sin-sym
+- **estado:** pendiente
+- **origen:** Encontrado el 4 sep 2026 haciendo `csp-erp-migrar-handlers`. **No es de esa ficha ni lo causó.**
+
+**Qué pasa.** En `/admin/albaranes/new`, escribir en el buscador de línea **no ofrece ninguna
+sugerencia del catálogo**. El navegador lanza `SYM is not defined` y la lista nunca se pinta.
+
+**Por qué.** `views/line-search.js` documenta lo que exige a la página que lo use: *«debe tener en
+scope `catalog`, `SYM`, `escHtml` y `applyLinePick`»*. **`albaranes.js` no define `SYM`** — es el
+único de los siete ficheros que lo usan que no lo hace (`pedidos`, `quotes`, `invoices`,
+`purchase-orders` y `stock-transfers` sí; `products.js` tampoco, y habría que mirarlo).
+
+**Es ANTERIOR a la CSP y no tiene que ver con ella.** El 4 sep se comprobó de las dos maneras: con
+el handler de atributo (como estaba) y con el oyente delegado (como está ahora), y falla igual. Se
+deja registrado sin tocar porque **arreglarlo no es «lo que pide la ficha» de CSP**, y tocar código
+vecino está prohibido.
+
+**Criterios de aceptación**
+
+- [ ] Escribir en el buscador de línea de `/admin/albaranes/new` ofrece productos del catálogo.
+- [ ] Se comprueba también `/admin/products`, que tampoco define `SYM`.
+- [ ] Hay un gate que **teclea** en ese buscador y exige sugerencias, probado en rojo.
+
+
+## TAREA — Dos gates de citas llevan rojos anteriores
+
+- **id:** gates-citas-rojos-previos
+- **estado:** pendiente
+- **origen:** Medido el 4 sep 2026 durante `csp-erp-migrar-handlers`.
+
+**`gate-citas-mes`: 128 OK · 2 fallos** — «el mes que se está mirando viene marcado — Sep» y «a
+360 px no hay scroll horizontal».
+**`gate-citas-pantalla`: 39 OK · 3 fallos** — los tres de «atender con cobro» (`factura undefined`,
+el cuadre de 20 € + 21 %, y la factura anulada al anular la cita).
+
+**No son de la migración de handlers, y está medido, no supuesto:** se corrieron los dos **con y sin**
+los cambios de esa sesión (`git stash`), y dan **exactamente lo mismo**. Se dejan sin tocar.
+
+**Criterios de aceptación**
+
+- [ ] Se averigua desde cuándo están rojos y por qué.
+- [ ] O se arreglan, o el gate dice en su cabecera qué mide de menos y por qué se acepta.
+
+
+## TAREA — Un cliente del negocio de desarrollo se llama `<img src=x onerror=…>`
+
+- **id:** limpiar-cliente-con-carga
+- **estado:** pendiente
+- **origen:** Visto el 4 sep 2026 en `csp-erp-migrar-handlers`, al mirar el DOM de `/admin/quotes/new`.
+
+**Qué es.** Un cliente del negocio de desarrollo tiene por nombre una carga de XSS, resto de algún
+gate viejo. **Sale ESCAPADO** (`&lt;img …`), o sea que la defensa funciona y no ejecuta nada: es
+texto, no un handler. Pero ensucia los desplegables de cliente y hace que cualquier medida por
+expresión regular sobre el HTML dé un falso positivo — pasó justo eso.
+
+**No se toca sin permiso.** `scripts/limpiar-restos-de-gates.mjs` cubre `products` y `categories`,
+que Ibrahin autorizó una por una. **`clients` no está autorizada**, y borrar un cliente arrastra sus
+documentos.
+
+**Criterios de aceptación**
+
+- [ ] Se cuenta cuántos clientes con carga hay y **qué documentos cuelgan de cada uno**, antes de proponer nada.
+- [ ] Con el visto bueno de Ibrahin: simulacro primero, copia previa, y **archivar** en vez de borrar si tienen documentos.
