@@ -10461,6 +10461,60 @@ Dos cosas de la misma familia. La primera: el tipo de un fichero subido se decid
 > salía del **nombre que escribe el cliente**: bastaba llamar al fichero `datos.php` para dejar un
 > `.php` en la carpeta de adjuntos.
 
+## ✅ TAREA — Fuera todo el bot antiguo
+
+- **id:** bot-antiguo-borrado
+- **estado:** ✅ HECHA — 4 sep 2026 · commit `0f9623d`
+- **origen:** Encargo de Ibrahin, 4 sep 2026: «quita todo lo que tenía que ver con el antiguo bot, además quedan botones de acciones viejas»
+
+**Los botones no estaban en el código: estaban en su móvil.** El vigía los mandó con `is_persistent: true`, así que seguían pegados al chat aunque no respondieran a nada desde el 3 de septiembre. Se retiraron con un `remove_keyboard` y un mensaje que explica por qué.
+
+**Y el código se BORRÓ, no se desactivó** — 2.055 líneas fuera, 276 dentro:
+
+| Qué | Antes | Ahora |
+|---|---|---|
+| `orchestrator/vigia/escucha.js` | 583 líneas | **no existe** |
+| `orchestrator/vigia/bot-retirado.js` (el cerrojo) | 43 líneas | **no existe** |
+| `orchestrator/vigia/ordenes.js` | 286 líneas | **57** (solo `ORDENES`, que usa el ciclo) |
+| `core/telegram-transporte.js` | 230 líneas | **145**, y solo exporta `enviar` |
+| `orq.js` | `escuchar`, `probar-telegram`, `conectar-telegram` | **ninguno** |
+| configuración | `vigia.telegram` · `vigia.escucha` · `vigia.teclado` | **ninguno** |
+| `orquestador-vigia.service` | instalada en `/etc` y en el repo | **borrada de los dos** |
+
+**`parte.js` ya no entrega: anota.** La fábrica no tiene canal de salida, pero el parte se sigue escribiendo en disco — es el registro de lo que hizo, y perderlo por no tener a quién mandarlo sería tirar información.
+
+> ### 🧹 QUÉ SE HIZO, Y POR QUÉ BORRAR EN VEZ DE APAGAR
+>
+> **Un cerrojo se quita con dos teclas.** Hasta hoy la fábrica conservaba todo su código de Telegram
+> y lo que le impedía hablar era un cerrojo al principio de cada camino. El 3 de septiembre se midió
+> lo que cuesta confiar en eso: **el vigía llevaba 30 horas escuchando y EJECUTANDO órdenes** con la
+> fábrica parada. Devolverle la voz ahora exige **escribir otra vez todo lo borrado**, y eso ya no
+> es un descuido: es una decisión.
+>
+> **El centinela pasó a medir una propiedad más fuerte.** Antes vigilaba que el cerrojo siguiera
+> puesto; ahora exige que **en `orchestrator/` no quede ni una línea capaz de hablar con Telegram** y
+> que **la tubería no sepa oír**. Autoprueba de 5 averías sembradas, las 5 cazadas. Y de paso cazó un
+> resto real que nadie había visto: `nucleo/secretos.js` seguía listando la credencial del bot.
+>
+> **⚠️ UN FALLO MÍO, Y LA LECCIÓN QUE DEJA.** Al quitar `configurado` del transporte dejé una `e`
+> suelta. **`node --check` la dio por buena** —una `e` sola es una expresión válida— y la tubería
+> **reventaba al importarla**: Bamburu estuvo sin poder avisar y **ningún verde lo dijo**, porque
+> `gate-aviso-copias` corre en seco y no la importa. Lo destapó ejecutar
+> `gate-arranque-modulos`, que sí la carga.
+> **`node --check` comprueba que un fichero se puede leer, no que funcione.** Por eso el censo ahora
+> **importa** la tubería de verdad y comprueba que solo exporta `enviar`; probado en rojo volviendo a
+> meter la `e`.
+>
+> **Probado de verdad:** aviso enviado al móvil **con `orchestrator/` apartada entera del árbol**.
+> Pruebas de la fábrica **197/197** (eran 246: las 49 que faltan probaban el código borrado y se van
+> con él, ninguna silenciada). `gate-arranque-modulos` 39 ✓ · `gate-aviso-copias` 16 ✓ · los dos
+> censos en verde.
+>
+> **Lo que NO se ha tocado, y sigue esperando tu palabra:** `orquestador.service` está **parado pero
+> `enabled`**, con su enlace en `multi-user.target.wants`. **No es del bot** —no puede hablar por él—
+> pero **arrancaría la fábrica sola en el próximo reinicio del servidor**. Se quita con
+> `sudo systemctl disable orquestador`.
+
 ## ✅ TAREA — Que un fallo de las copias AVISE (cabo suelto del 4 sep 2026)
 
 - **id:** aviso-fallo-de-copias
