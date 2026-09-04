@@ -1,3 +1,15 @@
+> ⚠️ **DOCUMENTO RETIRADO EL 4 DE SEPTIEMBRE DE 2026. NO DESCRIBE EL SISTEMA ACTUAL.**
+>
+> Explicaba cómo hablarle a la fábrica por Telegram. **Ese camino ya no existe**: por encargo de
+> Ibrahin se borró todo el código del bot antiguo — `vigia/escucha.js`, el intérprete de órdenes,
+> los botones, el servicio `orquestador-vigia` y los comandos `conectar-telegram` / `probar-telegram`.
+> El bot es **exclusivo de los avisos de Bamburu** y **solo sabe enviar**.
+>
+> Se conserva como historia, que es la costumbre de este repositorio: nada se borra. Si algún día se
+> enciende la fábrica, tendrá **su propio bot** y se escribirá un manual nuevo.
+
+---
+
 # Encender los avisos de Telegram
 
 El orquestador te manda un parte cada 3 horas contando qué ha hecho. Para eso necesita dos

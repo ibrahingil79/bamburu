@@ -114,9 +114,22 @@ nuevo para la fábrica: está parada, y se creará el día que se encienda, con 
   `BAMBURU_TELEGRAM_CHAT_ID`. `/etc/orquestador.env` quedó **vacío a propósito**.
 - **Una sola puerta:** `core/telegram-servidor.js`. Estampa `BAMBURU — <tema>` en cada aviso y
   **sin `tema` no manda nada**. Desde bash: `printf '%s' "…" | node scripts/avisar-telegram.mjs <tema>`.
-- **El cerrojo de la fábrica:** `orchestrator/vigia/bot-retirado.js`, llamado desde `vigia/parte.js`,
-  `vigia/escucha.js` y `orq.js`. `orquestador-vigia.service` está **parado y deshabilitado**.
-- **Lo vigila `node scripts/censo-bot-de-bamburu.mjs`**, en `lint` + `infra` + RAPIDO, con autoprueba.
+- ~~**El cerrojo de la fábrica:** `orchestrator/vigia/bot-retirado.js`, llamado desde `vigia/parte.js`,
+  `vigia/escucha.js` y `orq.js`. `orquestador-vigia.service` está **parado y deshabilitado**.~~
+  **⚙️ CORREGIDO EL 4 SEP 2026 — YA NO HAY CERROJO PORQUE YA NO HAY MANOS.** Encargo de Ibrahin:
+  «quita todo lo que tenía que ver con el antiguo bot». **Se BORRÓ, no se desactivó:**
+  `vigia/escucha.js` entero (583 líneas), el intérprete de órdenes y su vocabulario, el teclado de
+  botones, `recibir`/`responderA`/`marcaTeclado` de la tubería, los comandos `escuchar`,
+  `probar-telegram` y `conectar-telegram` de `orq.js`, el bloque `vigia.telegram`/`escucha`/`teclado`
+  de la configuración, la unit `orquestador-vigia.service` (de `/etc` y del repo) y el propio
+  cerrojo, que ya no cerraba nada. **El parte de la fábrica ya no se entrega: se anota en disco.**
+  **El motivo de borrar en vez de desactivar:** un cerrojo se quita con dos teclas; devolverle la voz
+  a la fábrica exige ahora escribirlo todo otra vez, y eso ya no es un descuido, es una decisión.
+- **La tubería SOLO SABE ENVIAR.** `core/telegram-transporte.js` exporta `enviar` y nada más:
+  no puede oír aunque alguien quisiera. 230 líneas → 145.
+- **Lo vigila `node scripts/censo-bot-de-bamburu.mjs`**, en `lint` + `infra` + RAPIDO, con autoprueba
+  de 5 averías sembradas. Desde el 4 sep mide una propiedad **más fuerte**: que en `orchestrator/`
+  no quede ni una línea capaz de hablar con Telegram, y que la tubería no sepa escuchar.
 
 ## Lo PRIMERO en cada sesión
 

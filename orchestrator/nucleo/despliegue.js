@@ -20,10 +20,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 
-/** Qué fuentes mira cada servicio. Lo que no esté aquí no se vigila, y se dice. */
+/** Qué fuentes mira cada servicio. Lo que no esté aquí no se vigila, y se dice.
+ *  ⚙️ 4 SEP 2026: aquí estaba también `orquestador-vigia`. Ese servicio ya no existe — se borró
+ *  con el resto del bot antiguo, unit incluida. Vigilar un servicio que no está solo produce
+ *  ruido: diría «no se puede saber» todas las veces, para siempre. */
 export const VIGILADOS = Object.freeze({
   'orquestador': ['orchestrator'],
-  'orquestador-vigia': ['orchestrator'],
   'bamburu': ['index.js', 'core', 'modules'],
 });
 

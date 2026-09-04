@@ -14,14 +14,18 @@ test('tapa un token por su FORMA, aunque no lo conozca', () => {
   assert.equal(tapar(`error con ${TOKEN} vaya`, {}), 'error con «token tapado» vaya');
 });
 
+// ⚙️ 4 SEP 2026 — esta prueba usaba `ORQUESTADOR_TELEGRAM_TOKEN`, que ya no existe: la fábrica se
+// quedó sin credenciales de bot al borrarse todo lo del bot antiguo. Se cambia por una que SÍ está
+// en la lista. Lo que se mide es lo mismo: tapar por VALOR, aunque el secreto no tenga forma de
+// token. Dejarla apuntando a una variable retirada habría sido una prueba en verde sobre nada.
 test('tapa un secreto por su VALOR, aunque no tenga forma de token', () => {
-  const t = tapar('la clave es abc12345xyz', { ORQUESTADOR_TELEGRAM_TOKEN: 'abc12345xyz' });
-  assert.match(t, /«ORQUESTADOR_TELEGRAM_TOKEN tapado»/);
+  const t = tapar('la clave es abc12345xyz', { ANTHROPIC_API_KEY: 'abc12345xyz' });
+  assert.match(t, /«ANTHROPIC_API_KEY tapado»/);
   assert.ok(!t.includes('abc12345xyz'));
 });
 
 test('no tapa valores cortos: taparlos destrozaría cualquier texto', () => {
-  assert.equal(tapar('dice si', { ORQUESTADOR_TELEGRAM_TOKEN: 'si' }), 'dice si');
+  assert.equal(tapar('dice si', { ANTHROPIC_API_KEY: 'si' }), 'dice si');
 });
 
 test('la pista deja ver que está puesto, sin enseñarlo', () => {

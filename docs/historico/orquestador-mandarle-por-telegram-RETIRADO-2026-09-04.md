@@ -1,3 +1,15 @@
+> ⚠️ **DOCUMENTO RETIRADO EL 4 DE SEPTIEMBRE DE 2026. NO DESCRIBE EL SISTEMA ACTUAL.**
+>
+> Explicaba cómo hablarle a la fábrica por Telegram. **Ese camino ya no existe**: por encargo de
+> Ibrahin se borró todo el código del bot antiguo — `vigia/escucha.js`, el intérprete de órdenes,
+> los botones, el servicio `orquestador-vigia` y los comandos `conectar-telegram` / `probar-telegram`.
+> El bot es **exclusivo de los avisos de Bamburu** y **solo sabe enviar**.
+>
+> Se conserva como historia, que es la costumbre de este repositorio: nada se borra. Si algún día se
+> enciende la fábrica, tendrá **su propio bot** y se escribirá un manual nuevo.
+
+---
+
 # Mandarle al orquestador desde el móvil
 
 Hasta ahora el bot solo hablaba: te mandaba el parte cada 3 horas y tú no podías contestar.

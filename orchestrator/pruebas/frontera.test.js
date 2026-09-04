@@ -567,33 +567,6 @@ test('BLOQUE 4 · una DECISIÓN DE IBRAHIN sí sube, con su pregunta y su motivo
 // solo la SELLA (el journal, el historial, la marca de un parte guardado) y ésos no deciden nada.
 // Los que DECIDEN quedaban en dos sitios sin reloj inyectable, y el segundo es serio.
 
-test('BLOQUE 5.1 · una confirmación CADUCA, y eso se prueba adelantando el reloj', async () => {
-  // LO QUE PROTEGE ESTO. `parar-ya`, `saltar` y `desapartar` son las tres órdenes que pueden
-  // romper algo, y por eso piden un «sí» antes de ejecutarse. Ese «sí» vale dos minutos.
-  // **No había NI UNA prueba de `confirmacionViva` ni de `confirmacionMs`** —cero coincidencias en
-  // toda la suite— porque `Date.now()` se llamaba por dentro y no se podía adelantar el reloj.
-  // Si la caducidad se rompiera, un «sí» de hace tres horas ejecutaría una parada de emergencia.
-  const { Escucha } = await import('../vigia/escucha.js');
-  const raiz = repoTemporal();
-  try {
-    const cfg = configDe(raiz, { vigia: { escucha: { confirmacionMs: 120000 } } });
-    let ahora = 1_000_000;
-    const e = new Escucha({ config: cfg, almacen: null, vigilante: null,
-                            logger: (await import('./ayuda.js')).registroMudo(),
-                            entorno: {}, reloj: () => ahora });
-
-    e.pendienteDeConfirmar = { orden: 'parar-ya', id: null, hasta: ahora + cfg.vigia.escucha.confirmacionMs };
-    assert.ok(e.confirmacionViva(), 'recién pedida, vale');
-
-    ahora += 119000;                       // 1 min 59 s después
-    assert.ok(e.confirmacionViva(), 'dentro del plazo sigue valiendo');
-
-    ahora += 2000;                         // 2 min 1 s
-    assert.equal(e.confirmacionViva(), null, 'pasado el plazo, el «sí» ya no vale');
-    assert.equal(e.pendienteDeConfirmar, null, 'y se borra: no puede resucitar más tarde');
-  } finally { limpiar(raiz); }
-});
-
 test('BLOQUE 5.1 · el parte sale cuando toca, y eso se prueba sin esperar tres horas', async () => {
   // «El parte deja de salir» es una avería que no se nota: no rompe nada, solo deja a Ibrahin sin
   // noticias. Sin reloj inyectable habría pasado en verde indefinidamente — para verla había que
@@ -925,43 +898,6 @@ Su cuerpo entero, sin recortar.
 Cuerpo.
 `;
 
-test('PREGUNTAS · sin nada esperando, lo dice claro', async () => {
-  const { contestarPreguntas } = await import('../vigia/escucha.js');
-  const t = contestarPreguntas({ decisiones: [], firmas: [] });
-  assert.match(t, /Nada espera por ti/);
-});
-
-test('PREGUNTAS · los tres grupos, numerados y sin jerga', async () => {
-  const { contestarPreguntas } = await import('../vigia/escucha.js');
-  const t = contestarPreguntas({
-    decisiones: [{ id: 'papelera-con-recuperacion', titulo: 'Papelera', pregunta: '¿Cuánto se guarda lo borrado?' }],
-    firmas: [
-      { id: 'anclar', titulo: 'Anclar las facturas', promesa: 'Cada factura queda sellada.', estado: 'esperando' },
-      { id: 'pruebas', titulo: 'Modo de pruebas', estado: 'en-discusion', desde: new Date(Date.now() - 3600000).toISOString() },
-    ],
-  });
-  assert.match(t, /Decisiones que tienen una tarea parada \(1\)/);
-  assert.match(t, /esperando tu visto bueno \(1\)/);
-  assert.match(t, /Conversaciones que dejaste abiertas \(1\)/);
-  assert.match(t, /<b>1\.<\/b> Papelera/, 'numeradas: es la única forma de contestar desde un móvil');
-
-  // NADA DE JERGA: lo lee de pie y sin saber programar.
-  assert.doesNotMatch(t, /papelera-con-recuperacion|\.js|\.md|commit|rama tarea\//,
-    'ni identificadores técnicos, ni ficheros, ni ramas');
-});
-
-test('PREGUNTAS · una conversación abierta SIGUE saliendo hasta que se resuelva', async () => {
-  const { contestarPreguntas } = await import('../vigia/escucha.js');
-  const enDiscusion = [{ id: 'x', titulo: 'Modo de pruebas', estado: 'en-discusion', desde: new Date().toISOString() }];
-  for (const vuelta of [1, 2, 3]) {
-    const t = contestarPreguntas({ decisiones: [], firmas: enDiscusion });
-    assert.match(t, /Conversaciones que dejaste abiertas/, `vuelta ${vuelta}: tiene que seguir ahí`);
-    assert.doesNotMatch(t, /Nada espera por ti/);
-  }
-  // Y desaparece cuando deja de estar pendiente, no antes.
-  assert.match(contestarPreguntas({ decisiones: [], firmas: [] }), /Nada espera por ti/);
-});
-
 test('RESPONDER · la respuesta se guarda LITERAL y la tarea vuelve a la cola', async () => {
   const { guardarRespuesta } = await import('../tablero/respuestas.js');
   const { decisionesEsperando, tareasPendientes } = await import('../reader.js');
@@ -989,31 +925,6 @@ test('RESPONDER · la respuesta se guarda LITERAL y la tarea vuelve a la cola', 
   } finally { limpiar(raiz); }
 });
 
-test('RESPONDER · lo que no cabe en una línea se queda esperando, y el bot NO discute', async () => {
-  const { interpretar } = await import('../vigia/ordenes.js');
-  // Se reconoce como respuesta, con su número…
-  const o = interpretar('1 lo tengo que pensar');
-  assert.equal(o.orden, 'RESPONDER');
-  assert.equal(o.numero, 1);
-  // …y el vigía la deja estar. La conversación de producto no es cosa suya.
-});
-
-test('«para» dejó de parar la fábrica: es la preposición más común del castellano', async () => {
-  // Salió al montar las respuestas por Telegram, y ahí deja de ser una curiosidad: desde hoy
-  // Ibrahin contesta EN PROSA desde el móvil, y «que se le obligue para poder facturar» habría
-  // parado el orquestador sin que él se enterara.
-  const { interpretar } = await import('../vigia/ordenes.js');
-  for (const f of ['esto es para el cliente', '2fa obligatoria para el dueño',
-                   'una papelera para recuperar', 'que se le obligue para poder facturar']) {
-    assert.notEqual(interpretar(f).orden, 'PARAR', `«${f}» NO puede parar la fábrica`);
-  }
-  // Y las órdenes de verdad siguen funcionando.
-  for (const f of ['para', 'parar', 'párate', 'pausa', 'detente', 'no cojas más tareas']) {
-    assert.equal(interpretar(f).orden, 'PARAR', `«${f}» sí tiene que parar`);
-  }
-  assert.equal(interpretar('para ya').orden, 'PARAR_YA');
-});
-
 // ════════════════════════════════════════════════════════════════════════════════════════════
 //  «VERIFIQUÉ EL CÓDIGO, NO EL DESPLIEGUE»
 // ════════════════════════════════════════════════════════════════════════════════════════════
@@ -1032,9 +943,9 @@ test('DESPLIEGUE · un proceso que arrancó ANTES del último cambio sale como v
   // signifique algo. Lo que se afirma no es «hay un desfase» —eso depende del momento— sino que
   // **la pregunta se puede contestar**, que es justo lo que no se podía el 1 sep.
   const ss = estadoDelDespliegue('/home/ubuntu/bamburu');
-  assert.ok(ss.length >= 2, 'tiene que vigilar al menos el orquestador y su vigía');
+  assert.ok(ss.length >= 2, 'tiene que vigilar al menos el orquestador y Bamburu');
   for (const s of ss) {
-    assert.ok(['orquestador', 'orquestador-vigia', 'bamburu'].includes(s.unidad));
+    assert.ok(['orquestador', 'bamburu'].includes(s.unidad));
     assert.ok(s.desfasado === true || s.desfasado === false || s.desfasado === null,
       'siempre contesta: sí, no, o «no se puede saber» — nunca se lo calla');
     if (s.desfasado) {
@@ -1057,16 +968,6 @@ test('DESPLIEGUE · se mide por la fecha del FICHERO, no por la del commit', asy
     assert.ok(b, 'el producto también se vigila');
     if (!b.activo) assert.equal(b.desfasado, null, 'parado = no se sabe, no «al día»');
   } finally { limpiar(raiz); }
-});
-
-test('DESPLIEGUE · el bot avisa cuando no te entiende Y además es viejo', async () => {
-  // El punto exacto donde dolió: la respuesta de «no te he entendido». Si además lleva código
-  // viejo, esa respuesta es engañosa — puede que la orden exista y él sea de antes.
-  const { ayuda } = await import('../vigia/ordenes.js');
-  assert.doesNotMatch(ayuda(), /código anterior/, 'la ayuda normal no habla de despliegues');
-  // Y la ayuda menciona lo nuevo, que es lo que Ibrahin va a buscar.
-  assert.match(ayuda(), /preguntas/i);
-  assert.match(ayuda(), /qué me falta/i);
 });
 
 // ── utilidades ───────────────────────────────────────────────────────────────────────────────

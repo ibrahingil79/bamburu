@@ -1,9 +1,12 @@
 // entorno.js — Lee /etc/orquestador.env cuando el comando se lanza a mano.
 //
-// Bajo systemd lo carga la propia unit (EnvironmentFile). Pero Ibrahin lanza
-// «probar-telegram» desde su terminal, y ahí no hay systemd que lo cargue: si esto no
-// existiera, la comprobación diría «sin configurar» con el fichero relleno, que es la peor
-// respuesta posible — la que le haría dudar de lo que acaba de escribir bien.
+// Bajo systemd lo carga la propia unit (EnvironmentFile). Esto es para cuando un comando se lanza
+// A MANO desde la terminal, donde no hay systemd que lo cargue: sin esto, el comando diría «sin
+// configurar» con el fichero relleno, que es la peor respuesta posible — la que hace dudar de lo
+// que acabas de escribir bien.
+//
+// ⚙️ 4 SEP 2026: aquí ponía «Ibrahin lanza probar-telegram desde su terminal». Ese comando ya no
+// existe: se borró con el resto del bot antiguo. El fichero sigue haciendo falta para lo demás.
 import fs from 'node:fs';
 
 export const FICHERO_SECRETOS = process.env.ORQUESTADOR_ENV_FILE || '/etc/orquestador.env';

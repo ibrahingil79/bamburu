@@ -5,7 +5,6 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { redactar, redactarApartada, entregar } from '../vigia/parte.js';
-import { configurado, queFalta } from '../../core/telegram-transporte.js';
 import { estadoInicial } from '../nucleo/almacen.js';
 import { leerLineas } from '../nucleo/almacen.js';
 
@@ -39,11 +38,6 @@ test('los partes se acumulan mientras no se pueden entregar', async () => {
   assert.equal(cola[0].texto, 'parte 1', 'se conserva el orden');
 });
 
-test('queFalta dice exactamente qué hay que poner para encenderlo', () => {
-  assert.deepEqual(queFalta(CONFIG, {}), ['TG_TOKEN', 'TG_CHAT']);
-  assert.deepEqual(queFalta(CONFIG, { TG_TOKEN: 'x' }), ['TG_CHAT']);
-  assert.equal(configurado(CONFIG, { TG_TOKEN: 'x', TG_CHAT: 'y' }), true);
-});
 
 test('el parte dice lo que tiene que decir, en español y sin jerga', () => {
   const estado = { ...estadoInicial(),

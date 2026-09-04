@@ -4,9 +4,6 @@
 // caído o sin configurar el ciclo NO se detiene. Así que el parte se escribe siempre, se
 // intenta mandar, y si no sale se guarda para el próximo intento. Nunca se pierde.
 import { leerLineas, escribirAtomico } from '../nucleo/almacen.js';
-import { revisarTeclado } from './ordenes.js';
-import { enviar, configurado, queFalta } from '../../core/telegram-transporte.js';
-import { botRetirado } from './bot-retirado.js';   // 3 sep 2026: el bot es exclusivo de Bamburu
 import { alcanzaParaCiclo } from '../nucleo/maquina.js';
 
 const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -322,50 +319,29 @@ export function redactarAveria({ motivo, nombres = [], pendientes = 0 }) {
  * Entrega con cola. Se intenta mandar lo pendiente primero (en orden) y luego lo nuevo.
  * Nunca lanza. Devuelve qué pasó, para que el ciclo lo registre y siga.
  */
-export async function entregar({ texto, config, entorno = process.env, logger }) {
+// ⚙️ 4 SEP 2026 — ESTO YA NO ENTREGA: ANOTA. Encargo de Ibrahin, «quita todo lo que tenía que ver
+// con el antiguo bot». La fábrica no tiene canal de salida: el bot de Telegram es exclusivo de los
+// avisos de Bamburu desde el 3 de septiembre. Aquí había una cola de envío con reintentos, teclado
+// y manejo de errores de Telegram; todo eso se ha borrado.
+//
+// El parte SIGUE ESCRIBIÉNDOSE, y a propósito: es el registro de lo que hizo la fábrica, y perderlo
+// sería tirar información por no tener a quién mandarla. Se acumula en el fichero de partes
+// pendientes, que es donde ya se guardaba cuando el bot no estaba configurado.
+//
+// Devuelve `ok:false` porque nadie lo ha recibido, y `guardado:true` porque no se ha perdido. El día
+// que la fábrica tenga bot propio, aquí se vuelve — con SUS credenciales.
+export async function entregar({ texto, config, logger }) {
   const ruta = config.rutasAbs.partesPendientes;
   const pendientes = leerLineas(ruta);
-
-  if (!configurado(config, entorno)) {
-    guardar(ruta, pendientes, { texto, cuando: new Date().toISOString() }, config);
-    logger?.aviso(`Vigía sin configurar (falta ${queFalta(config, entorno).join(' y ')}): el parte queda guardado.`);
-    return { ok: false, guardado: true, pendientes: pendientes.length + 1, motivo: 'sin configurar' };
-  }
-
-  const cola = [...pendientes, { texto, cuando: new Date().toISOString() }];
-  const quedan = [];
-  let enviados = 0;
-
-  for (const p of cola) {
-    if (quedan.length) { quedan.push(p); continue; }   // si uno falla, el resto espera: se mantiene el orden
-    // El parte llega cada tres horas y a veces es lo ÚNICO que Ibrahin recibe en todo el día:
-    // si no llevara el teclado, quien solo lea partes no lo vería aparecer nunca. Si la revisión
-    // no pasa va `null`, y `enviar` manda el parte igual.
-    // ⛔ 3 SEP 2026 — EL BOT ES EXCLUSIVO DE BAMBURU (decisión de Ibrahin). La fábrica no manda
-    // partes por él. Se corta AQUÍ y no dentro de `enviar`, que es tubería que Bamburu comparte.
-    const r = botRetirado('parte del orquestador');
-    void enviar; void tecladoDe; void entorno;   // se dejan a la vista: el día que la fábrica tenga bot propio, aquí se vuelve
-    if (r.ok) { enviados++; continue; }
-    if (!r.reintentable) {
-      logger?.error(`Telegram rechaza y no tiene arreglo solo: ${r.motivo}. Descarto ese parte.`);
-      continue;
-    }
-    logger?.aviso(`No pude entregar el parte (${r.motivo}). Se guarda para luego.`);
-    quedan.push(p);
-  }
-
-  escribirAtomico(ruta, quedan.map((p) => JSON.stringify(p)).join('\n') + (quedan.length ? '\n' : ''));
-  return { ok: quedan.length === 0, enviados, pendientes: quedan.length };
+  guardar(ruta, pendientes, { texto, cuando: new Date().toISOString() }, config);
+  logger?.aviso(`Parte anotado (${pendientes.length + 1} en el registro): la fábrica no tiene canal de salida.`);
+  return { ok: false, guardado: true, pendientes: pendientes.length + 1,
+           motivo: 'la fábrica no tiene bot: el parte queda anotado' };
 }
-
 function guardar(ruta, pendientes, nuevo, config) {
-  const max = config.vigia.telegram.maxPendientes;
+  const max = config.vigia?.maxPartesPendientes ?? 50;
   const cola = [...pendientes, nuevo].slice(-max);
   escribirAtomico(ruta, cola.map((p) => JSON.stringify(p)).join('\n') + '\n');
 }
 
-/** El teclado fijo, si pasa la revisión. `null` si no: el parte sale igual. */
-function tecladoDe(config) {
-  const r = revisarTeclado(config.vigia?.teclado);
-  return r.ok ? r.filas : null;
-}
+

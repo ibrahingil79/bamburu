@@ -17,7 +17,7 @@
 | `bamburu-propuestas` | Genera las **Propuestas de DISA** del día (07:45 Europe/Madrid) | abajo |
 | `bamburu-verifactu-cola` | **Red de seguridad** de la cola de envío a la AEAT (cada 2 min) | `docs/verifactu/tarea2-cola-envio-automatico.md` |
 | `orquestador` | **INSTALADA (31 ago 2026).** Construye solo las tareas PENDIENTES del TABLERO, una tras otra, sin que nadie mueva ningún rótulo (arquitecto → programador → revisor) | `orquestador.service` y `orchestrator/LEEME.md` |
-| `orquestador-vigia` | **INSTALADA (31 ago 2026).** Atiende las órdenes que Ibrahin manda por Telegram. Va aparte del ciclo para poder contestar mientras el orquestador está ocupado o caído | `orquestador-vigia.service` y `docs/orquestador/mandarle-por-telegram.md` |
+| ~~`orquestador-vigia`~~ | **RETIRADA EL 4 SEP 2026** (encargo de Ibrahin: fuera todo lo del bot antiguo). Atendía órdenes por Telegram; el código de escucha se borró entero y la unit se quitó de `/etc` y del repo. El manual está archivado en `docs/historico/orquestador-mandarle-por-telegram-RETIRADO-2026-09-04.md` | — |
 
 ## Caducar reservas por Internet (peldaño 7 · pieza 6) — INSTALADO
 

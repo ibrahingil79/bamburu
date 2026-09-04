@@ -27,6 +27,19 @@
 // aquí abajo, SOLO la parte que este transporte de verdad usa: tapar un token de Telegram POR SU
 // FORMA en las respuestas de la API y en los errores de red — que es exactamente lo que las cuatro
 // llamadas a `tapar(...)` de este fichero hacían, ni más ni menos.
+// ⚙️ 4 SEP 2026 — ESTA TUBERÍA YA SOLO SABE HABLAR. Encargo de Ibrahin: «quita todo lo que tenía
+// que ver con el antiguo bot». Aquí vivían además `recibir` (el sondeo de mensajes), `responderA`
+// (contestar a un chat) y `marcaTeclado` (los botones fijos). Eran las manos y los oídos del vigía
+// de la fábrica, retirado el 3 de septiembre.
+//
+// NO SE HAN COMENTADO NI DESACTIVADO: SE HAN BORRADO. Un cerrojo se quita por descuido —bastaba con
+// volver a llamar a `recibir` desde cualquier sitio— y el 3 de septiembre se midió lo que eso cuesta:
+// el vigía llevaba 30 horas escuchando y EJECUTANDO órdenes con la fábrica parada. Lo que no existe
+// no se vuelve a encender sin escribirlo entero otra vez, y eso ya no es un descuido: es una decisión.
+//
+// Queda lo que Bamburu usa de verdad: `enviar`. Sin `teclado`, porque los botones eran el mando de
+// la fábrica y no hay ningún aviso de Bamburu que se pulse.
+
 import https from 'node:https';
 
 // Un token de bot de Telegram tiene esta forma: 8+ dígitos, dos puntos, 20+ caracteres. Bastaba
@@ -36,12 +49,8 @@ import https from 'node:https';
 const FORMA_TOKEN_TELEGRAM = /\b\d{6,}:[A-Za-z0-9_-]{20,}\b/g;
 function tapar(texto) { return String(texto ?? '').replace(FORMA_TOKEN_TELEGRAM, '«token tapado»'); }
 
-export function configurado(config, entorno = process.env) {
-  const t = config.vigia.telegram;
-  return Boolean(entorno[t.tokenEnv] && entorno[t.chatIdEnv]);
-}
-
-export function queFalta(config, entorno = process.env) {
+/** Qué falta por poner para poder avisar. Interno: lo usa `enviar` para explicarse. */
+function queFalta(config, entorno = process.env) {
   const t = config.vigia.telegram;
   const falta = [];
   if (!entorno[t.tokenEnv]) falta.push(t.tokenEnv);
@@ -60,8 +69,6 @@ export function queFalta(config, entorno = process.env) {
  *
  * Y NO se pone `selective`: el chat es de una sola persona y ese campo solo complica.
  */
-export const marcaTeclado = (filas) => ({ keyboard: filas.map((f) => f.map((texto) => ({ text: texto }))),
-                                   resize_keyboard: true, is_persistent: true });
 
 /**
  * @param teclado filas de textos YA COMPROBADAS por `ordenes.revisarTeclado`, o `null`.
@@ -78,7 +85,7 @@ export const marcaTeclado = (filas) => ({ keyboard: filas.map((f) => f.map((text
  * así que quien tiene que rechazar un botón vacío es `revisarTeclado`, y lo hace.
  * @returns { ok, motivo?, reintentable } — nunca lanza: un Telegram caído no puede tumbar nada.
  */
-export function enviar({ texto, config, entorno = process.env, teclado = null, poster = postear }) {
+export function enviar({ texto, config, entorno = process.env, poster = postear }) {
   const t = config.vigia.telegram;
   const token = entorno[t.tokenEnv];
   const chatId = entorno[t.chatIdEnv];
@@ -88,34 +95,22 @@ export function enviar({ texto, config, entorno = process.env, teclado = null, p
       motivo: `sin configurar: falta ${queFalta(config, entorno).join(' y ')}` });
   }
 
-  const base = {
-    chat_id: chatId,
-    text: texto.slice(0, 4096),
-    parse_mode: 'HTML',
-    disable_web_page_preview: true,
-  };
-
-  // ⚙️ SI EL TECLADO NO ENTRA, EL MENSAJE SÍ (1 sep 2026). Lo pide el encargo con estas
-  // palabras: «si el teclado no se puede montar por lo que sea, el bot sigue funcionando
-  // escribiendo. Esto no puede romper nada». Y no es teórico: `reply_markup` va DENTRO del
-  // mismo envío, así que un teclado que Telegram no acepte devuelve 400 y se lleva por delante
-  // **el mensaje entero** — el parte, la respuesta a «cuota», todo. Ante un 400 habiendo mandado
-  // teclado, se reintenta UNA vez sin él: se pierde el adorno, no la conversación.
-  const enviarCuerpo = (conTeclado) => poster({
-    token, cuerpo: JSON.stringify(conTeclado ? { ...base, reply_markup: marcaTeclado(teclado) } : base),
+  // ⚙️ 4 SEP 2026 — AQUÍ HABÍA UN `teclado` Y UN REINTENTO. El teclado eran los botones fijos del
+  // mando de la fábrica, y el reintento existía porque `reply_markup` viaja DENTRO del mismo envío:
+  // un teclado que Telegram rechazara devolvía 400 y se llevaba por delante el mensaje entero. Sin
+  // botones no hay nada que pueda tumbar el mensaje, así que el reintento tampoco hace falta. Un
+  // camino menos por el que un aviso puede no salir.
+  return poster({
+    token,
+    cuerpo: JSON.stringify({
+      chat_id: chatId,
+      text: texto.slice(0, 4096),
+      parse_mode: 'HTML',
+      disable_web_page_preview: true,
+    }),
     timeoutMs: t.timeoutMs,
   });
-
-  const hayTeclado = Array.isArray(teclado) && teclado.length > 0;
-  if (!hayTeclado) return enviarCuerpo(false);
-  return enviarCuerpo(true).then((r) => {
-    if (r.ok || r.codigo !== 400) return r;
-    return enviarCuerpo(false).then((r2) => (r2.ok
-      ? { ...r2, sinTeclado: true, motivo: `el teclado no entró (${r.motivo}); el mensaje salió sin él` }
-      : r2));
-  });
 }
-
 function postear({ token, cuerpo, timeoutMs }) {
   return new Promise((resolve) => {
     const req = https.request({
@@ -144,87 +139,3 @@ function postear({ token, cuerpo, timeoutMs }) {
   });
 }
 
-
-/**
- * Escucha. Long polling: la petición se queda abierta hasta `esperaS` segundos esperando a
- * que llegue algo, en vez de preguntar mil veces por segundo.
- *
- * NO interpreta nada: devuelve los mensajes tal cual llegan, con su chat y su texto en crudo.
- * Quién manda y qué se puede mandar lo decide `vigia/ordenes.js`.
- *
- * @returns { ok, mensajes:[{ updateId, chatId, texto, de, cuando }], siguienteOffset, motivo? }
- *          Nunca lanza: un Telegram caído no puede tumbar al vigía.
- */
-export function recibir({ config, entorno = process.env, offset = 0, esperaS = 50 } = {}) {
-  const t = config.vigia.telegram;
-  const token = entorno[t.tokenEnv];
-  if (!token) {
-    return Promise.resolve({ ok: false, reintentable: true, mensajes: [], siguienteOffset: offset,
-                             motivo: `sin configurar: falta ${t.tokenEnv}` });
-  }
-
-  const cuerpo = JSON.stringify({
-    offset,
-    timeout: esperaS,
-    // Solo mensajes de texto. Ni fotos, ni audios, ni pulsaciones de botón: menos superficie.
-    allowed_updates: ['message'],
-  });
-
-  return new Promise((resolve) => {
-    const req = https.request({
-      hostname: 'api.telegram.org',
-      path: `/bot${token}/getUpdates`,
-      method: 'POST',
-      // El margen sobre la espera larga es a propósito: si se cortara a los `timeoutMs` de un
-      // envío normal, TODAS las esperas largas morirían por tiempo agotado y el vigía daría
-      // vueltas en vano.
-      timeout: (esperaS + 15) * 1000,
-      headers: { 'content-type': 'application/json', 'content-length': Buffer.byteLength(cuerpo) },
-    }, (res) => {
-      let datos = '';
-      res.setEncoding('utf8');
-      res.on('data', (d) => { datos += d; });
-      res.on('end', () => {
-        if (res.statusCode !== 200) {
-          let desc = datos.slice(0, 200);
-          try { desc = JSON.parse(datos).description || desc; } catch { /* se queda el crudo */ }
-          return resolve({ ok: false, reintentable: res.statusCode === 429 || res.statusCode >= 500,
-                           mensajes: [], siguienteOffset: offset,
-                           motivo: tapar(`Telegram respondió ${res.statusCode}: ${desc}`) });
-        }
-        let cuerpoJson;
-        try { cuerpoJson = JSON.parse(datos); }
-        catch (e) { return resolve({ ok: false, reintentable: true, mensajes: [], siguienteOffset: offset,
-                                     motivo: tapar(`respuesta ilegible: ${e.message}`) }); }
-
-        const updates = Array.isArray(cuerpoJson.result) ? cuerpoJson.result : [];
-        const mensajes = [];
-        let mayor = offset;
-        for (const u of updates) {
-          const id = Number(u.update_id);
-          if (Number.isFinite(id) && id >= mayor) mayor = id + 1;   // +1: Telegram da por leído hasta aquí
-          const m = u.message;
-          if (!m || typeof m.text !== 'string') continue;
-          mensajes.push({
-            updateId: id,
-            chatId: String(m.chat?.id ?? ''),
-            texto: m.text,
-            // Solo para el registro de quién intentó qué. Nunca se usa para decidir permiso.
-            de: String(m.from?.username || m.from?.id || 'desconocido'),
-            cuando: new Date((Number(m.date) || 0) * 1000).toISOString(),
-          });
-        }
-        resolve({ ok: true, mensajes, siguienteOffset: mayor });
-      });
-    });
-    req.on('timeout', () => { req.destroy(new Error('tiempo agotado')); });
-    req.on('error', (e) => resolve({ ok: false, reintentable: true, mensajes: [], siguienteOffset: offset,
-                                     motivo: tapar(`red: ${e.message}`) }));
-    req.end(cuerpo);
-  });
-}
-
-/** Envía a UN chat concreto (el que preguntó), no al chat del parte. */
-export function responderA({ chatId, texto, config, entorno = process.env, teclado = null }) {
-  return enviar({ texto, config, teclado, entorno: { ...entorno, [config.vigia.telegram.chatIdEnv]: chatId } });
-}

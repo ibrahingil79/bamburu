@@ -36,7 +36,6 @@ import { crearRegistro } from './nucleo/registro.js';
 import { Vigilante } from './cuota/vigilante.js';
 import { Ciclo } from './ciclo.js';
 import { redactar, redactarApartada, redactarAveria, redactarFirma, entregar } from './vigia/parte.js';
-import { configurado, queFalta } from '../core/telegram-transporte.js';
 import { leerTablero, buscarSiguienteTarea, tareasPendientes, esRepo, rama } from './reader.js';
 import { correrBarrido } from './barrido.js';
 import { alcanzaParaCiclo } from './nucleo/maquina.js';
@@ -75,10 +74,7 @@ export async function arrancar({ config = null, unaVuelta = false, entorno = pro
   if (!esRepo(cfg.repo.raiz)) { log.error(`${cfg.repo.raiz} no es un repositorio git. No arranco.`); return 1; }
   log.info(`Rama:     ${rama(cfg.repo.raiz)}`);
 
-  if (cfg.vigia.activo && !configurado(cfg, entorno)) {
-    log.aviso(`Vigía de Telegram SIN CONFIGURAR: falta ${queFalta(cfg, entorno).join(' y ')}.`);
-    log.aviso('El ciclo funciona igual; los partes se guardan y se mandan cuando se configure.');
-  }
+
 
   const almacen = new Almacen({
     rutaEstado: cfg.rutasAbs.estado,

@@ -9,7 +9,6 @@ import { cargarSecretos, FICHERO_SECRETOS } from './nucleo/entorno.js';
 import { tareasPendientes, buscarSiguienteTarea } from './reader.js';
 import { averiaOciosoConTablero } from './nucleo/maquina.js';
 import { estadoDelDespliegue } from './nucleo/despliegue.js';
-import { revisarTeclado } from './vigia/ordenes.js';
 
 const AYUDA = `
 Orquestador de Bamburu
@@ -24,9 +23,6 @@ Comandos:
   parar-ya            parada de EMERGENCIA: corta lo que esté haciendo (puede dejar algo a medias)
   historial           tareas hechas, rechazadas, replanteadas y apartadas, con su consumo
   parte               fuerza el envío del parte ahora (y vacía la cola de pendientes)
-  escuchar            atiende las órdenes que Ibrahin manda por Telegram (daemon aparte)
-  conectar-telegram   te pregunta los dos datos de Telegram y los guarda
-  probar-telegram     comprueba el aviso de Telegram y manda un mensaje de prueba
   ayuda               esto
 `;
 
@@ -205,7 +201,7 @@ function colaDelTablero(cfg, estado) {
   if (pendientes.length > 8) L.push(`      …y ${pendientes.length - 8} más`);
 
   // Ocioso con el tablero lleno NO es ocioso. Si pasa, aquí se ve, con la MISMA regla
-  // que usa el daemon para avisar por Telegram.
+  // que usa el daemon.
   const averia = (!estado.tarea && !siguiente) ? averiaOciosoConTablero(pendientes) : null;
   if (averia) L.push('', `  🚨 AVERÍA: ${averia.motivo}`);
   return L;
@@ -252,27 +248,6 @@ function parar(cfg, señal) {
   return 0;
 }
 
-/**
- * El vigía que recibe órdenes desde Telegram. Corre en su propio proceso, aparte del ciclo:
- * así contesta «¿qué estás haciendo?» aunque el orquestador lleve media hora en una llamada,
- * o aunque se haya caído.
- */
-async function escuchar(cfg) {
-  const { Escucha } = await import('./vigia/escucha.js');
-  const { Vigilante } = await import('./cuota/vigilante.js');
-  const { crearRegistro } = await import('./nucleo/registro.js');
-  const log = crearRegistro({ dirLogs: cfg.rutasAbs.logs, nombre: 'vigia.log' });
-  log.titulo('VIGÍA DEL ORQUESTADOR  ·  escuchando órdenes');
-
-  const escucha = new Escucha({
-    config: cfg, almacen: almacenDe(cfg), vigilante: new Vigilante({ config: cfg, rutaLogs: cfg.rutasAbs.logs }), logger: log,
-  });
-  const parar = () => { log.aviso('Parando el vigía.'); escucha.parar(); };
-  process.on('SIGTERM', parar);
-  process.on('SIGINT', parar);
-  return escucha.correr();
-}
-
 async function forzarParte(cfg) {
   const { redactar, entregar } = await import('./vigia/parte.js');
   const { Vigilante } = await import('./cuota/vigilante.js');
@@ -296,125 +271,8 @@ async function forzarParte(cfg) {
   const texto = redactar({ estado, cuota, historialReciente: [], tareaEnTablero: enTablero,
                            pendientesEnTablero, averia, desde: null, config: cfg });
   const r = await entregar({ texto, config: cfg, logger: log });
-  process.stdout.write(`\n${texto.replace(/<[^>]+>/g, '')}\n\n  → ${r.ok ? 'Entregado por Telegram.' : `Guardado (${r.pendientes} pendiente/s): ${r.motivo || 'no se pudo entregar'}`}\n\n`);
+  process.stdout.write(`\n${texto.replace(/<[^>]+>/g, '')}\n\n  → ${r.ok ? 'Anotado.' : `Guardado (${r.pendientes} pendiente/s): ${r.motivo || 'no se pudo anotar'}`}\n\n`);
   return 0;
-}
-
-/**
- * Pregunta los dos datos y los guarda. Existe para que Ibrahin NO tenga que abrir un fichero
- * ni escribir un comando con el secreto dentro: si el token fuera un argumento, se quedaría
- * escrito en el historial del terminal para siempre.
- */
-async function conectarTelegram(cfg) {
-  // ⛔ 3 SEP 2026 — RETIRADO POR DECISIÓN DE IBRAHIN. Este camino pedía el token y lo ESCRIBÍA en
-  // el fichero de entorno de la fábrica. El bot de Telegram es ahora exclusivo de los avisos de
-  // Bamburu, así que darle a la fábrica una forma cómoda de guardarse unas credenciales de bot es
-  // exactamente lo que no puede existir: dos preguntas y ya volvería a hablar por el chat de
-  // Ibrahin. Se corta antes de pedir nada — un secreto que no se pide no se puede guardar mal.
-  //
-  // El día que la fábrica se encienda tendrá un bot PROPIO, y entonces esto se vuelve a abrir
-  // apuntando a SUS variables, nunca a las de Bamburu (`BAMBURU_TELEGRAM_*`).
-  const { MOTIVO } = await import('./vigia/bot-retirado.js');
-  process.stdout.write('\n  ⛔ CONECTAR TELEGRAM está retirado.\n     ' + MOTIVO + '\n\n');
-  return 1;
-}
-
-async function probarTelegram(cfg) {
-  const { enviar, configurado, queFalta } = await import('../core/telegram-transporte.js');
-  const { pista } = await import('./nucleo/secretos.js');
-  const L = [];
-  const decir = (t) => L.push(t);
-  const soltar = () => { process.stdout.write('\n' + L.join('\n') + '\n\n'); };
-
-  decir('═'.repeat(64));
-  decir('  COMPROBACIÓN DEL AVISO DE TELEGRAM');
-  decir('═'.repeat(64));
-  decir('');
-
-  const r = cargarSecretos();
-  if (!r.existe) {
-    decir(`  ❌ No encuentro el fichero de datos secretos.`);
-    decir('');
-    decir(`     Tendría que estar en:  ${FICHERO_SECRETOS}`);
-    decir('     Avísame y lo vuelvo a crear.');
-    soltar(); return 1;
-  }
-  if (!r.legible) {
-    decir(`  ❌ El fichero de datos secretos ${r.motivo}.`);
-    decir('');
-    decir('     Prueba a lanzar esto mismo como el usuario «ubuntu».');
-    soltar(); return 1;
-  }
-
-  const falta = queFalta(cfg, process.env);
-  if (!configurado(cfg, process.env)) {
-    decir('  ⏳ Todavía no has puesto los datos de Telegram.');
-    decir('');
-    decir(`     Falta por rellenar: ${falta.length === 2 ? 'los dos datos' : 'uno de los dos'}.`);
-    if (falta.includes('ORQUESTADOR_TELEGRAM_TOKEN')) decir('       · el dato largo que da @BotFather');
-    if (falta.includes('ORQUESTADOR_TELEGRAM_CHAT_ID')) decir('       · el número de tu conversación');
-    decir('');
-    decir('     Los pasos, con capturas de lo que vas a ver, están en:');
-    decir('       docs/orquestador/encender-telegram.md');
-    decir('');
-    decir('     Mientras tanto NO pasa nada: el orquestador trabaja igual y');
-    decir('     guarda los partes para mandártelos en cuanto lo rellenes.');
-    soltar(); return 1;
-  }
-
-  decir('  Los dos datos están puestos:');
-  decir(`     · dato de @BotFather:   ${pista(process.env.ORQUESTADOR_TELEGRAM_TOKEN)}`);
-  decir(`     · número de conversación: ${process.env.ORQUESTADOR_TELEGRAM_CHAT_ID}`);
-  decir('');
-  decir('  Mandando un mensaje de prueba…');
-
-  const cuando = new Date().toLocaleString('es-ES', { timeZone: 'Europe/Madrid' });
-  // La prueba manda TAMBIÉN el teclado, y por eso sirve de algo: es la forma de ver con los ojos
-  // que los seis botones llegan al móvil, y de reponerlos si alguna vez se pliegan. Si la
-  // revisión no pasa se avisa aquí mismo, en vez de dejar a Ibrahin descubriéndolo a tientas.
-  const rev = revisarTeclado(cfg.vigia?.teclado);
-  if (!rev.ok) decir(`  ⚠️  El teclado NO se monta: ${rev.fallos.join(' · ')}`);
-  // ⛔ 3 SEP 2026 — EL BOT ES EXCLUSIVO DE BAMBURU (decisión de Ibrahin). La prueba de aviso de la
-  // fábrica no manda nada: no tiene bot al que mandarlo.
-  const { botRetirado } = await import('./vigia/bot-retirado.js');
-  const env = botRetirado('prueba de aviso del orquestador');
-  void enviar;
-  const _envViejo = () => ({
-    texto: `✅ <b>Prueba del orquestador</b>\n\nSi lees esto, el aviso está bien puesto.`
-      + `${rev.ok ? '\n\nY abajo tienes los botones: toca uno.' : ''}\n\n<i>${cuando}</i>`,
-    config: cfg,
-    teclado: rev.ok ? rev.filas : null,
-  });
-  void _envViejo;
-  if (env.sinTeclado) decir(`  ⚠️  El mensaje salió SIN teclado: ${env.motivo}`);
-
-  decir('');
-  if (env.ok) {
-    decir('  ✅ ENVIADO. Mira tu Telegram: tienes que ver un mensaje de prueba.');
-    decir('');
-    decir('     Si NO lo ves, el número de conversación es de otro sitio.');
-    decir('     Repite el paso 5 de las instrucciones.');
-    soltar(); return 0;
-  }
-
-  decir(`  ❌ NO SE PUDO ENVIAR: ${env.motivo}`);
-  decir('');
-  const m = String(env.motivo || '');
-  if (/401|unauthorized|token/i.test(m)) {
-    decir('     Eso significa que el dato largo de @BotFather está mal copiado.');
-    decir('     Vuelve al paso 3: cópialo entero, sin espacios delante ni detrás.');
-  } else if (/chat not found|400/i.test(m)) {
-    decir('     Eso significa que el número de la conversación no es el bueno,');
-    decir('     o que todavía no le has escrito al bot.');
-    decir('     Vuelve al paso 4: escríbele «hola» al bot y repite el paso 5.');
-  } else if (/403|blocked/i.test(m)) {
-    decir('     Has bloqueado al bot en Telegram. Desbloquéalo y repite.');
-  } else {
-    decir('     Parece un problema de conexión. Vuelve a probar en un minuto.');
-  }
-  decir('');
-  decir('     El orquestador NO se para por esto: guarda los partes y los manda luego.');
-  soltar(); return 1;
 }
 
 async function principal() {
@@ -430,9 +288,6 @@ async function principal() {
     case 'parar':       return parar(cfg, 'SIGTERM');
     case 'parar-ya':    return parar(cfg, 'SIGINT');
     case 'parte':       cargarSecretos(); return forzarParte(cfg);
-    case 'escuchar':    cargarSecretos(); return escuchar(cfg);
-    case 'probar-telegram': return probarTelegram(cfg);
-    case 'conectar-telegram': return conectarTelegram(cfg);
     default:
       process.stderr.write(`\n  No conozco el comando «${comando}».\n${AYUDA}`);
       return 1;
