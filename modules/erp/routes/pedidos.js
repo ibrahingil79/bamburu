@@ -465,7 +465,7 @@ export function createPedidoRoutes(db) {
         <hr style="margin:1.25rem 0;border:none;border-top:1px solid var(--border)">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
           <h3 style="font-size:.9rem;font-weight:600;margin:0">Líneas</h3>
-          <button class="btn btn-secondary btn-sm" onclick="addLine()">+ Añadir línea</button>
+          <button class="btn btn-secondary btn-sm" data-act="add-line">+ Añadir línea</button>
         </div>
         <div class="table-wrap"><table>
           <thead><tr><th>Descripción</th><th style="width:80px">Cant.</th><th style="width:120px">P. unit.</th><th style="width:100px;text-align:right">Subtotal</th><th style="width:36px"></th></tr></thead>
@@ -473,7 +473,7 @@ export function createPedidoRoutes(db) {
           <tfoot id="totals-foot"></tfoot>
         </table></div>
         <div class="form-group" style="margin-top:1.25rem"><label class="form-label">Notas (opcional)</label><textarea id="f-notes" class="form-control" rows="2">${isEdit ? esc(existing.notes || '') : ''}</textarea></div>
-        <div style="text-align:right;margin-top:1rem"><button class="btn btn-primary" id="btn-save" onclick="savePedido()">Guardar borrador</button></div>
+        <div style="text-align:right;margin-top:1rem"><button class="btn btn-primary" id="btn-save">Guardar borrador</button></div>
       </div></div>
       <script nonce="${c.get('cspNonce')}">
       const SYM='${sym}', SHOW_IRPF=${showIrpf}, IRPF_DEFAULT=${irpfDefault};
@@ -496,7 +496,7 @@ export function createPedidoRoutes(db) {
           + '<td><input type="number" class="form-control line-qty" step="0.01" min="0.01" value="'+(pre?pre.quantity:1)+'"></td>'
           + '<td><input type="number" class="form-control line-price" step="0.01" min="0" value="'+(pre?Number(pre.unit_price).toFixed(2):'0')+'"></td>'
           + '<td style="text-align:right;padding:.7rem 1rem"><span class="line-subtotal">'+SYM+'0.00</span></td>'
-          + '<td><button class="btn btn-danger btn-sm" onclick="this.closest(\\'tr\\').remove();scheduleRecalc()">✕</button></td>';
+          + '<td><button class="btn btn-danger btn-sm" data-act="quitar-fila">✕</button></td>';
         row.cells[0].insertAdjacentHTML('beforeend','<input type="hidden" class="line-tax" value="21">');
         tbody.appendChild(row);
         if (pre){
@@ -560,7 +560,16 @@ export function createPedidoRoutes(db) {
         } catch(e){ toast(e.message||'Error guardando','err'); btn.disabled=false; }
       }
       loadAll();
-      </script>`;
+      
+      // 5 SEP 2026 (csp-erp-migrar-handlers) — los fijos van directos; la fila de quitar se pinta
+      // DESPUES, asi que va por delegacion: sin ella, cada linea nueva naceria con el boton muerto.
+      document.getElementById('btn-save')?.addEventListener('click', () => savePedido());
+      document.querySelector('[data-act="add-line"]')?.addEventListener('click', () => addLine());
+      document.addEventListener('click', (e) => {
+        const q = e.target.closest('[data-act="quitar-fila"]'); if (!q) return;
+        q.closest('tr').remove(); scheduleRecalc();
+      });
+</script>`;
     return c.html(adminLayout(isEdit ? 'Editar pedido' : 'Nuevo pedido', content, 'pedidos', csrfToken, c));
   };
   views.get('/new', requirePerm('pedidos.create'), c => formView(c, null));
@@ -637,13 +646,13 @@ export function createPedidoRoutes(db) {
   <div class="dp-actions" style="margin-top:14px;display:flex;flex-direction:column;gap:.5rem">
     <button data-act="imprimir" class="btn btn-secondary">Imprimir</button>
     <a href="/admin/pedidos/${id}/pdf" class="btn btn-secondary">Descargar PDF</a>
-    ${isBorrador && can(c, 'pedidos.edit') ? `<a href="/admin/pedidos/${id}/edit" class="btn btn-secondary">Editar</a><button onclick="confirmar()" class="btn btn-primary">Confirmar pedido</button>` : ''}
+    ${isBorrador && can(c, 'pedidos.edit') ? `<a href="/admin/pedidos/${id}/edit" class="btn btn-secondary">Editar</a><button data-act="confirmar" class="btn btn-primary">Confirmar pedido</button>` : ''}
     ${isConfirmado && can(c, 'albaranes.create') && hasPending ? `<a href="/admin/albaranes/new?order=${id}" class="btn btn-primary">Crear albarán (entregar)</a>` : ''}
-    ${isConfirmado && !invoice && can(c, 'pedidos.edit') ? `<button onclick="facturar()" class="btn btn-secondary">Facturar pedido</button>` : ''}
+    ${isConfirmado && !invoice && can(c, 'pedidos.edit') ? `<button data-act="facturar" class="btn btn-secondary">Facturar pedido</button>` : ''}
     ${invoice ? `<a href="/admin/invoices/${invoice.id}" class="btn btn-secondary">Ver factura ${esc(invoice.invoice_number)}</a>` : ''}
     ${isConfirmado && can(c, 'pedidos.edit') ? `
-      <button onclick="anular()" class="btn btn-danger">Anular</button>
-      <button onclick="anularYRehacer()" class="btn btn-secondary">Anular y rehacer</button>` : ''}
+      <button data-act="anular" class="btn btn-danger">Anular</button>
+      <button data-act="anular-rehacer" class="btn btn-secondary">Anular y rehacer</button>` : ''}
     <a href="/admin/pedidos" class="btn btn-secondary">Volver al listado</a>
   </div>
 </div></div>
@@ -674,6 +683,16 @@ export function createPedidoRoutes(db) {
       validar:v2 => !String(v2.m||'').trim() ? { campo:'m', mensaje:'El motivo es obligatorio.' } : null });
     if(!v) return;
     try{ const d=await call('/anular-y-rehacer',{motivo:String(v.m).trim()}); location.href='/admin/pedidos/'+d.id+'/edit'; }catch(e){ toast(e.message,'err'); } }
+
+      // 5 SEP 2026 — LOS CUATRO SON CONDICIONALES y dependen del estado del pedido: Confirmar solo
+      // en borrador; Facturar solo si esta confirmado y sin factura; Anular y Anular-y-rehacer solo
+      // si esta confirmado. El enganche tolera que no existan, y esta pantalla se prueba en TODOS
+      // sus estados: mirar un pedido cualquiera fue justo el error que dejo botones muertos el 5 sep.
+      const _eng = (act, fn) => document.querySelector('[data-act="' + act + '"]')?.addEventListener('click', fn);
+      _eng('confirmar', () => confirmar());
+      _eng('facturar', () => facturar());
+      _eng('anular', () => anular());
+      _eng('anular-rehacer', () => anularYRehacer());
 </script>`;
     return c.html(adminLayout('Pedido ' + (o.order_number || ('#' + id)), docShell(paper, panel), 'pedidos', csrfToken, c));
   });

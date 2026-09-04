@@ -6082,7 +6082,11 @@ El pilar queda completo: multi-almacén + stock mínimo/punto de pedido + trazab
 - **D6 · [a verificar] XSS en páginas públicas de la tienda** (HTML guardado por admin sin escapar). La tienda está apagada de forma reversible (D1); revisar antes de reabrir en Capa 2. *(El bug de fuga de stock de `cancel_order` ya quedó resuelto al archivar `sales_orders`, D4.)*
 
 ### Deuda técnica
-- ⚠️ **`limpiar-restos-de-gates.mjs` no cubre la tabla `categories` (5 sep 2026).** Al limpiar el
+- ~~⚠️ **`limpiar-restos-de-gates.mjs` no cubre la tabla `categories` (5 sep 2026).**~~
+  **⚙️ CERRADO el mismo día:** el limpiador ya cubre `categories` (borra las que no tienen productos,
+  deja y avisa de las que sí) y las 9 con carga se limpiaron con autorización de Ibrahin. Texto
+  original tachado abajo:
+- ~~**`limpiar-restos-de-gates.mjs` no cubría `categories`.** Al limpiar el
   negocio de desarrollo quedaron **9 categorías** con `<img onerror=…>` en el nombre y **cero
   productos colgando** — basura de gates que el limpiador no mira porque esa tabla no está en su
   lista. No estorban a ninguna pantalla endurecida hoy, pero volverán a aparecer en cuanto se
@@ -13446,7 +13450,7 @@ Y su propia limpieza no lo recogió: `cleanup(slug)` empieza con `if (!slug) ret
 ## TAREA — Migrar el ERP para quitarle el `unsafe-inline`
 
 - **id:** csp-erp-migrar-handlers
-- **estado:** pendiente · **EN CURSO — 4 sesiones: 4 sep (`fca9551`) y 5 sep (`552bccc`, `ee1453e`, `904ceae`)**
+- **estado:** pendiente · **EN CURSO — 5 sesiones: 4 sep (`fca9551`) y 5 sep (`552bccc`, `ee1453e`, `904ceae`, `PENDIENTE`)**
 - **origen:** Desgajada de `csp-unsafe-inline` el 4 sep 2026, al medir el tamaño real. Es la pieza que el código llama **C4b-4**.
 
 **Medido el 4 sep 2026, no estimado:** `modules/erp` tiene **546 handlers de atributo** y **88
@@ -13621,6 +13625,56 @@ armazón también cambian el DOM** y tapaban la señal. Reescrita para decir lo 
 y la cola: plantillas (10), servicios de agenda (11), mostrador (12), avisos (13), CRM (19 y 20),
 citas (35), proyectos (43), productos (76), clientes (85).
 **Más `/admin/descuentos`**, limpia de código y bloqueada por los restos de gate en sus datos.
+
+**`LEGADO` sigue en pie.**
+
+---
+
+### 📋 5ª SESIÓN — 5 sep 2026 · LOS BOTONES CONDICIONALES, Y UN CRITERIO MEJOR
+
+**Migradas enteras tres plantillas de documento** — `pedidos.js`, `albaranes.js` y
+`supplier-returns.js`: 17 handlers, incluidos **todos los condicionales** (Confirmar, Facturar,
+Anular, Anular y rehacer). Los fijos van con oyente directo; **las filas que se pintan después van
+por delegación**, porque si no, cada línea nueva nacería con el botón muerto.
+
+**⚙️ Y DE AHÍ SALE UN CRITERIO MEJOR QUE EL DE AYER, que era insuficiente.** Ayer la regla decía:
+*«una regla por forma solo vale si todas las pantallas de esa forma están limpias en todos sus
+estados»*. Correcta, pero **no comprobable**: los 16 pedidos del negocio de desarrollo están **TODOS
+anulados**, así que los botones de borrador y de confirmado **no se pueden ver navegando**, ni con la
+mejor voluntad. El criterio que sí se puede comprobar de un vistazo, y que es más fuerte:
+
+> **Una forma se endurece cuando su PLANTILLA ENTERA tiene CERO handlers de atributo.** Si el fichero
+> no escribe ninguno, ningún estado del documento puede pintar uno. No depende de qué documentos
+> haya en la base.
+
+Con eso entran **6 reglas nuevas**: fichas y altas de pedido, albarán y devolución. **33 superficies
+estrictas · 236 pantallas endurecidas.**
+
+**Probado pulsando el botón que estuvo muerto:** en un albarán en estado que SÍ lo muestra, se
+**pulsa Anular** y se comprueba que abre su confirmación (y se cierra sin anular nada: `anular()`
+pregunta antes). `gate-csp-estricta` pasa de 59 a **65**. **Rojo provocado sobre ese mismo botón** →
+caen los dos guardianes: el de pulsar (1 fallo) y `gate-csp-superficies-limpias` (4 fichas sucias).
+
+**Limpiador ampliado a `categories`** (autorizado por Ibrahin, misma decisión): simulacro primero,
+copia previa, y **9 categorías borradas** — las que llevaban carga en el nombre y **cero productos
+dentro**. Las que tuvieran productos se dejarían y se dirían: una categoría no tiene «archivada», y
+desasignarla cambiaría el catálogo de verdad. `foreign_key_check` limpio, cero productos huérfanos.
+
+| | handlers | bloques | limpias | endurecidas |
+|---|---|---|---|---|
+| tras la 4ª | 592 | 49 | 232 | 210 |
+| **tras la 5ª** | **580** | **49** | **240** | **236** |
+
+### ▶️ QUÉ QUEDA
+
+**98 pantallas con algo que migrar**, y solo **4 limpias sin endurecer**: `/admin/quotes/<id>` (3) y
+`/admin/purchase-orders/<id>` (1) — esperan a que sus plantillas lleguen a cero.
+
+**Lo siguiente, y ya con el patrón rodado:** terminar `quotes.js` (12), `purchase-orders.js` (11) y
+`purchases.js` (12), que desbloquean sus formas enteras. Después la cola:
+`/admin/citas/servicios` (11), `/admin/mostrador` (12), `/admin/avisos` (13), `/admin/crm` (19),
+`/admin/crm/cola` (20), `/admin/citas` (35), `/admin/proyectos` (43), `/admin/products` (76),
+`/admin/clients` (85).
 
 **`LEGADO` sigue en pie.**
 

@@ -425,7 +425,7 @@ export function createAlbaranRoutes(db) {
             <tbody id="lines-body"></tbody>
           </table></div>
           <div class="form-group" style="margin-top:1rem"><label class="form-label">Notas (opcional)</label><textarea id="f-notes" class="form-control" rows="2"></textarea></div>
-          <div style="text-align:right;margin-top:1rem"><button class="btn btn-primary" id="btn-save" onclick="saveAlbaran()">Confirmar entrega</button></div>
+          <div style="text-align:right;margin-top:1rem"><button class="btn btn-primary" id="btn-save">Confirmar entrega</button></div>
         </div></div>
         <script nonce="${c.get('cspNonce')}">
         const CSRF=${JSON.stringify(csrfToken)}, ORDER_ID=${orderId}, PEND=${linesJson};
@@ -454,7 +454,10 @@ export function createAlbaranRoutes(db) {
           } catch(e){ toast(e.message||'Error','err'); btn.disabled=false; }
         }
         render();
-        </script>`;
+        
+      // 5 SEP 2026 (csp-erp-migrar-handlers) — el boton se engancha aqui, no en su atributo.
+      document.getElementById('btn-save')?.addEventListener('click', () => saveAlbaran());
+</script>`;
       return c.html(adminLayout('Entregar pedido', content, 'albaranes', csrfToken, c));
     }
 
@@ -476,14 +479,14 @@ export function createAlbaranRoutes(db) {
         <hr style="margin:1.25rem 0;border:none;border-top:1px solid var(--border)">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
           <h3 style="font-size:.9rem;font-weight:600;margin:0">Líneas a entregar</h3>
-          <button class="btn btn-secondary btn-sm" onclick="addLine()">+ Añadir línea</button>
+          <button class="btn btn-secondary btn-sm" data-act="add-line">+ Añadir línea</button>
         </div>
         <div class="table-wrap"><table>
           <thead><tr><th>Concepto</th><th style="width:120px">Cantidad</th><th style="width:36px"></th></tr></thead>
           <tbody id="lines-body"></tbody>
         </table></div>
         <div class="form-group" style="margin-top:1.25rem"><label class="form-label">Notas (opcional)</label><textarea id="f-notes" class="form-control" rows="2"></textarea></div>
-        <div style="text-align:right;margin-top:1rem"><button class="btn btn-primary" id="btn-save" onclick="saveAlbaran()">Confirmar entrega</button></div>
+        <div style="text-align:right;margin-top:1rem"><button class="btn btn-primary" id="btn-save">Confirmar entrega</button></div>
       </div></div>
       <script nonce="${c.get('cspNonce')}">
       const CSRF=${JSON.stringify(csrfToken)};
@@ -494,7 +497,7 @@ export function createAlbaranRoutes(db) {
         const tbody=document.getElementById('lines-body'); const row=document.createElement('tr');
         row.innerHTML = LINE_CELL
           + '<td><input type="number" class="form-control line-qty" step="1" min="1" value="1"></td>'
-          + '<td><button class="btn btn-danger btn-sm" onclick="this.closest(\\'tr\\').remove()">✕</button></td>';
+          + '<td><button class="btn btn-danger btn-sm" data-act="quitar-fila">✕</button></td>';
         tbody.appendChild(row);
       }
       ${lineSearchScript()}
@@ -530,7 +533,16 @@ export function createAlbaranRoutes(db) {
         } catch(e){ toast(e.message||'Error','err'); btn.disabled=false; }
       }
       loadAll();
-      </script>`;
+      
+      // 5 SEP 2026 — los fijos van directos; la fila de quitar se pinta DESPUES, asi que va por
+      // delegacion. Sin ella, las lineas nuevas naceran con el boton muerto.
+      document.getElementById('btn-save')?.addEventListener('click', () => saveAlbaran());
+      document.querySelector('[data-act="add-line"]')?.addEventListener('click', () => addLine());
+      document.addEventListener('click', (e) => {
+        const q = e.target.closest('[data-act="quitar-fila"]'); if (!q) return;
+        q.closest('tr').remove();
+      });
+</script>`;
     return c.html(adminLayout('Nuevo albarán', content, 'albaranes', csrfToken, c));
   });
 
@@ -563,9 +575,9 @@ export function createAlbaranRoutes(db) {
   <div class="dp-actions" style="margin-top:14px;display:flex;flex-direction:column;gap:.5rem">
     <button data-act="imprimir" class="btn btn-secondary">Imprimir</button>
     <a href="/admin/albaranes/${id}/pdf" class="btn btn-secondary">Descargar PDF</a>
-    ${isConfirmed && !invoice && can(c, 'albaranes.edit') ? `<button onclick="facturar()" class="btn btn-primary">Facturar este albarán</button>` : ''}
+    ${isConfirmed && !invoice && can(c, 'albaranes.edit') ? `<button data-act="facturar" class="btn btn-primary">Facturar este albarán</button>` : ''}
     ${invoice ? `<a href="/admin/invoices/${invoice.id}" class="btn btn-secondary">Ver factura ${esc(invoice.invoice_number)}</a>` : ''}
-    ${isConfirmed && can(c, 'albaranes.edit') ? `<button onclick="anular()" class="btn btn-danger">Anular</button>` : ''}
+    ${isConfirmed && can(c, 'albaranes.edit') ? `<button data-act="anular" class="btn btn-danger">Anular</button>` : ''}
     <a href="/admin/albaranes" class="btn btn-secondary">Volver al listado</a>
   </div>
 </div></div>
@@ -582,6 +594,12 @@ export function createAlbaranRoutes(db) {
       campos:[{id:'m',etiqueta:'Motivo de la anulación',ayuda:'Queda guardado con el albarán.'}],
       validar:v2 => !String(v2.m||'').trim() ? {campo:'m',mensaje:'El motivo es obligatorio.'} : null});
     if(!v) return; const m=String(v.m); try{ await call('/anular',{motivo:m.trim()}); location.reload(); }catch(e){ toast(e.message,'err'); } }
+
+      // 5 SEP 2026 — LOS DOS SON CONDICIONALES: Facturar solo si esta confirmado y sin factura;
+      // Anular solo si esta confirmado. Por eso el enganche tolera que no existan, y por eso esta
+      // pantalla se prueba en TODOS sus estados y no en uno cualquiera.
+      document.querySelector('[data-act="facturar"]')?.addEventListener('click', () => facturar());
+      document.querySelector('[data-act="anular"]')?.addEventListener('click', () => anular());
 </script>`;
     return c.html(adminLayout('Albarán ' + (a.delivery_number || ('#' + id)), docShell(paper, panel), 'albaranes', csrfToken, c));
   });

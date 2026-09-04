@@ -375,7 +375,7 @@ export function createSupplierReturnRoutes(db) {
         <div class="card-head"><h3>Documento de origen</h3></div>
         <div class="card-body">
           <div class="form-row">
-            <div class="form-group"><label class="form-label">Origen (compra recibida o recepción confirmada) *</label><select class="form-control" id="fOrigin" onchange="loadLines()"><option value="">— Elige un documento —</option>${opts}</select></div>
+            <div class="form-group"><label class="form-label">Origen (compra recibida o recepción confirmada) *</label><select class="form-control" id="fOrigin"><option value="">— Elige un documento —</option>${opts}</select></div>
             <div class="form-group"><label class="form-label">Fecha *</label><input class="form-control" type="date" id="fDate" value="${today}"></div>
           </div>
           <div class="form-group"><label class="form-label">Motivo de la devolución * <span style="color:var(--text3);font-weight:400">(mín. 3 caracteres)</span></label><input class="form-control" id="fMotivo" placeholder="Mercancía defectuosa, pedido equivocado..."></div>
@@ -392,7 +392,7 @@ export function createSupplierReturnRoutes(db) {
       </div>
       <div style="display:flex;justify-content:flex-end;gap:.5rem">
         <a href="/admin/supplier-returns" class="btn btn-secondary">Cancelar</a>
-        <button class="btn btn-primary" id="btn-confirm" onclick="confirmReturn()">Confirmar devolución</button>
+        <button class="btn btn-primary" id="btn-confirm">Confirmar devolución</button>
       </div>
       <script nonce="${c.get('cspNonce')}">
       const SYM = '${sym}';
@@ -414,7 +414,7 @@ export function createSupplierReturnRoutes(db) {
             + '<td style="text-align:right">' + l.recibido + '</td>'
             + '<td style="text-align:right">' + l.devuelto + '</td>'
             + '<td style="text-align:right;font-weight:600">' + l.devolvible + '</td>'
-            + '<td><input class="form-control r-qty" type="number" min="0" max="' + l.devolvible + '" value="0" style="width:90px" oninput="recalc()"></td>'
+            + '<td><input class="form-control r-qty" type="number" min="0" max="' + l.devolvible + '" value="0" style="width:90px" data-act="recalc"></td>'
             + '<td style="text-align:right"><span class="r-sub">0.00 ' + SYM + '</span></td>'
             + '</tr>'
           ).join('');
@@ -469,6 +469,12 @@ export function createSupplierReturnRoutes(db) {
           window.location.href = '/admin/supplier-returns/' + d.id;
         } catch(e){ toast(e.message || 'Error registrando la devolución','err'); btn.disabled = false; }
       }
+
+      // 5 SEP 2026 (csp-erp-migrar-handlers) — los controles se enganchan aqui, no en sus atributos.
+      // Las filas se pintan DESPUES, asi que el de recalcular va por delegacion; los dos fijos, directos.
+      document.getElementById('fOrigin')?.addEventListener('change', () => loadLines());
+      document.getElementById('btn-confirm')?.addEventListener('click', () => confirmReturn());
+      document.addEventListener('input', (e) => { if (e.target.closest('[data-act="recalc"]')) recalc(); });
       </script>`;
     return c.html(adminLayout('Nueva devolución a proveedor', content, 'supplier-returns', csrfToken, c));
   });
@@ -530,7 +536,7 @@ export function createSupplierReturnRoutes(db) {
         <div class="dp-row"><span class="k">Proveedor</span><span class="v">${esc(r.supplier_name || r.supplier_current_name)}</span></div>
         <div class="dp-row"><span class="k">Valor</span><span class="v">${dineroEs(total)}{sym}</span></div>
         <div class="dp-actions" style="margin-top:14px">
-          ${r.status === 'confirmada' && canEdit ? '<button class="btn btn-danger" onclick="anularDevolucion()">Anular</button>' : ''}
+          ${r.status === 'confirmada' && canEdit ? '<button class="btn btn-danger" data-act="anular-dev">Anular</button>' : ''}
           <a href="/admin/supplier-returns" class="btn btn-secondary">Volver</a>
         </div>
       </div></div>
@@ -547,6 +553,10 @@ export function createSupplierReturnRoutes(db) {
           toast(d.message || 'Devolución anulada'); location.reload();
         } catch(e){ toast(e.message || 'Error anulando','err'); }
       }
+
+      // El boton de Anular es CONDICIONAL: solo se pinta si la devolucion esta confirmada. Por eso
+      // el enganche tolera que no exista, y por eso esta pantalla se prueba en los DOS estados.
+      document.querySelector('[data-act="anular-dev"]')?.addEventListener('click', () => anularDevolucion());
       </script>`;
     return c.html(adminLayout('Devolución ' + (r.return_number || ''), docShell(paper, panel), 'supplier-returns', csrfToken, c));
   });

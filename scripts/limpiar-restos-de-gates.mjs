@@ -98,6 +98,18 @@ function procesar(slug, ruta) {
     const proBorrar = pro.filter(p => libre(db, p.id, DE_UN_PRODUCTO));
     const proArchivar = pro.filter(p => !libre(db, p.id, DE_UN_PRODUCTO) && p.status !== 'archived');
 
+    // ── CATEGORÍAS ────────────────────────────────────────────────────────────────────────────
+    // ⚙️ 5 SEP 2026 — LAS CATEGORÍAS FALTABAN, y se notó. Al endurecer la CSP del panel apareció que
+    // 9 categorías tenían en el NOMBRE una carga de ataque (un `<img onerror=...>`) que dejó un gate
+    // viejo, con CERO productos colgando. No las miraba nadie porque esta tabla no estaba en la
+    // lista. Misma regla que el resto: sin nada colgando se borra; con productos dentro, se deja y
+    // se dice (una categoría no tiene «archivada», y desasignarla cambiaría el catálogo de verdad).
+    const cat = db.prepare(`SELECT id, name FROM categories WHERE ${MARCA_SQL('name')}`).all();
+    const catConProd = new Set(db.prepare(
+      `SELECT DISTINCT category_id id FROM products WHERE category_id IS NOT NULL`).all().map(r => r.id));
+    const catBorrar = cat.filter(x => !catConProd.has(x.id));
+    const catQuedan = cat.filter(x => catConProd.has(x.id));
+
     // ── USUARIOS DE PRUEBA ──────────────────────────────────────────────────────────────────────
     const MARCA_USU = "(name LIKE 'GATE%' OR name LIKE 'Gate %' OR name LIKE 'ZZ %' OR email LIKE '%gate%' OR email LIKE 'zz-%' OR email LIKE 'gas-%')";
     const usu = db.prepare(`SELECT id, name, email, role, active FROM admin_users WHERE role<>'owner' AND ${MARCA_USU}`).all();
@@ -134,6 +146,8 @@ function procesar(slug, ruta) {
     console.log(`    · se ARCHIVAN (tienen facturas u otros): ${cliArchivar.length}`);
     console.log(`  productos con marca: ${pro.length} → borrar ${proBorrar.length} · archivar ${proArchivar.length}`);
     console.log(`  proveedores con marca: ${prv.length} → borrar ${prvBorrar.length} · archivar ${prvArchivar.length}`);
+    console.log(`  categorías con marca: ${cat.length} → borrar ${catBorrar.length}`
+      + (catQuedan.length ? ` · se DEJAN ${catQuedan.length} (tienen productos dentro)` : ''));
     console.log(`  usuarios de prueba: ${usu.length} → borrar ${usuBorrar.length} · archivar ${usuArchivar.length}`);
     console.log(`  almacenes vacíos con marca: ${almBorrar.length} de ${alm.length}`);
     console.log(`  recursos con marca sin citas: ${recBorrar.length} de ${rec.length}`);
@@ -161,6 +175,7 @@ function procesar(slug, ruta) {
       R.borrado.paneles = paneles.length ? db.prepare(`DELETE FROM analytics_panels WHERE id IN ${enLista(paneles)}`).run().changes : 0;
       R.borrado.clientes = cliBorrar.length ? db.prepare(`DELETE FROM clients WHERE id IN ${enLista(cliBorrar)}`).run().changes : 0;
       R.borrado.productos = proBorrar.length ? db.prepare(`DELETE FROM products WHERE id IN ${enLista(proBorrar)}`).run().changes : 0;
+      R.borrado.categorias = catBorrar.length ? db.prepare(`DELETE FROM categories WHERE id IN ${enLista(catBorrar)}`).run().changes : 0;
       R.borrado.almacenes = almBorrar.length ? db.prepare(`DELETE FROM warehouses WHERE id IN ${enLista(almBorrar)}`).run().changes : 0;
       R.borrado.recursos = recBorrar.length ? db.prepare(`DELETE FROM recursos WHERE id IN ${enLista(recBorrar)}`).run().changes : 0;
       R.borrado.proveedores = prvBorrar.length ? db.prepare(`DELETE FROM suppliers WHERE id IN ${enLista(prvBorrar)}`).run().changes : 0;

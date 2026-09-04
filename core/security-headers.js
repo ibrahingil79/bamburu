@@ -85,6 +85,22 @@ const SUPERFICIES_ESTRICTAS = [
   /^\/admin\/suscripcion$/,
   /^\/admin\/vigia$/,
   /^\/admin\/descuentos$/,
+  // ⚙️ 5 SEP 2026, 4ª tanda — LAS FICHAS DE PEDIDO, ALBARÁN Y DEVOLUCIÓN. Estas SÍ se pueden
+  // endurecer por forma, y el criterio que lo permite es más fuerte que «las que miré estaban
+  // limpias», que fue lo que falló esta misma mañana:
+  //
+  //   **su plantilla entera (`routes/pedidos.js`, `albaranes.js`, `supplier-returns.js`) tiene CERO
+  //   handlers de atributo**, así que NINGÚN estado del documento puede pintar uno.
+  //
+  // Es comprobable de un vistazo y no depende de qué documentos haya en la base. Hacía falta:
+  // los 16 pedidos del negocio de desarrollo están TODOS anulados, así que los botones de borrador
+  // y de confirmado no se podían ver navegando ni con la mejor voluntad.
+  /^\/admin\/pedidos\/\d+$/,
+  /^\/admin\/pedidos\/new$/,
+  /^\/admin\/albaranes\/\d+$/,
+  /^\/admin\/albaranes\/new$/,
+  /^\/admin\/supplier-returns\/\d+$/,
+  /^\/admin\/supplier-returns\/new$/,
 ];
 
 export function securityHeaders() {

@@ -362,7 +362,45 @@ try {
   });
   ok(pulsable === 'ok', 'y en el importador, pulsar su control hace algo', pulsable);
 
+  // ── 11 · LAS FICHAS DE DOCUMENTO: sus botones CONDICIONALES responden ──
+  console.log('\n[11] Fichas de albarán y devolución: el botón condicional de Anular responde');
+  // SE PULSA EL BOTON QUE ESTUVO MUERTO. El 5 sep, endurecer por forma dejó mudo justo este botón en
+  // varias fichas, y no se notó porque nadie lo pulsaba. Pulsarlo NO destruye nada: `anular()` abre
+  // antes una confirmación en la propia página, así que la prueba llega hasta el diálogo y lo cierra.
+  const p11 = await nuevaPagina();
+  await p11.setCookie({ name: 'asess', value: erpTok, domain: 'desarrollo-bamburu.localhost', path: '/' });
+  const confirmado = await (async () => {
+    for (const id of [1, 3, 4, 6]) {
+      const r = await p11.goto(ERP_BASE + '/admin/albaranes/' + id, { waitUntil: 'networkidle0' });
+      if (r.status() !== 200) continue;
+      if (await p11.evaluate(() => !!document.querySelector('[data-act="anular"]'))) return id;
+    }
+    return null;
+  })();
+  ok(confirmado !== null, 'hay un albarán en estado que SÍ muestra el botón de Anular', 'id ' + confirmado);
+  if (confirmado !== null) {
+    const r11 = await p11.goto(ERP_BASE + '/admin/albaranes/' + confirmado, { waitUntil: 'networkidle0' });
+    ok(/script-src[^;]*'nonce-/.test(cabecera(r11)) && !/script-src[^;]*'unsafe-inline'/.test(cabecera(r11)),
+       '  y esa ficha va con la política estricta');
+    const abrio = await p11.evaluate(async () => {
+      document.querySelector('[data-act="anular"]').click();
+      await new Promise(r => setTimeout(r, 500));
+      const ov = document.querySelector('.modal-overlay.open');
+      if (ov) ov.remove();                       // se cierra: no se anula nada
+      return !!ov;
+    });
+    ok(abrio, '  PULSAR Anular abre su confirmación → el botón condicional está vivo');
+    ok((await violaciones(p11)).length === 0, '  y sin una sola violación de CSP');
+  }
+  // Y una ficha de pedido, que es la forma con más pantallas (16).
+  const r11b = await p11.goto(ERP_BASE + '/admin/pedidos/1', { waitUntil: 'networkidle0' });
+  ok(/script-src[^;]*'nonce-/.test(cabecera(r11b)), 'la ficha de un pedido va con la política estricta');
+  ok(await p11.evaluate(() => !/\son[a-z]+\s*=\s*["']/i.test(
+       document.documentElement.outerHTML.replace(/<script[\s\S]*?<\/script>/gi, ''))),
+     '  y no trae ni un handler de atributo');
+
   const todas = [...(await violaciones(p3)), ...(await violaciones(p4)),
+                 ...(await violaciones(p11)),
                  ...(await violaciones(p9)),
                  ...(await violaciones(p8)),
                  ...(await violaciones(p5)), ...(await violaciones(p6)), ...(await violaciones(p7))];
