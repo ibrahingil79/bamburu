@@ -10315,7 +10315,7 @@ La prueba de hoy es **mejor de lo que Codex vio**: descarga la copia, la compara
 ## ✅ TAREA — El enlace del portal lleva la llave en la dirección
 
 - **id:** portal-token-fuera-de-la-url
-- **estado:** ✅ HECHA — 4 sep 2026 · commit `PENDIENTE-HASH`
+- **estado:** ✅ HECHA — 4 sep 2026 · commit `0213d2d`
 - **origen:** Auditoría de Codex, 25 ago 2026 · AUD-009 — comprobado vivo el 2 sep
 
 El portal del cliente se abre con `/portal/:token`: la llave va **en la dirección**, así que queda en el historial del navegador, en los registros de cualquier intermediario y en el «referer» si el cliente pincha un enlace desde ahí. Comprobado el 2 sep.
