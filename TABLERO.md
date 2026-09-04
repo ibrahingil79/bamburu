@@ -10510,10 +10510,14 @@ Dos cosas de la misma familia. La primera: el tipo de un fichero subido se decid
 > con él, ninguna silenciada). `gate-arranque-modulos` 39 ✓ · `gate-aviso-copias` 16 ✓ · los dos
 > censos en verde.
 >
-> **Lo que NO se ha tocado, y sigue esperando tu palabra:** `orquestador.service` está **parado pero
-> `enabled`**, con su enlace en `multi-user.target.wants`. **No es del bot** —no puede hablar por él—
-> pero **arrancaría la fábrica sola en el próximo reinicio del servidor**. Se quita con
-> `sudo systemctl disable orquestador`.
+> ~~**Lo que NO se ha tocado, y sigue esperando tu palabra:** `orquestador.service` está **parado pero
+> `enabled`**…~~ **⚙️ CERRADO EL MISMO DÍA: Ibrahin dijo «hazlo».** Ejecutado
+> `sudo systemctl disable orquestador`. El enlace en `multi-user.target.wants` (del 31 de agosto)
+> **ya no está**, y `is-enabled` dice `disabled`. **La unit se queda instalada en `/etc`** a
+> propósito: desenganchar no es desinstalar, y encenderla sigue siendo decisión suya.
+> **Llevaba 33 días a un reinicio de distancia de arrancar sola**, y no arrancó solo porque el
+> servidor lleva 11 semanas sin reiniciarse. Comprobado después: **nada de la fábrica queda
+> enganchado al arranque**, y las 9 unidades de Bamburu siguen como estaban.
 
 ## ✅ TAREA — Que un fallo de las copias AVISE (cabo suelto del 4 sep 2026)
 

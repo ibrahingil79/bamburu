@@ -1,6 +1,13 @@
 # Orquestador de Bamburu — Architect → Programmer → Review, desatendido.
 #
-# INSTALAR:
+# ⛔ LA FÁBRICA ESTÁ PARADA Y DESENGANCHADA DEL ARRANQUE (Ibrahin, 2 y 4 sep 2026).
+#    El 4 sep se hizo `systemctl disable orquestador`. La unit sigue instalada a propósito —para
+#    poder encenderla el día que él lo diga— pero YA NO ARRANCA SOLA al reiniciar el servidor.
+#    Estuvo `enabled` 33 días con el daemon parado: la máquina no se reinició, y solo por eso no
+#    arrancó. Encenderla es decisión de Ibrahin y de nadie más.
+#
+# INSTALAR (⚠️ el `enable` de abajo es justo lo que se deshizo el 4 sep: no lo ejecutes sin que
+# Ibrahin lo pida):
 #   sudo cp deploy/systemd/orquestador.service /etc/systemd/system/
 #   sudo systemctl daemon-reload
 #   sudo systemctl enable --now orquestador

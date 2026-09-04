@@ -114,6 +114,12 @@ nuevo para la fábrica: está parada, y se creará el día que se encienda, con 
   `BAMBURU_TELEGRAM_CHAT_ID`. `/etc/orquestador.env` quedó **vacío a propósito**.
 - **Una sola puerta:** `core/telegram-servidor.js`. Estampa `BAMBURU — <tema>` en cada aviso y
   **sin `tema` no manda nada**. Desde bash: `printf '%s' "…" | node scripts/avisar-telegram.mjs <tema>`.
+- **⛔ 4 SEP 2026 — LA FÁBRICA YA NO ARRANCA SOLA.** `orquestador.service` estaba **parado pero
+  `enabled`**, con su enlace en `multi-user.target.wants` desde el 31 de agosto: llevaba 33 días a
+  un reinicio de distancia de arrancar el ciclo desatendido, y no lo hizo solo porque el servidor
+  no se reinició (lleva 11 semanas encendido). Por orden de Ibrahin se ejecutó
+  `sudo systemctl disable orquestador`. **La unit sigue instalada en `/etc`** —para poder
+  encenderla el día que él lo diga— pero **ya no se engancha al arranque**. `is-enabled: disabled`.
 - ~~**El cerrojo de la fábrica:** `orchestrator/vigia/bot-retirado.js`, llamado desde `vigia/parte.js`,
   `vigia/escucha.js` y `orq.js`. `orquestador-vigia.service` está **parado y deshabilitado**.~~
   **⚙️ CORREGIDO EL 4 SEP 2026 — YA NO HAY CERROJO PORQUE YA NO HAY MANOS.** Encargo de Ibrahin:
