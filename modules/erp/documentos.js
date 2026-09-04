@@ -20,7 +20,7 @@
 // LO QUE NO UNIFORMA: el CONTENIDO. Cada papel pinta los campos que pintaba —el albarán no enseña el
 // email del cliente, la orden de compra sí enseña los teléfonos— porque eso son decisiones del
 // documento, no del membrete. Aquí se unifica cómo se ve, no qué dice.
-import { getAttachment, readAttachmentBuffer } from './attachments.js';
+import { getAttachment, readAttachmentBuffer, mimeReal } from './attachments.js';
 import { escHtml } from '../../core/escape.js';
 
 // El adjunto del logo lleva marca propia. La ruta que lo sirve SOLO acepta este kind: así no se
@@ -38,17 +38,21 @@ export const LOGO_MIME = new Set(['image/jpeg', 'image/png', 'image/webp']);
 export const LOGO_MAX_BYTES = 2 * 1024 * 1024;
 
 // ── QUÉ ES DE VERDAD ESTE FICHERO ────────────────────────────────────────────────────────────────
-// La extensión no dice nada: un `.exe` renombrado a `.png` sigue siendo un `.exe`, y el navegador
-// manda el `type` que le da la gana. Así que se mira lo ÚNICO que no se puede renombrar: los
-// primeros bytes. Si no coinciden con una imagen de verdad, no entra.
-export function mimeReal(buf) {
-  if (!buf || buf.length < 12) return null;
-  if (buf[0] === 0xFF && buf[1] === 0xD8 && buf[2] === 0xFF) return 'image/jpeg';
-  if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47
-      && buf[4] === 0x0D && buf[5] === 0x0A && buf[6] === 0x1A && buf[7] === 0x0A) return 'image/png';
-  if (buf.toString('ascii', 0, 4) === 'RIFF' && buf.toString('ascii', 8, 12) === 'WEBP') return 'image/webp';
-  return null;
-}
+// SE MUDÓ A `attachments.js` (AUD-011, 4 sep 2026) y aquí solo se reexporta, para que las rutas que
+// ya la importaban de este fichero sigan funcionando. El motivo de la mudanza: esta comprobación
+// existía SOLO para el logo, mientras la puerta por la que entran TODOS los adjuntos —
+// `saveAttachment`— se creía el `type` del navegador. La regla tiene que vivir en la puerta común,
+// y `attachments.js` es la de abajo (este fichero ya importa de él; al revés sería un ciclo).
+// Al mudarse creció de tres tipos a los cinco de ALLOWED_MIME: ahora también reconoce GIF y PDF,
+// que aquí se siguen rechazando por `LOGO_MIME` — un logo sigue siendo JPG, PNG o WebP.
+//
+// OJO CON LA FORMA DE ESTA LÍNEA: se IMPORTA arriba y se reexporta aquí. Escrito como
+// `export { mimeReal } from './attachments.js'`, que es lo natural, se reexporta SIN crear el enlace
+// local — y `logoDataUri`, tres funciones más abajo, llama a `mimeReal`. Reventaba con un
+// ReferenceError que su propio `catch` se tragaba, así que el logo desaparecía de TODAS las facturas
+// y de todos los PDF sin un solo error en el log. Media hora de vida tuvo el fallo, y lo cazó mirar
+// el logo de un negocio de verdad, no el razonamiento.
+export { mimeReal };
 
 // ── EL LOGO, INCRUSTADO ──────────────────────────────────────────────────────────────────────────
 // SE INCRUSTA, NO SE ENLAZA, y esto es lo que decide todo lo demás. El PDF lo genera Chromium EN EL

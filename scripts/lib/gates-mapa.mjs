@@ -93,6 +93,11 @@ export const RAPIDO = new Map([
   // Y que la llave del portal no vuelva a la dirección. Estático de red, <1 s: monta las rutas
   // reales sobre una base de usar y tirar y las conduce por HTTP con el cliente de pruebas de Hono.
   ['gate-portal-sin-llave-en-url', 'el portal: ¿sigue la llave fuera de la dirección y el enlace de un solo uso? (AUD-009)'],
+  // Y que un adjunto siga siendo lo que sus BYTES dicen, y su ruta no salga de data/uploads/. Sube
+  // ficheros de verdad por las rutas de verdad (perfil y compras) y siembra rutas tramposas en la
+  // base. ~2 s. Los dos agujeros que cierra eran reales: en la prueba en rojo, un ejecutable
+  // disfrazado de PNG entró con HTTP 200 y /etc/bamburu.env se sirvió entero.
+  ['gate-adjuntos-por-contenido', 'adjuntos: ¿el contenido manda sobre lo declarado, y la ruta no se sale? (AUD-011/012)'],
   // Que no falte ninguna sección ni ninguna puerta.
   ['verify-menu-completo',   'una sección sin enlace es una función que nadie encuentra'],
   // Que la cadena de VERI*FACTU esté entera. Va aquí y no en el completo por su propio motivo: exige
@@ -179,6 +184,10 @@ export const GRUPOS = {
   documentos: [
     'gate-documentos',               // una sola regla congelado-vs-vivo, un solo dialecto de membrete,
                                      // el logo incrustado (sin peticiones fuera) y el PDF de los seis
+    // 4 sep 2026 (AUD-011/012) — va AQUÍ porque `AFECTA` manda `modules/erp/attachments.js` a este
+    // grupo: quien toque la puerta de los adjuntos despierta a quien la vigila. También en `infra`,
+    // que es donde vive el resto de la familia de seguridad.
+    'gate-adjuntos-por-contenido',
   ],
   // ── LA PUERTA PÚBLICA DE RESERVA (peldaño 7 · pieza 6) — DENTRO DEL BARRIDO (20 ago 2026) ────
   // SEGUNDA ZONA ENTERA que aparece fuera del mapa en el mismo día (la primera fue la agenda). Las
@@ -332,7 +341,7 @@ export const GRUPOS = {
   // 25 ago 2026 · Las dos del correo. `verify-correo-freno` prueba que el freno para de verdad al
   // llegar al tope; `verify-comprobaciones-sin-correo-real` vigila la norma del dueño: ninguna
   // comprobación vuelve a escribir a una bandeja real. Ver docs/censo-correos.md.
-  infra: ['gate-arranque-modulos', 'gate-copias-cifradas', 'gate-restauracion-completa', 'gate-portal-sin-llave-en-url', 'censo-bot-de-bamburu', 'censo-avisos-sin-fabrica', 'verify-correo-freno', 'verify-comprobaciones-sin-correo-real', 'verify-disco-perfiles', 'test-c6-secretos', 'gate-conciliacion-deshacer', 'verify-superadmin-escrituras', 'verify-tenant-lookup-readonly', 'verify-wal-acotado', 'verify-safe-error',
+  infra: ['gate-arranque-modulos', 'gate-copias-cifradas', 'gate-restauracion-completa', 'gate-portal-sin-llave-en-url', 'gate-adjuntos-por-contenido', 'censo-bot-de-bamburu', 'censo-avisos-sin-fabrica', 'verify-correo-freno', 'verify-comprobaciones-sin-correo-real', 'verify-disco-perfiles', 'test-c6-secretos', 'gate-conciliacion-deshacer', 'verify-superadmin-escrituras', 'verify-tenant-lookup-readonly', 'verify-wal-acotado', 'verify-safe-error',
           'verify-xss-escape', 'gate-xss-escape', 'gate-csp-estricta',
           // PUNTO 2 (24 ago 2026) — dar de baja a alguien del equipo: borrar si no dejó rastro,
           // archivar si lo dejó, y decirlo ANTES de pulsar. Antes daba un 500 seco.
