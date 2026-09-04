@@ -280,7 +280,7 @@ export function createPurchaseOrderReceiptRoutes(db) {
           <a href="/admin/purchase-orders/${r.order_id}" class="btn btn-secondary">Ver orden</a>
         </div>
       </div></div>
-      <script>
+      <script nonce="${c.get('cspNonce')}">
       async function anularRecepcion(){
         const _v = await window.pedirDatos({titulo:'Anular la recepción ${esc(r.receipt_number || '')}',aceptar:'Anular',
       texto:'Se revertirá el stock que entró con ella.',

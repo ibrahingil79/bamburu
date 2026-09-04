@@ -309,7 +309,7 @@ try {
   await p9.setRequestInterception(false);
 
   // ── 10 · LAS ONCE PANTALLAS DEL 2º LOTE: su bloque de arranque CORRE con el nonce ──
-  console.log('\n[10] Once pantallas más: el bloque con nonce se ejecuta de verdad');
+  console.log('\n[10] El lote de las baratas: su bloque con nonce se ejecuta de verdad');
   // COMO SE PRUEBA QUE UN BLOQUE CORRIO CUANDO LA PANTALLA NO TIENE BOTONES.
   // ⚠️ LA SEÑAL QUE MANDA ES LA DE VIOLACIONES, y conviene decir por qué. Un bloque sin nonce en una
   // pantalla endurecida se BLOQUEA, y el navegador lo DECLARA: esa es la prueba, y es la que cazó el
@@ -318,10 +318,14 @@ try {
   // cambian el DOM, así que por sí sola daría verde con el bloque de la pantalla bloqueado.
   // Se comprueba además que la pantalla TRAE un bloque con nonce: sin eso, «cero violaciones» sería
   // cierto y vacío.
-  const LOTE2 = ['/admin/analytics', '/admin/crm/tareas', '/admin/fichaje', '/admin/migracion',
-                 '/admin/migracion/importar', '/admin/purchases/8', '/admin/settings/avisos',
-                 '/admin/supplier-returns/1', '/admin/supplier-returns/2', '/admin/suscripcion',
-                 '/admin/vigia'];
+  // ⚠️ 5 SEP 2026 — SALEN `/admin/purchases/8` y las dos de `supplier-returns`. Estaban aquí porque
+  // se endurecieron por FORMA, y esa forma se retiró el mismo día: sus plantillas tienen botones
+  // CONDICIONALES que solo se pintan en cierto estado, así que otras fichas de la misma forma
+  // quedaban endurecidas con un handler vivo y el botón muerto. Vuelven cuando la plantilla esté
+  // migrada entera. Entra `/admin/descuentos`, que sí se cerró.
+  const LOTE2 = ['/admin/analytics', '/admin/crm/tareas', '/admin/descuentos', '/admin/fichaje',
+                 '/admin/migracion', '/admin/migracion/importar', '/admin/settings/avisos',
+                 '/admin/suscripcion', '/admin/vigia'];
   const p10 = await nuevaPagina();
   const erroresJs = [];
   p10.on('pageerror', e => erroresJs.push(String(e.message).slice(0, 80)));
@@ -339,8 +343,8 @@ try {
     const v = await p10.evaluate(() => { const x = window.__csp || []; window.__csp = []; return x; });
     if (v.length) conViolaciones.push(ruta + ' (' + v[0] + ')');
   }
-  ok(estrictas === LOTE2.length, 'las once sirven la política estricta', estrictas + '/' + LOTE2.length);
-  ok(corrieron === LOTE2.length, 'las once TRAEN su bloque con nonce y la pantalla se monta',
+  ok(estrictas === LOTE2.length, 'las nueve sirven la política estricta', estrictas + '/' + LOTE2.length);
+  ok(corrieron === LOTE2.length, 'las nueve TRAEN su bloque con nonce y la pantalla se monta',
      corrieron + '/' + LOTE2.length);
   // ESTA es la que prueba que el bloque de cada pantalla corrió: si le faltara el nonce, la CSP lo
   // bloquearía y el navegador lo declararía aquí. Es la que cae en el rojo provocado.

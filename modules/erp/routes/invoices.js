@@ -2066,7 +2066,7 @@ export function createInvoiceRoutes(db) {
   <div class="dp-row"><span class="k">Total</span><span class="v">${dineroEs(inv.total, sym)}</span></div>
   ${proyRowHtml}
   <div class="dp-actions" style="margin-top:14px">
-    <button onclick="window.print()" class="btn btn-primary">Imprimir</button>
+    <button data-act="imprimir" class="btn btn-primary">Imprimir</button>
     <a href="/admin/invoices/${inv.id}/pdf" class="btn btn-secondary">Descargar PDF</a>
     ${feStatus?.ready ? `<a href="/admin/invoices/${inv.id}/facturae.xml" class="btn btn-secondary">Generar Facturae</a>` : ''}
     ${esTicketSustituible && can(c, 'invoices.create') ? `<button onclick="openSust()" class="btn btn-primary">Emitir factura completa</button>` : ''}

@@ -346,7 +346,7 @@ export function createStockTransferRoutes(db) {
         <a href="/admin/stock-transfers" class="btn btn-secondary">Cancelar</a>
         <button class="btn btn-primary" id="btn-confirm" onclick="confirmTransfer()">Confirmar traslado</button>
       </div>
-      <script>
+      <script nonce="${c.get('cspNonce')}">
       const SYM = '${sym}';
       const catalog = ${jsonForScript(catalog)};
       const LINE_CELL = ${JSON.stringify(lineSearchCellHtml('<input type="hidden" class="line-pid">'))};
@@ -512,7 +512,7 @@ export function createStockTransferRoutes(db) {
         </table></div>
         <div class="card-body" style="color:var(--text3);font-size:.78rem">El coste es el medio ponderado (WAC) global del producto congelado al confirmar. Un traslado no cambia el stock total ni el WAC global: solo redistribuye cantidad y valor entre almacenes.</div>
       </div>
-      <script>
+      <script nonce="${c.get('cspNonce')}">
       async function anularTraslado(){
         const _v = await window.pedirDatos({titulo:'Anular el traslado ${esc(t.transfer_number || '')}',aceptar:'Anular',
       texto:'El stock volverá al almacén de origen.',

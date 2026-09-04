@@ -576,7 +576,7 @@ export function createQuoteRoutes(db) {
         <div class="form-group" style="margin-top:1.25rem"><label class="form-label">Notas (opcional)</label><textarea id="f-notes" class="form-control" rows="2">${isEdit ? esc(existing.notes || '') : ''}</textarea></div>
         <div style="text-align:right;margin-top:1rem"><button class="btn btn-primary" id="btn-save" onclick="saveQuote()">Guardar borrador</button></div>
       </div></div>
-      <script>
+      <script nonce="${c.get('cspNonce')}">
       const SYM='${sym}', SHOW_IRPF=${showIrpf}, IRPF_DEFAULT=${irpfDefault};
       const LINE_CELL=${JSON.stringify(lineSearchCellHtml('<input type="hidden" class="line-pid"><input type="hidden" class="line-pname">'))};
       const IS_EDIT=${isEdit}, EDIT_ID=${isEdit ? existing.id : 'null'};
@@ -712,7 +712,7 @@ export function createQuoteRoutes(db) {
   <div class="dp-row"><span class="k">Total</span><span class="v">${dineroEs(q.total, sym)}</span></div>
   ${q.valid_until ? `<div class="dp-row"><span class="k">Válido hasta</span><span class="v">${fechaEs(q.valid_until)}</span></div>` : ''}
   <div class="dp-actions" style="margin-top:14px;display:flex;flex-direction:column;gap:.5rem">
-    <button onclick="window.print()" class="btn btn-secondary">Imprimir</button>
+    <button data-act="imprimir" class="btn btn-secondary">Imprimir</button>
     <a href="/admin/quotes/${id}/pdf" class="btn btn-secondary">Descargar PDF</a>
     ${isBorrador && can(c, 'quotes.edit') ? `<a href="/admin/quotes/${id}/edit" class="btn btn-secondary">Editar</a><button onclick="emitir()" class="btn btn-primary">Emitir presupuesto</button>` : ''}
     ${isEmitido && can(c, 'quotes.edit') ? `
@@ -730,7 +730,7 @@ export function createQuoteRoutes(db) {
     <a href="/admin/quotes" class="btn btn-secondary">Volver al listado</a>
   </div>
 </div></div>
-<script>
+<script nonce="${c.get('cspNonce')}">
   const CSRF=${JSON.stringify(csrfToken)}, QID=${id}, LIVE_EMAIL=${JSON.stringify(liveEmail)};
   async function call(path, body){ let r; try{ r=await fetch('/api/erp/quotes/'+QID+path,{method:'POST',headers:{'Content-Type':'application/json','x-csrf-token':CSRF},body:JSON.stringify(body||{})}); }catch(_e){ throw new Error(window.ERR.NET); } let d; try{ d=await r.json(); }catch(_e){ d=null; } if(!r.ok||!d||d.error) throw new Error(window.cleanErrMsg((d&&d.error)||'')); return d; }
   async function emitir(){

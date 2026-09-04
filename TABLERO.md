@@ -6082,6 +6082,12 @@ El pilar queda completo: multi-almacén + stock mínimo/punto de pedido + trazab
 - **D6 · [a verificar] XSS en páginas públicas de la tienda** (HTML guardado por admin sin escapar). La tienda está apagada de forma reversible (D1); revisar antes de reabrir en Capa 2. *(El bug de fuga de stock de `cancel_order` ya quedó resuelto al archivar `sales_orders`, D4.)*
 
 ### Deuda técnica
+- ⚠️ **`limpiar-restos-de-gates.mjs` no cubre la tabla `categories` (5 sep 2026).** Al limpiar el
+  negocio de desarrollo quedaron **9 categorías** con `<img onerror=…>` en el nombre y **cero
+  productos colgando** — basura de gates que el limpiador no mira porque esa tabla no está en su
+  lista. No estorban a ninguna pantalla endurecida hoy, pero volverán a aparecer en cuanto se
+  endurezca `/admin/products` o `/admin/categories`. **Añadir `categories` al limpiador** (borrar las
+  que no tengan productos, archivar las que sí) es pequeño y evita repetir el rodeo de hoy.
 - ⚠️ **Restos de gates con carga XSS en los datos del negocio de desarrollo (5 sep 2026).**
   **9 categorías y 6 productos** tienen en su NOMBRE un `<img src=x onerror=…>` que dejó un gate
   viejo. **Comprobado que son inertes**: con la política permisiva puesta no ejecutan nada. Pero
@@ -13440,7 +13446,7 @@ Y su propia limpieza no lo recogió: `cleanup(slug)` empieza con `if (!slug) ret
 ## TAREA — Migrar el ERP para quitarle el `unsafe-inline`
 
 - **id:** csp-erp-migrar-handlers
-- **estado:** pendiente · **EN CURSO — 3 sesiones: 4 sep (`fca9551`) y 5 sep (`552bccc`, `ee1453e`)**
+- **estado:** pendiente · **EN CURSO — 4 sesiones: 4 sep (`fca9551`) y 5 sep (`552bccc`, `ee1453e`, `PENDIENTE`)**
 - **origen:** Desgajada de `csp-unsafe-inline` el 4 sep 2026, al medir el tamaño real. Es la pieza que el código llama **C4b-4**.
 
 **Medido el 4 sep 2026, no estimado:** `modules/erp` tiene **546 handlers de atributo** y **88
@@ -13615,5 +13621,63 @@ armazón también cambian el DOM** y tapaban la señal. Reescrita para decir lo 
 y la cola: plantillas (10), servicios de agenda (11), mostrador (12), avisos (13), CRM (19 y 20),
 citas (35), proyectos (43), productos (76), clientes (85).
 **Más `/admin/descuentos`**, limpia de código y bloqueada por los restos de gate en sus datos.
+
+**`LEGADO` sigue en pie.**
+
+---
+
+### 📋 4ª SESIÓN — 5 sep 2026 · LA LIMPIEZA, EL BOTÓN DE IMPRIMIR… Y UN FALLO MÍO QUE HABÍA DEJADO TRES BOTONES MUERTOS
+
+**⚠️ LO PRIMERO, PORQUE ES LO QUE IMPORTA.** En la sesión anterior endurecí
+`/^\/admin\/purchases\/\d+$/` y `/^\/admin\/supplier-returns\/\d+$/` **por FORMA**, tras ver
+limpias las fichas que salían en el censo. **Esas plantillas tienen botones CONDICIONALES** —el de
+anular solo se pinta si el documento está en cierto estado— y el censo muestreó documentos que no lo
+mostraban. Resultado: **varias fichas quedaron endurecidas con un handler vivo y su botón de anular
+MUERTO, en silencio.** Es literalmente el fallo que esta ficha existe para impedir, cometido por
+quien la está haciendo.
+
+**Reparado el mismo día:** las dos reglas por forma, retiradas — y también
+`/^\/admin\/pedidos\/\d+$/`, que tenía el mismo problema latente (sus botones de *Editar* y
+*Facturar* son condicionales). Las 22 fichas que hoy están limpias **se quedan sin endurecer a
+propósito** hasta que su plantilla esté migrada entera.
+
+**LA REGLA QUE SALE DE AQUÍ, y queda escrita en `core/security-headers.js`:** *una regla POR FORMA
+solo vale si TODAS las pantallas de esa forma están limpias EN TODOS SUS ESTADOS. Mientras una
+plantilla tenga handlers condicionales, sus fichas se endurecen de una en una o no se endurecen.*
+
+**Y la red que faltaba: `scripts/gate-csp-superficies-limpias.mjs`.** Recorre **todas** las pantallas
+que hoy reciben la política estricta —incluidos varios documentos de cada tipo, no uno— y exige cero
+handlers de atributo y cero bloques sin nonce. **Probado en rojo** devolviendo la regla culpable:
+cazó 6 fichas de compra de golpe. En `RAPIDO` + `infra`.
+
+**Lo demás de la sesión:**
+- **Limpieza de restos de gates autorizada por Ibrahin (5 sep)**, ejecutada con copia previa:
+  **24 clientes, 21 productos, 6 proveedores, 12 usuarios, 6 almacenes y 2 recursos borrados**;
+  1 cliente, 3 productos y 1 proveedor **archivados** (tienen facturas). `foreign_key_check` limpio.
+  Con eso, **`/admin/descuentos` pasó a cero violaciones** en Report-Only y **se endureció**.
+- **El botón de Imprimir**, que estaba escrito en el atributo de **cinco botones idénticos** (uno por
+  tipo de documento), pasa al oyente único del armazón.
+- **Nonce en seis ficheros de rutas más** (pedidos, albaranes, quotes, purchase-orders,
+  stock-transfers, purchase-order-receipts). Comprobado sirviendo cada ruta: ningún 500, o sea que
+  `c` estaba en alcance en todas.
+
+| | handlers | bloques sin nonce | limpias | endurecidas |
+|---|---|---|---|---|
+| tras la 3ª | 662 | 122 | 234 | 233 |
+| **tras la 4ª** | **592** | **49** | **232** | **210** |
+
+*(bajan las endurecidas porque se retiraron tres reglas por forma inseguras; es una corrección, no un retroceso)*
+
+### ▶️ QUÉ QUEDA
+
+**106 pantallas con algo que migrar**, y **22 limpias que no se pueden endurecer por forma** hasta
+migrar su plantilla: `/admin/pedidos/<id>` (16), `/admin/quotes/<id>` (3), `/admin/albaranes/<id>` (2)
+y `/admin/purchase-orders/<id>` (1).
+
+**Lo siguiente, por rendimiento:** migrar los handlers CONDICIONALES de `pedidos.js`, `quotes.js`,
+`albaranes.js`, `purchase-orders.js`, `purchases.js` y `supplier-returns.js` (son pocos por fichero
+y desbloquean ~50 fichas de golpe). Después la cola larga: `/admin/clients` (85),
+`/admin/products` (76), `/admin/proyectos` (43), `/admin/citas` (35), CRM (19 y 20),
+`/admin/avisos` (13), `/admin/mostrador` (12).
 
 **`LEGADO` sigue en pie.**

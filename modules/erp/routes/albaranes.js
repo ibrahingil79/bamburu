@@ -427,7 +427,7 @@ export function createAlbaranRoutes(db) {
           <div class="form-group" style="margin-top:1rem"><label class="form-label">Notas (opcional)</label><textarea id="f-notes" class="form-control" rows="2"></textarea></div>
           <div style="text-align:right;margin-top:1rem"><button class="btn btn-primary" id="btn-save" onclick="saveAlbaran()">Confirmar entrega</button></div>
         </div></div>
-        <script>
+        <script nonce="${c.get('cspNonce')}">
         const CSRF=${JSON.stringify(csrfToken)}, ORDER_ID=${orderId}, PEND=${linesJson};
         function render(){
           document.getElementById('lines-body').innerHTML = PEND.map(function(l,i){
@@ -485,7 +485,7 @@ export function createAlbaranRoutes(db) {
         <div class="form-group" style="margin-top:1.25rem"><label class="form-label">Notas (opcional)</label><textarea id="f-notes" class="form-control" rows="2"></textarea></div>
         <div style="text-align:right;margin-top:1rem"><button class="btn btn-primary" id="btn-save" onclick="saveAlbaran()">Confirmar entrega</button></div>
       </div></div>
-      <script>
+      <script nonce="${c.get('cspNonce')}">
       const CSRF=${JSON.stringify(csrfToken)};
       const LINE_CELL=${JSON.stringify(lineSearchCellHtml('<input type="hidden" class="line-pid"><input type="hidden" class="line-pname"><input type="hidden" class="line-price"><input type="hidden" class="line-tax" value="21">'))};
       let catalog=[];
@@ -561,7 +561,7 @@ export function createAlbaranRoutes(db) {
   <div class="dp-row"><span class="k">Almacén</span><span class="v">${esc(a.warehouse_name || 'Principal')}</span></div>
   ${a.order_number ? `<div class="dp-row"><span class="k">Pedido</span><span class="v">${esc(a.order_number)}</span></div>` : ''}
   <div class="dp-actions" style="margin-top:14px;display:flex;flex-direction:column;gap:.5rem">
-    <button onclick="window.print()" class="btn btn-secondary">Imprimir</button>
+    <button data-act="imprimir" class="btn btn-secondary">Imprimir</button>
     <a href="/admin/albaranes/${id}/pdf" class="btn btn-secondary">Descargar PDF</a>
     ${isConfirmed && !invoice && can(c, 'albaranes.edit') ? `<button onclick="facturar()" class="btn btn-primary">Facturar este albarán</button>` : ''}
     ${invoice ? `<a href="/admin/invoices/${invoice.id}" class="btn btn-secondary">Ver factura ${esc(invoice.invoice_number)}</a>` : ''}
@@ -569,7 +569,7 @@ export function createAlbaranRoutes(db) {
     <a href="/admin/albaranes" class="btn btn-secondary">Volver al listado</a>
   </div>
 </div></div>
-<script>
+<script nonce="${c.get('cspNonce')}">
   const CSRF=${JSON.stringify(csrfToken)}, AID=${id};
   async function call(path, body){ let r; try{ r=await fetch('/api/erp/albaranes/'+AID+path,{method:'POST',headers:{'Content-Type':'application/json','x-csrf-token':CSRF},body:JSON.stringify(body||{})}); }catch(_e){ throw new Error(window.ERR.NET); } let d; try{ d=await r.json(); }catch(_e){ d=null; } if(!r.ok||!d||d.error) throw new Error(window.cleanErrMsg((d&&d.error)||'')); return d; }
   async function facturar(){

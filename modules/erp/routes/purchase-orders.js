@@ -597,7 +597,7 @@ export function createPurchaseOrderRoutes(db) {
         <a href="${isEdit ? '/admin/purchase-orders/' + existing.id : '/admin/purchase-orders'}" class="btn btn-secondary">Cancelar</a>
         <button class="btn btn-primary" id="btn-save" onclick="saveOrder()">${isEdit ? 'Guardar cambios' : 'Guardar borrador'}</button>
       </div>
-      <script>
+      <script nonce="${c.get('cspNonce')}">
       const SYM = '${sym}';
       const catalog = ${jsonForScript(products)};
       const SEED = ${jsonForScript(seed)};
@@ -814,7 +814,7 @@ export function createPurchaseOrderRoutes(db) {
         <a href="/admin/purchase-orders/${id}" class="btn btn-secondary">Cancelar</a>
         <button class="btn btn-primary" id="btn-confirm" onclick="confirmReceipt()">Confirmar recepción</button>
       </div>
-      <script>
+      <script nonce="${c.get('cspNonce')}">
       const SYM = '${sym}';
       function rowsR(){ return Array.prototype.slice.call(document.querySelectorAll('#rLines tr')); }
       // Pie en vivo + AVISO de exceso por línea (C1.c): si la cantidad supera el
@@ -1055,13 +1055,13 @@ ${receptionBlock}`;
   ${o.expected_date ? `<div class="dp-row"><span class="k">Entrega prevista</span><span class="v">${fechaEs(o.expected_date)}</span></div>` : ''}
   <div class="dp-row"><span class="k">Proveedor</span><span class="v">${esc(proveedor.name || '')}</span></div>
   <div class="dp-actions" style="margin-top:14px">
-    <button onclick="window.print()" class="btn btn-primary">Imprimir</button>
+    <button data-act="imprimir" class="btn btn-primary">Imprimir</button>
     <a href="/admin/purchase-orders/${id}/pdf" class="btn btn-secondary">Descargar PDF</a>
     ${actions}
     <a href="/admin/purchase-orders" class="btn btn-secondary">Volver al listado</a>
   </div>
 </div></div>
-<script>
+<script nonce="${c.get('cspNonce')}">
   const CSRF = ${JSON.stringify(csrfToken)};
   async function post(url, body){
     let r; try{ r = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json','x-csrf-token':CSRF}, body: JSON.stringify(body||{}) }); }catch(_e){ throw new Error(window.ERR.NET); }

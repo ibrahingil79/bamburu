@@ -60,22 +60,31 @@ const SUPERFICIES_ESTRICTAS = [
   // ⚙️ 5 SEP 2026 (2ª tanda) — ONCE pantallas más: las que solo necesitaban el `nonce` de su bloque
   // y no tenían ni un handler. Todas ancladas, como el resto.
   //
-  // ⚠️ FALTA `/admin/descuentos`, QUE ESTABA EN ESTE LOTE Y SE QUEDA FUERA A PROPÓSITO. Su código
-  // está limpio —sus botones usan `el.onclick = función`, que la CSP estricta SÍ permite— pero su
-  // pantalla reporta 6 violaciones que salen de los DATOS: nombres de categoría y de producto con
-  // `<img onerror=…>` que dejó un gate viejo en el negocio de desarrollo. Son inertes (comprobado:
-  // no se ejecutan ni con la política permisiva), pero un `[~]` frena el cierre, así que esa
-  // pantalla no entra hasta que se limpien esos restos. Anotado en TABLERO.
+  // ⚙️ 5 SEP 2026, 3ª tanda — `/admin/descuentos` ENTRA. Se quedó fuera del lote anterior porque
+  // reportaba 6 violaciones que no venían de su código sino de los DATOS: nombres de producto con
+  // `<img onerror=…>` que dejó un gate viejo. Con la limpieza autorizada por Ibrahin (5 sep) esos
+  // productos se fueron, y la pantalla da CERO en Report-Only. Se endurece ahora.
   /^\/admin\/analytics$/,
   /^\/admin\/crm\/tareas$/,
   /^\/admin\/fichaje$/,
   /^\/admin\/migracion$/,
   /^\/admin\/migracion\/importar$/,
-  /^\/admin\/purchases\/\d+$/,
+  // ⚠️ RETIRADAS EL 5 SEP 2026, EL MISMO DÍA QUE SE PUSIERON, Y ES LA LECCIÓN DE LA TANDA:
+  //     /^\/admin\/purchases\/\d+$/ y /^\/admin\/supplier-returns\/\d+$/
+  // Se endurecieron por FORMA tras ver limpias las pantallas del censo. Pero esas plantillas tienen
+  // botones CONDICIONALES —`${estado === 'confirmada' ? '<button onclick=…>' : ''}`— que solo
+  // aparecen en cierto estado del documento. El censo muestreó documentos que no los mostraban, así
+  // que /admin/purchases/1, /admin/purchases/5 y /admin/supplier-returns/7 quedaron endurecidas CON
+  // un handler vivo: su botón de anular estuvo MUERTO, en silencio, justo el fallo que esta ficha
+  // existe para impedir.
+  //
+  // LA REGLA QUE SALE DE AQUÍ: una regla POR FORMA solo vale si TODAS las pantallas de esa forma
+  // están limpias EN TODOS SUS ESTADOS. Mientras una plantilla tenga handlers condicionales, sus
+  // fichas se endurecen de una en una o no se endurecen.
   /^\/admin\/settings\/avisos$/,
-  /^\/admin\/supplier-returns\/\d+$/,
   /^\/admin\/suscripcion$/,
   /^\/admin\/vigia$/,
+  /^\/admin\/descuentos$/,
 ];
 
 export function securityHeaders() {

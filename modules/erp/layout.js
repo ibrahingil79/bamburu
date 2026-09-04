@@ -1567,6 +1567,9 @@ ${ROOT_TOKENS}
         case 'navfly':         { var g=el.closest('[data-navg]'); if(g&&window.toggleFly)window.toggleFly(g); break; }
         case 'rowmenu':        window.toggleRowMenu&&window.toggleRowMenu(el); break;
         case 'menu-reset':     window.menuRestablecer&&window.menuRestablecer(); break;
+        // 5 SEP 2026 — el boton de Imprimir de los seis papeles. Estaba escrito en el atributo de
+        // cinco botones identicos, uno por tipo de documento; ahora lo despacha este mismo oyente.
+        case 'imprimir':       window.print(); break;
         case 'cerrar-acceso':  { var m=document.getElementById('accessDeniedModal'); if(m)m.style.display='none'; break; }
       }
     });
