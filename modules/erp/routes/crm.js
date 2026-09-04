@@ -383,9 +383,9 @@ export function createCrmRoutes(db) {
         try{ rows=await api('GET','/api/erp/clients/search?q='+encodeURIComponent(q)+'&limit=20'); }
         catch(e){ document.getElementById('oCliList').innerHTML='<div style="padding:.5rem .6rem;color:var(--danger);font-size:.8rem">No se pudo cargar la lista de clientes.</div>'; return; }
         const crear = PUEDE_CLIENTE
-          ? '<button type="button" class="rmenu-item" style="color:var(--accent)" onmousedown="event.preventDefault();showNewClient()"><i class="ti ti-plus"></i> Crear '+(q?'«'+escHtml(q)+'» como cliente nuevo':'un cliente nuevo')+'</button>'
+          ? '<button type="button" class="rmenu-item" style="color:var(--accent)" data-crm="cliente-nuevo"><i class="ti ti-plus"></i> Crear '+(q?'«'+escHtml(q)+'» como cliente nuevo':'un cliente nuevo')+'</button>'
           : '';
-        const items = rows.map(r=>'<button type="button" class="rmenu-item" onmousedown="event.preventDefault();pickClient('+r.id+',this)">'+escHtml(r.name)+(r.fiscal_id?' <span style="color:var(--muted)">'+escHtml(r.fiscal_id)+'</span>':'')+'</button>').join('');
+        const items = rows.map(r=>'<button type="button" class="rmenu-item" data-crm="cliente-elegir" data-id="'+r.id+'">'+escHtml(r.name)+(r.fiscal_id?' <span style="color:var(--muted)">'+escHtml(r.fiscal_id)+'</span>':'')+'</button>').join('');
         const vacio = '<div style="padding:.5rem .6rem;color:var(--muted);font-size:.8rem">'+(q?'Ningún cliente con «'+escHtml(q)+'».':'Aún no tienes clientes registrados.')+'</div>';
         document.getElementById('oCliList').innerHTML = (rows.length ? items : vacio) + crear;
       }, q?200:0);
@@ -495,14 +495,14 @@ export function createCrmRoutes(db) {
         '<div class="form-row" style="margin-top:.75rem">'
         +'<div class="form-group"><label class="form-label">Canal</label><select class="form-control" id="acChannel">${channelOptions}</select></div>'
         +'<div class="form-group" style="flex:1"><label class="form-label">Nota</label><input class="form-control" id="acNote" placeholder="Qué hablasteis (opcional)"></div>'
-        +'</div><div style="display:flex;gap:.5rem;justify-content:flex-end"><button class="btn btn-secondary btn-sm" onclick="document.getElementById(\\'actForm\\').innerHTML=\\'\\'">Cancelar</button>'
-        +'<button class="btn btn-primary btn-sm" onclick="saveActividad(\\'contacto\\')">Registrar</button></div>';
+        +'</div><div style="display:flex;gap:.5rem;justify-content:flex-end"><button class="btn btn-secondary btn-sm" data-crm="act-limpiar">Cancelar</button>'
+        +'<button class="btn btn-primary btn-sm" data-crm="act-guardar" data-tipo="contacto">Registrar</button></div>';
     }
     function actNota(){
       document.getElementById('actForm').innerHTML =
         '<div class="form-group" style="margin-top:.75rem"><label class="form-label">Nota</label><textarea class="form-control" id="acNote" rows="3"></textarea></div>'
-        +'<div style="display:flex;gap:.5rem;justify-content:flex-end"><button class="btn btn-secondary btn-sm" onclick="document.getElementById(\\'actForm\\').innerHTML=\\'\\'">Cancelar</button>'
-        +'<button class="btn btn-primary btn-sm" onclick="saveActividad(\\'nota\\')">Guardar nota</button></div>';
+        +'<div style="display:flex;gap:.5rem;justify-content:flex-end"><button class="btn btn-secondary btn-sm" data-crm="act-limpiar">Cancelar</button>'
+        +'<button class="btn btn-primary btn-sm" data-crm="act-guardar" data-tipo="nota">Guardar nota</button></div>';
     }
     function actCompromiso(){
       const hoy=new Date().toISOString().slice(0,10);
@@ -511,8 +511,8 @@ export function createCrmRoutes(db) {
         +'<div class="form-group"><label class="form-label">Quedasteis para el</label><input type="date" class="form-control" id="acDate" value="'+hoy+'"></div>'
         +'<div class="form-group" style="flex:1"><label class="form-label">Nota</label><input class="form-control" id="acNote" placeholder="(opcional)"></div>'
         +'</div><div style="color:var(--muted);font-size:.78rem;margin-bottom:.5rem">Hasta esa fecha no te propondré insistir.</div>'
-        +'<div style="display:flex;gap:.5rem;justify-content:flex-end"><button class="btn btn-secondary btn-sm" onclick="document.getElementById(\\'actForm\\').innerHTML=\\'\\'">Cancelar</button>'
-        +'<button class="btn btn-primary btn-sm" onclick="saveActividad(\\'compromiso\\')">Registrar compromiso</button></div>';
+        +'<div style="display:flex;gap:.5rem;justify-content:flex-end"><button class="btn btn-secondary btn-sm" data-crm="act-limpiar">Cancelar</button>'
+        +'<button class="btn btn-primary btn-sm" data-crm="act-guardar" data-tipo="compromiso">Registrar compromiso</button></div>';
     }
     async function actEmail(){
       let prev; try{ prev=await api('GET','/api/erp/crm/'+actOppId+'/email-preview'); }catch(e){ toast(e.message,'err'); return; }
@@ -520,8 +520,8 @@ export function createCrmRoutes(db) {
         '<div style="margin-top:.75rem;color:var(--muted);font-size:.8rem">Para: '+escHtml(prev.to)+' · tono: '+escHtml(prev.tono)+'</div>'
         +'<div class="form-group"><label class="form-label">Asunto</label><input class="form-control" id="acSubject" value="'+escHtml(prev.subject)+'"></div>'
         +'<div class="form-group"><label class="form-label">Mensaje (editable antes de enviar)</label><textarea class="form-control" id="acText" rows="9">'+escHtml(prev.text)+'</textarea></div>'
-        +'<div style="display:flex;gap:.5rem;justify-content:flex-end"><button class="btn btn-secondary btn-sm" onclick="document.getElementById(\\'actForm\\').innerHTML=\\'\\'">Cancelar</button>'
-        +'<button class="btn btn-primary btn-sm" id="acSendBtn" onclick="saveActividad(\\'email\\')">Enviar email</button></div>';
+        +'<div style="display:flex;gap:.5rem;justify-content:flex-end"><button class="btn btn-secondary btn-sm" data-crm="act-limpiar">Cancelar</button>'
+        +'<button class="btn btn-primary btn-sm" id="acSendBtn" data-crm="act-guardar" data-tipo="email">Enviar email</button></div>';
     }
     async function saveActividad(type){
       const g=id=>{const el=document.getElementById(id);return el?el.value:'';};
@@ -539,21 +539,70 @@ export function createCrmRoutes(db) {
         toast(e.message,'err');
         const b=document.getElementById('acSendBtn'); if(b){b.disabled=false;b.textContent='Enviar email';}
       }
-    }`;
+    }
+
+    // ── 4 SEP 2026 (csp-erp-migrar-handlers) — ENGANCHE COMUN A LAS DOS VISTAS ────────────────
+    // Casi todo lo de aqui se pinta despues (las tarjetas, la lista de clientes del buscador, los
+    // formularios de seguimiento), asi que va por delegacion. Los fijos de las ventanas tambien,
+    // porque las ventanas son las MISMAS en las dos vistas y asi solo hay un sitio que mirar.
+    // El menu de fila llega por el evento del armazon: sus botones ya no llevan codigo dentro.
+    document.addEventListener('click', function(e){
+      var t = e.target.closest('[data-crm]'); if (!t) return;
+      var a = t.getAttribute('data-crm'), id = Number(t.getAttribute('data-id'));
+      if (a === 'cliente-nuevo') showNewClient();
+      else if (a === 'cliente-elegir') pickClient(id, t);
+      else if (a === 'cliente-ocultar') hideNewClient();
+      else if (a === 'cliente-crear') createInlineClient();
+      else if (a === 'act-limpiar') document.getElementById('actForm').innerHTML = '';
+      else if (a === 'act-guardar') saveActividad(t.getAttribute('data-tipo'));
+      else if (a === 'act-contacto') actContacto();
+      else if (a === 'act-compromiso') actCompromiso();
+      else if (a === 'act-nota') actNota();
+      else if (a === 'act-cerrar') closeModal('actModal');
+      else if (a === 'opp-cerrar') closeModal('oppModal');
+      else if (a === 'opp-guardar') saveOpp();
+      else if (a === 'opp-nueva') openNewOpp();
+      else if (a === 'cierre-cerrar') closeModal('closeModal');
+      else if (a === 'seguimiento') openActividad(id);
+    });
+    // Las dos listas de sugerencias del buscador de cliente se elegian con mousedown para
+    // adelantarse al blur del campo; sin el preventDefault, el blur cierra la lista antes del clic.
+    document.addEventListener('mousedown', function(e){
+      var t = e.target.closest('[data-crm="cliente-elegir"], [data-crm="cliente-nuevo"]');
+      if (t) e.preventDefault();
+    });
+    document.addEventListener('rowmenu:act', function(e){
+      var a = e.detail.act, id = Number(e.detail.arg);
+      if (a === 'nueva-oportunidad') openNewOpp();
+      else if (a === 'seguimiento') openActividad(id);
+      else if (a === 'editar') openEditOpp(id);
+      else if (a === 'ganada') openClose(id, 'ganada');
+      else if (a === 'perdida') openClose(id, 'perdida');
+      else if (a === 'archivar') archiveOpp(id);
+    });
+    document.addEventListener('DOMContentLoaded', function(){
+      var d = function(sel, ev, fn){ var x = document.querySelector(sel); if (x) x.addEventListener(ev, fn); };
+      d('#oClient', 'input', function(){ cliSearch(); });
+      d('#oClient', 'focus', function(){ cliSearch(); });
+      d('#oClient', 'blur',  function(){ cliBlur(); });
+      d('#cReason', 'change', function(){ onReasonChange(); });
+      d('#closeBtn', 'click', function(){ doClose(); });
+      d('#actEmailBtn', 'click', function(){ actEmail(); });
+    });`;
 
   // Modal "nueva / editar oportunidad" — COMPARTIDO por las dos vistas (antes estaba duplicado, y
   // era donde el usuario se atascaba). Incluye la CREACIÓN DE CLIENTE EN LÍNEA (`puedeCliente`): si
   // el cliente no está registrado, se crea aquí mismo en vez de dejar la oportunidad sin avanzar.
   const oppModalHtml = (s, puedeCliente) => `
       <div class="modal-overlay" id="oppModal"><div class="modal" style="max-width:620px">
-        <div class="modal-head"><h3 id="oppModalTitle">Nueva oportunidad</h3><button class="modal-close" onclick="closeModal('oppModal')">✕</button></div>
+        <div class="modal-head"><h3 id="oppModalTitle">Nueva oportunidad</h3><button class="modal-close" data-crm="opp-cerrar">✕</button></div>
         <div class="modal-body">
           <div class="form-group" style="position:relative">
             <label class="form-label">Cliente *</label>
-            <input class="form-control" id="oClient" oninput="cliSearch()" onfocus="cliSearch()" onblur="cliBlur()" autocomplete="off" placeholder="Haz clic para elegir o escribe para buscar...">
+            <input class="form-control" id="oClient" autocomplete="off" placeholder="Haz clic para elegir o escribe para buscar...">
             <input type="hidden" id="oClientId">
             <div id="oCliList" class="crm-pop"></div>
-            ${puedeCliente ? '<div style="margin-top:.4rem;font-size:.8rem;color:var(--muted)">¿No está en la lista? <button type="button" class="crm-link" onmousedown="event.preventDefault();showNewClient()">Crear un cliente nuevo</button></div>' : ''}
+            ${puedeCliente ? '<div style="margin-top:.4rem;font-size:.8rem;color:var(--muted)">¿No está en la lista? <button type="button" class="crm-link" data-crm="cliente-nuevo">Crear un cliente nuevo</button></div>' : ''}
           </div>
           ${puedeCliente ? `<div id="oNewCli" style="display:none;border:1px solid var(--border2);border-radius:10px;padding:.75rem;margin-bottom:1rem;background:var(--bg3)">
             <div style="font-weight:600;font-size:.85rem;margin-bottom:.5rem">Nuevo cliente</div>
@@ -566,8 +615,8 @@ export function createCrmRoutes(db) {
               <div class="form-group" style="flex:1"><label class="form-label">Teléfono</label><input class="form-control" id="ncPhone" placeholder="(opcional)"></div>
             </div>
             <div style="display:flex;gap:.5rem;justify-content:flex-end">
-              <button class="btn btn-secondary btn-sm" onclick="hideNewClient()">Cancelar</button>
-              <button class="btn btn-primary btn-sm" onclick="createInlineClient()">Crear y usar</button>
+              <button class="btn btn-secondary btn-sm" data-crm="cliente-ocultar">Cancelar</button>
+              <button class="btn btn-primary btn-sm" data-crm="cliente-crear">Crear y usar</button>
             </div>
           </div>` : ''}
           <div class="form-row">
@@ -583,7 +632,7 @@ export function createCrmRoutes(db) {
           <div class="form-group"><label class="form-label">Notas</label><textarea class="form-control" id="oNotes" rows="2"></textarea></div>
           <div style="color:var(--muted);font-size:.78rem">El valor estimado es comercial, no fiscal: la factura la sigue llevando su documento.</div>
         </div>
-        <div class="modal-foot"><button class="btn btn-secondary" onclick="closeModal('oppModal')">Cancelar</button><button class="btn btn-primary" onclick="saveOpp()">Guardar</button></div>
+        <div class="modal-foot"><button class="btn btn-secondary" data-crm="opp-cerrar">Cancelar</button><button class="btn btn-primary" data-crm="opp-guardar">Guardar</button></div>
       </div></div>`;
 
   // ── VISTA 1: EL EMBUDO (Kanban con drag & drop real) ────────────
@@ -596,7 +645,7 @@ export function createCrmRoutes(db) {
       ${kanbanCss}
       <div class="ph">
         <h2>Oportunidades</h2>
-        ${puedeGestionar ? '<button class="btn btn-primary" onclick="openNewOpp()">Nueva oportunidad</button>' : ''}
+        ${puedeGestionar ? '<button class="btn btn-primary" data-crm="opp-nueva">Nueva oportunidad</button>' : ''}
       </div>
       ${tabs('embudo')}
 
@@ -623,29 +672,29 @@ export function createCrmRoutes(db) {
 
       <!-- Modal: cerrar (ganada / perdida) -->
       <div class="modal-overlay" id="closeModal"><div class="modal" style="max-width:520px">
-        <div class="modal-head"><h3 id="closeTitle">Cerrar oportunidad</h3><button class="modal-close" onclick="closeModal('closeModal')">✕</button></div>
+        <div class="modal-head"><h3 id="closeTitle">Cerrar oportunidad</h3><button class="modal-close" data-crm="cierre-cerrar">✕</button></div>
         <div class="modal-body">
           <input type="hidden" id="closeStatus">
           <div id="closeHint" style="color:var(--muted);font-size:.82rem;margin-bottom:.85rem"></div>
           <div id="lostBlock" class="form-group">
             <label class="form-label">Motivo *</label>
-            <select class="form-control" id="cReason" onchange="onReasonChange()"><option value="">— Elige el motivo —</option>${lostOptions}</select>
+            <select class="form-control" id="cReason"><option value="">— Elige el motivo —</option>${lostOptions}</select>
           </div>
           <div class="form-group"><label class="form-label" id="cNoteLabel">Nota (opcional)</label><textarea class="form-control" id="cNote" rows="2"></textarea></div>
         </div>
-        <div class="modal-foot"><button class="btn btn-secondary" onclick="closeModal('closeModal')">Cancelar</button><button class="btn btn-primary" id="closeBtn" onclick="doClose()">Cerrar</button></div>
+        <div class="modal-foot"><button class="btn btn-secondary" data-crm="cierre-cerrar">Cancelar</button><button class="btn btn-primary" id="closeBtn">Cerrar</button></div>
       </div></div>
 
       <!-- Modal: seguimiento (actividad + email) -->
       <div class="modal-overlay" id="actModal"><div class="modal" style="max-width:620px">
-        <div class="modal-head"><h3 id="actTitle">Seguimiento</h3><button class="modal-close" onclick="closeModal('actModal')">✕</button></div>
+        <div class="modal-head"><h3 id="actTitle">Seguimiento</h3><button class="modal-close" data-crm="act-cerrar">✕</button></div>
         <div class="modal-body">
           <div id="actProx"></div>
           <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin:.5rem 0">
-            <button class="btn btn-primary btn-sm" id="actEmailBtn" onclick="actEmail()">Enviar email</button>
-            <button class="btn btn-secondary btn-sm" onclick="actContacto()">Registrar contacto</button>
-            <button class="btn btn-secondary btn-sm" onclick="actCompromiso()">Registrar compromiso</button>
-            <button class="btn btn-secondary btn-sm" onclick="actNota()">Añadir nota</button>
+            <button class="btn btn-primary btn-sm" id="actEmailBtn">Enviar email</button>
+            <button class="btn btn-secondary btn-sm" data-crm="act-contacto">Registrar contacto</button>
+            <button class="btn btn-secondary btn-sm" data-crm="act-compromiso">Registrar compromiso</button>
+            <button class="btn btn-secondary btn-sm" data-crm="act-nota">Añadir nota</button>
           </div>
           <div id="actNoEmail" style="display:none;color:var(--muted);font-size:.8rem">Este cliente no tiene email: puedes registrar el contacto o una nota.</div>
           <div id="actForm"></div>
@@ -653,7 +702,7 @@ export function createCrmRoutes(db) {
         </div>
       </div></div>
 
-      <script>
+      <script nonce="${c.get('cspNonce')}">
       ${crmScript(s)}
       const PUEDE = ${puedeGestionar ? 'true' : 'false'};
       const PUEDE_CLIENTE = ${puedeCrearCliente ? 'true' : 'false'};
@@ -664,14 +713,14 @@ export function createCrmRoutes(db) {
         const stale = o.dias_en_etapa > 14;
         const due = !!(p && p.accion);
         const menu = PUEDE ? window.rowMenu([
-          {label:'Seguimiento', onclick:'openActividad('+o.id+')'},
-          {label:'Editar', onclick:'openEditOpp('+o.id+')'},
-          {label:'Marcar ganada', onclick:'openClose('+o.id+",'ganada')"},
-          {label:'Dar por perdida', onclick:'openClose('+o.id+",'perdida')"},
-          {label:'Archivar', danger:true, onclick:'archiveOpp('+o.id+')'},
+          {label:'Seguimiento', act:'seguimiento', arg:o.id},
+          {label:'Editar', act:'editar', arg:o.id},
+          {label:'Marcar ganada', act:'ganada', arg:o.id},
+          {label:'Dar por perdida', act:'perdida', arg:o.id},
+          {label:'Archivar', danger:true, act:'archivar', arg:o.id},
         ]) : '';
         return '<div class="kb-card" draggable="'+(PUEDE?'true':'false')+'" data-id="'+o.id+'" data-stage="'+escHtml(o.stage)+'"'
-          + ' ondragstart="onDragStart(event)" ondragend="onDragEnd(event)" ondblclick="'+(PUEDE?'openActividad('+o.id+')':'')+'">'
+          + (PUEDE ? ' data-crm-card="1"' : '') + '>'
           + '<div class="kb-c-t">'+escHtml(o.title)+'</div>'
           + '<div class="kb-c-cl"><i class="ti ti-user" style="font-size:.8rem"></i> '+escHtml(o.client_name||'')+'</div>'
           + '<div class="kb-c-meta"><span class="kb-c-v">'+money(o.amount)+' <span style="font-size:.68rem;color:var(--text3);font-weight:400">'+o.probability+'%</span></span>'
@@ -708,15 +757,17 @@ export function createCrmRoutes(db) {
 
       // ── DRAG & DROP (HTML5 nativo; sin librerías, sin framework) ──────
       let dragId=null, dragFrom=null;
-      function onDragStart(ev){
-        const card=ev.currentTarget;
+      // 4 SEP 2026 — la tarjeta llega COMO ARGUMENTO. Antes se sacaba de ev.currentTarget, que
+      // con el atributo era la propia tarjeta; ahora el oyente esta en el documento y currentTarget
+      // seria el documento entero.
+      function onDragStart(ev, card){
         dragId=card.dataset.id; dragFrom=card.dataset.stage;
         card.classList.add('dragging');
         ev.dataTransfer.effectAllowed='move';
         ev.dataTransfer.setData('text/plain', dragId);   // Firefox exige payload o no arrastra
       }
-      function onDragEnd(ev){
-        ev.currentTarget.classList.remove('dragging');
+      function onDragEnd(ev, card){
+        card.classList.remove('dragging');
         document.querySelectorAll('.over').forEach(function(e){e.classList.remove('over');});
       }
       function wireDropzones(){
@@ -748,6 +799,17 @@ export function createCrmRoutes(db) {
         });
       }
       wireDropzones();
+      // El arrastre y el doble clic de la tarjeta, por delegacion: las tarjetas se repintan en cada
+      // recarga del tablero, y un oyente por tarjeta habria que volver a ponerlo cada vez.
+      document.addEventListener('dragstart', function(ev){
+        var card = ev.target.closest('[data-crm-card]'); if (card) onDragStart(ev, card);
+      });
+      document.addEventListener('dragend', function(ev){
+        var card = ev.target.closest('[data-crm-card]'); if (card) onDragEnd(ev, card);
+      });
+      document.addEventListener('dblclick', function(ev){
+        var card = ev.target.closest('[data-crm-card]'); if (card) openActividad(Number(card.dataset.id));
+      });
       reload();
       </script>`;
     return c.html(adminLayout('Oportunidades', content, 'crm', c.get('session')?.csrfToken || '', c));
@@ -762,7 +824,7 @@ export function createCrmRoutes(db) {
     const content = `
       ${kanbanCss}
       <div class="ph"><h2>Oportunidades</h2>
-        ${puedeGestionar ? '<button class="btn btn-primary" onclick="openNewOpp()">Nueva oportunidad</button>' : ''}
+        ${puedeGestionar ? '<button class="btn btn-primary" data-crm="opp-nueva">Nueva oportunidad</button>' : ''}
       </div>
       ${tabs('cola')}
       <div class="card" style="margin-bottom:1rem"><div class="card-body" style="display:flex;align-items:baseline;gap:.75rem">
@@ -771,7 +833,7 @@ export function createCrmRoutes(db) {
         <span id="wlCount" style="color:var(--muted);font-size:.85rem"></span>
       </div></div>
       <div class="card">
-        <div class="card-head"><h3>A quién llamar hoy (más urgente arriba)</h3><input class="search" id="searchBox" placeholder="Buscar cliente u oportunidad..." oninput="filterRows()"></div>
+        <div class="card-head"><h3>A quién llamar hoy (más urgente arriba)</h3><input class="search" id="searchBox" data-crm="buscar" placeholder="Buscar cliente u oportunidad..."></div>
         <div class="table-wrap"><table>
           <thead><tr><th>Cliente</th><th>Oportunidad</th><th>Valor</th><th>Etapa</th><th>Próxima acción</th><th></th></tr></thead>
           <tbody id="wlBody">${skeletonRows(6)}</tbody>
@@ -781,26 +843,26 @@ export function createCrmRoutes(db) {
       ${oppModalHtml(s, puedeCrearCliente)}
 
       <div class="modal-overlay" id="closeModal"><div class="modal" style="max-width:520px">
-        <div class="modal-head"><h3 id="closeTitle">Cerrar oportunidad</h3><button class="modal-close" onclick="closeModal('closeModal')">✕</button></div>
+        <div class="modal-head"><h3 id="closeTitle">Cerrar oportunidad</h3><button class="modal-close" data-crm="cierre-cerrar">✕</button></div>
         <div class="modal-body">
           <input type="hidden" id="closeStatus">
           <div id="closeHint" style="color:var(--muted);font-size:.82rem;margin-bottom:.85rem"></div>
           <div id="lostBlock" class="form-group"><label class="form-label">Motivo *</label>
-            <select class="form-control" id="cReason" onchange="onReasonChange()"><option value="">— Elige el motivo —</option>${lostOptions}</select></div>
+            <select class="form-control" id="cReason"><option value="">— Elige el motivo —</option>${lostOptions}</select></div>
           <div class="form-group"><label class="form-label" id="cNoteLabel">Nota (opcional)</label><textarea class="form-control" id="cNote" rows="2"></textarea></div>
         </div>
-        <div class="modal-foot"><button class="btn btn-secondary" onclick="closeModal('closeModal')">Cancelar</button><button class="btn btn-primary" id="closeBtn" onclick="doClose()">Cerrar</button></div>
+        <div class="modal-foot"><button class="btn btn-secondary" data-crm="cierre-cerrar">Cancelar</button><button class="btn btn-primary" id="closeBtn">Cerrar</button></div>
       </div></div>
 
       <div class="modal-overlay" id="actModal"><div class="modal" style="max-width:620px">
-        <div class="modal-head"><h3 id="actTitle">Seguimiento</h3><button class="modal-close" onclick="closeModal('actModal')">✕</button></div>
+        <div class="modal-head"><h3 id="actTitle">Seguimiento</h3><button class="modal-close" data-crm="act-cerrar">✕</button></div>
         <div class="modal-body">
           <div id="actProx"></div>
           <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin:.5rem 0">
-            <button class="btn btn-primary btn-sm" id="actEmailBtn" onclick="actEmail()">Enviar email</button>
-            <button class="btn btn-secondary btn-sm" onclick="actContacto()">Registrar contacto</button>
-            <button class="btn btn-secondary btn-sm" onclick="actCompromiso()">Registrar compromiso</button>
-            <button class="btn btn-secondary btn-sm" onclick="actNota()">Añadir nota</button>
+            <button class="btn btn-primary btn-sm" id="actEmailBtn">Enviar email</button>
+            <button class="btn btn-secondary btn-sm" data-crm="act-contacto">Registrar contacto</button>
+            <button class="btn btn-secondary btn-sm" data-crm="act-compromiso">Registrar compromiso</button>
+            <button class="btn btn-secondary btn-sm" data-crm="act-nota">Añadir nota</button>
           </div>
           <div id="actNoEmail" style="display:none;color:var(--muted);font-size:.8rem">Este cliente no tiene email: puedes registrar el contacto o una nota.</div>
           <div id="actForm"></div>
@@ -808,7 +870,7 @@ export function createCrmRoutes(db) {
         </div>
       </div></div>
 
-      <script>
+      <script nonce="${c.get('cspNonce')}">
       ${crmScript(s)}
       const PUEDE = ${puedeGestionar ? 'true' : 'false'};
       const PUEDE_CLIENTE = ${puedeCrearCliente ? 'true' : 'false'};
@@ -821,12 +883,12 @@ export function createCrmRoutes(db) {
         document.getElementById('wlBody').innerHTML = WL.length ? WL.map(function(o){
           const p=o.proximaAccion;
           const acciones = PUEDE
-            ? '<button class="btn btn-primary btn-sm" onclick="openActividad('+o.id+')">Seguimiento</button> '
+            ? '<button class="btn btn-primary btn-sm" data-crm="seguimiento" data-id="'+o.id+'">Seguimiento</button> '
               + window.rowMenu([
-                  {label:'Editar', onclick:'openEditOpp('+o.id+')'},
-                  {label:'Marcar ganada', onclick:'openClose('+o.id+",'ganada')"},
-                  {label:'Dar por perdida', onclick:'openClose('+o.id+",'perdida')"},
-                  {label:'Archivar', danger:true, onclick:'archiveOpp('+o.id+')'},
+                  {label:'Editar', act:'editar', arg:o.id},
+                  {label:'Marcar ganada', act:'ganada', arg:o.id},
+                  {label:'Dar por perdida', act:'perdida', arg:o.id},
+                  {label:'Archivar', danger:true, act:'archivar', arg:o.id},
                 ])
             : '';
           return '<tr class="frow">'
@@ -837,7 +899,7 @@ export function createCrmRoutes(db) {
             +'<td>'+escHtml(proxTexto(p))+(p&&p.fechaObjetivo?' <span style="color:var(--muted);font-size:.8rem">· '+escHtml(p.fechaObjetivo)+'</span>':'')
               +'<div style="color:var(--muted);font-size:.8rem">'+escHtml(o.motivo||'')+'</div></td>'
             +'<td style="white-space:nowrap">'+acciones+'</td></tr>';
-        }).join('') : window.emptyRow(6, 'No tienes ninguna oportunidad abierta. Cuando alguien te pida precio, ábrele una y no se te escapa.', PUEDE ? { cta:'Nueva oportunidad', onclick:'openNewOpp()' } : { tone:'ok' });
+        }).join('') : window.emptyRow(6, 'No tienes ninguna oportunidad abierta. Cuando alguien te pida precio, ábrele una y no se te escapa.', PUEDE ? { cta:'Nueva oportunidad', act:'nueva-oportunidad' } : { tone:'ok' });
         filterRows();
       }
       function filterRows(){
@@ -847,7 +909,9 @@ export function createCrmRoutes(db) {
         });
       }
       reload();
-      </script>`;
+      
+      document.getElementById('searchBox')?.addEventListener('input', function(){ filterRows(); });
+</script>`;
     return c.html(adminLayout('Oportunidades', content, 'crm', c.get('session')?.csrfToken || '', c));
   });
 

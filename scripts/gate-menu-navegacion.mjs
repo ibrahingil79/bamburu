@@ -1188,7 +1188,7 @@ try {
   const avi = await page.evaluate(() => {
     const filas = [...document.querySelectorAll('table tbody tr')];
     const f = filas.find(r => /página de reservas/i.test(r.textContent));
-    return f ? { texto: f.textContent.replace(/\s+/g, ' ').trim(), apagar: !!f.querySelector('button[onclick*="apagarReservas"]') } : null;
+    return f ? { texto: f.textContent.replace(/\s+/g, ' ').trim(), apagar: !!f.querySelector('[data-act="av-apagar"]') } : null;
   });
   ok(!!avi, 'al encenderse se AVISA al dueño por los canales que ya hay', avi && avi.texto.slice(0, 120));
   ok(avi && /\/reservar\//.test(avi.texto), 'y el aviso trae el ENLACE y qué se ve', avi && avi.texto.slice(0, 160));
@@ -1199,7 +1199,9 @@ try {
   // Ya no se falsea `window.confirm`: esa ventanita no existe. El panel que la sustituyó lo acepta
   // `autoAceptarPaneles`, arriba, así que aquí se PULSA el botón y nada más — que es de lo que iba
   // esta comprobación.
-  await page.evaluate(() => document.querySelector('button[onclick*="apagarReservas"]').click());
+  // ⚙️ 4 SEP 2026 — el botón ya no lleva el código en un `onclick` (csp-erp-migrar-handlers): lo
+  // dice con `data-act` y lo despacha un oyente. Se busca por lo que ES, no por cómo se enganchaba.
+  await page.evaluate(() => document.querySelector('[data-act="av-apagar"]').click());
   await dormir(800);
   ok(pub().a === 0, 'pulsarlo la APAGA, en un clic', JSON.stringify(pub()));
 

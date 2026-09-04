@@ -50,6 +50,15 @@ const portalClienteId = pdb.prepare(
   'INSERT INTO clients (name,email,active) VALUES (?,?,1)').run(MARCA, 'delivered@resend.dev').lastInsertRowid;
 const portalToken = createToken(pdb, portalClienteId, 1);
 
+// ⚙️ 4 SEP 2026 — UNA OPORTUNIDAD DE VERDAD PARA EL TABLERO. El negocio de desarrollo tiene tres,
+// pero dos están archivadas y la otra perdida: el tablero sale VACÍO y no habría nada que pulsar.
+// Un gate que no puede pulsar no verifica nada, así que se siembra la suya, con la misma MARCA que
+// el resto, y se retira en el `finally` por la marca (no por el id de esta pasada).
+const oppId = pdb.prepare(`INSERT INTO opportunities
+    (client_id, title, amount, stage, probability, status, stage_changed_at, active, created_at)
+  VALUES (?, ?, 1000, 'nuevo', 50, 'activa', datetime('now'), 1, datetime('now'))`)
+  .run(portalClienteId, MARCA + ' oportunidad').lastInsertRowid;
+
 // ⚙️ 4 SEP 2026 — la primera pantalla del PANEL ya endurecida. Necesita sesión de dueño.
 const ERP_BASE = 'http://desarrollo-bamburu.localhost:3000';
 const erpTok = 'gate-csp-erp-' + randomBytes(12).toString('hex');
@@ -626,6 +635,79 @@ try {
   ok(kx.hayAjustar, '  y trae dentro el botón migrado de Ajustar stock');
   ok(kx.ajusteAbre, '  PULSARLO abre el ajuste: la delegación compartida funciona en legado también');
 
+
+  // /admin/crm — el tablero. Aquí vivía el tercer sitio donde el ARMAZÓN pintaba código en un
+  // atributo: el menú «···» de la tarjeta y el botón del estado vacío. Los dos tienen ahora una
+  // forma sin atributo (data-rm + el evento rowmenu:act), y esto la prueba pulsándola.
+  const r13d = await p13.goto(ERP_BASE + '/admin/crm', { waitUntil: 'networkidle0' });
+  ok(/script-src[^;]*'nonce-/.test(cabecera(r13d)), '/admin/crm — endurecida');
+  await new Promise(x => setTimeout(x, 1200));
+  const crm = await p13.evaluate(async () => {
+    const res = {};
+    res.hayTarjetas = document.querySelectorAll('.kb-card').length;
+    const trig = document.querySelector('.kb-card [data-act="rowmenu"]');
+    res.hayMenu = !!trig;
+    if (trig) {
+      trig.click(); await new Promise(r => setTimeout(r, 300));
+      const items = document.querySelectorAll('.kb-card .rmenu-item');
+      res.items = items.length;
+      res.conAtributo = [...items].filter(i => i.getAttribute('onclick')).length;
+      const editar = [...items].find(i => i.getAttribute('data-rm') === 'editar');
+      if (editar) { editar.click(); await new Promise(r => setTimeout(r, 700));
+                    res.abreEditar = !!document.getElementById('oppModal')?.classList.contains('open');
+                    document.querySelector('[data-crm="opp-cerrar"]')?.click();
+                    await new Promise(r => setTimeout(r, 300)); }
+    }
+    const card = document.querySelector('[data-crm-card]');
+    if (card) {
+      card.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+      await new Promise(r => setTimeout(r, 700));
+      res.dobleClic = !!document.getElementById('actModal')?.classList.contains('open');
+      document.querySelector('[data-crm="act-cerrar"]')?.click();
+      await new Promise(r => setTimeout(r, 300));
+      // El arrastre: se dispara dragstart y se mira que la tarjeta se marque como arrastrándose.
+      const dt = new DataTransfer();
+      card.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: dt }));
+      await new Promise(r => setTimeout(r, 200));
+      res.arrastra = card.classList.contains('dragging');
+      card.dispatchEvent(new DragEvent('dragend', { bubbles: true, dataTransfer: dt }));
+      await new Promise(r => setTimeout(r, 200));
+      res.sueltaBien = !card.classList.contains('dragging');
+    }
+    return res;
+  });
+  ok(crm.hayTarjetas > 0, '  el tablero pintó sus tarjetas', String(crm.hayTarjetas));
+  ok(crm.hayMenu, '  y la tarjeta trae su menú «···»');
+  ok(crm.conAtributo === 0, '  cuyos items NO llevan código en un atributo', 'con atributo: ' + crm.conAtributo);
+  ok(crm.abreEditar, '  PULSAR «Editar» en el menú abre la ventana de la oportunidad');
+  ok(crm.dobleClic, '  DOBLE CLIC en la tarjeta abre el seguimiento');
+  ok(crm.arrastra, '  ARRASTRAR la tarjeta la marca: el drag&drop del tablero sigue vivo');
+  ok(crm.sueltaBien, '  y soltarla la desmarca');
+  ok((await violaciones(p13)).length === 0, '  y el tablero entero, sin una violación de CSP');
+
+  const r13e = await p13.goto(ERP_BASE + '/admin/crm/cola', { waitUntil: 'networkidle0' });
+  ok(/script-src[^;]*'nonce-/.test(cabecera(r13e)), '/admin/crm/cola — endurecida');
+  await new Promise(x => setTimeout(x, 1200));
+  const cola = await p13.evaluate(async () => {
+    const res = {};
+    const b = document.querySelector('[data-crm="seguimiento"]');
+    res.hayBoton = !!b;
+    if (b) { b.click(); await new Promise(r => setTimeout(r, 700));
+             res.abreSeguimiento = !!document.getElementById('actModal')?.classList.contains('open');
+             document.querySelector('[data-crm="act-cerrar"]')?.click(); }
+    const s = document.getElementById('searchBox');
+    if (s) { const antes = document.querySelectorAll('.frow:not([style*="none"])').length;
+             s.value = 'zzzz-no-existe'; s.dispatchEvent(new Event('input', { bubbles: true }));
+             await new Promise(r => setTimeout(r, 300));
+             res.filtra = document.querySelectorAll('.frow:not([style*="none"])').length < antes;
+             s.value = ''; s.dispatchEvent(new Event('input', { bubbles: true })); }
+    return res;
+  });
+  ok(cola.hayBoton, '  la cola pintó sus filas con el botón de Seguimiento');
+  ok(cola.abreSeguimiento, '  PULSARLO abre la ventana de seguimiento');
+  ok(cola.filtra, '  y escribir en el buscador filtra las filas');
+  ok((await violaciones(p13)).length === 0, '  y la cola, sin una violación de CSP');
+
   const todas = [...(await violaciones(p3)), ...(await violaciones(p4)),
                  ...(await violaciones(p11)), ...(await violaciones(p12)), ...(await violaciones(p13)),
                  ...(await violaciones(p9)),
@@ -641,6 +723,7 @@ try {
     pdb.prepare('DELETE FROM portal_mensajes WHERE texto LIKE ?').run('ZZ mensaje de comprobacion CSP %');
     pdb.prepare('DELETE FROM portal_sesiones WHERE client_id IN (SELECT id FROM clients WHERE name LIKE ?)').run('ZZ CSP %');
     pdb.prepare('DELETE FROM portal_tokens   WHERE client_id IN (SELECT id FROM clients WHERE name LIKE ?)').run('ZZ CSP %');
+    pdb.prepare('DELETE FROM opportunities WHERE title LIKE ?').run('ZZ CSP %');
     pdb.prepare('DELETE FROM clients WHERE name LIKE ?').run('ZZ CSP %');
     pdb.prepare("DELETE FROM admin_sessions WHERE token LIKE 'gate-csp-erp-%'").run();
   } catch (e) { console.error('  ⚠️  limpieza incompleta: ' + (e?.message || e)); }

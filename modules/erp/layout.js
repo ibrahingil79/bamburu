@@ -36,12 +36,19 @@ export function disaBand(text, href = '', cta = 'Revisar') {
 }
 
 // Menú "···" (DISEÑO §6) para vistas SERVER-rendered: acciones secundarias de una fila.
-// items = [{label, href?, onclick?, danger?, target?}]. opts.label → botón con texto (p. ej.
-// "Exportar ▾") en vez del "···". Espejo de window.rowMenu.
+// items = [{label, href?, onclick?, act?, arg?, danger?, target?}]. opts.label → botón con texto
+// (p. ej. "Exportar ▾") en vez del "···". Espejo de window.rowMenu.
+//
+// ⚙️ 4 SEP 2026 (csp-erp-migrar-handlers) — `act` ES LA FORMA QUE SOBREVIVE A LA CSP ESTRICTA.
+// `onclick` mete CÓDIGO en un atributo, y un nonce hace que el navegador lo IGNORE: en una pantalla
+// endurecida el menú se abre y no hace nada, sin error. Con `act` el botón solo lleva un NOMBRE, y
+// el armazón dispara el evento `rowmenu:act` para que la pantalla lo despache. `onclick` se queda
+// para las pantallas que aún van en legado; ninguna de las diez que lo usan hoy cambia.
 export function rowMenu(items = [], opts = {}) {
   const body = items.map(it => {
     const cls = 'rmenu-item' + (it.danger ? ' danger' : '');
     if (it.href) return `<a href="${it.href}" class="${cls}"${it.target ? ` target="${it.target}"` : ''}>${it.label}</a>`;
+    if (it.act) return `<button type="button" class="${cls}" data-rm="${it.act}" data-rm-arg="${it.arg == null ? '' : it.arg}">${it.label}</button>`;
     return `<button type="button" class="${cls}" onclick="closeRowMenus();${it.onclick || ''}">${it.label}</button>`;
   }).join('');
   const trig = opts.label
@@ -691,11 +698,16 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
     };
     // Estado VACÍO (U2): icono sutil + frase + acción opcional. text ya viene escapado.
     // opts: {cta,href} botón azul · soft:true enlace suave · tone:'ok' vacío bueno (check).
+    //
+    // 4 SEP 2026 (csp-erp-migrar-handlers) — la clave act es la hermana de onclick que sobrevive
+    // a la CSP estricta: el boton lleva un NOMBRE y la pantalla lo recoge en 'rowmenu:act', igual
+    // que los items del menu de fila. La clave onclick sigue ahi para las que van en legado.
     window.emptyState=function(text,opts){
       opts=opts||{};
       var cta=opts.cta||'',href=opts.href||'',onclick=opts.onclick||'',soft=opts.soft,icon=opts.icon||'ti-sparkles',tone=opts.tone||'';
       var action='';
-      if(cta&&onclick)action='<button type="button" class="btn btn-primary" onclick="'+onclick+'">'+cta+'</button>';
+      if(cta&&opts.act)action='<button type="button" class="btn btn-primary" data-rm="'+escHtmlCli(opts.act)+'" data-rm-arg="'+escHtmlCli(opts.arg==null?'':opts.arg)+'">'+cta+'</button>';
+      else if(cta&&onclick)action='<button type="button" class="btn btn-primary" onclick="'+onclick+'">'+cta+'</button>';
       else if(cta&&href)action=soft?'<a class="empty-soft" href="'+href+'">'+cta+' →</a>':'<a class="btn btn-primary" href="'+href+'">'+cta+'</a>';
       var ic=tone==='ok'?'ti-circle-check':icon;
       return '<div class="empty"><span class="empty-ic'+(tone==='ok'?' ok':'')+'"><i class="ti '+ic+'"></i></span><div class="empty-tx">'+text+'</div>'+action+'</div>';
@@ -710,6 +722,9 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
       var body=(items||[]).map(function(it){
         var cls='rmenu-item'+(it.danger?' danger':'');
         if(it.href) return '<a href="'+it.href+'" class="'+cls+'"'+(it.target?' target="'+it.target+'"':'')+'>'+it.label+'</a>';
+        // 4 SEP 2026 — con la clave act el boton lleva un NOMBRE, no codigo: es lo unico que
+        // sigue vivo bajo la CSP estricta. Ver el gemelo del servidor, arriba en este fichero.
+        if(it.act) return '<button type="button" class="'+cls+'" data-rm="'+escHtmlCli(it.act)+'" data-rm-arg="'+escHtmlCli(it.arg==null?'':it.arg)+'">'+it.label+'</button>';
         return '<button type="button" class="'+cls+'" onclick="closeRowMenus();'+(it.onclick||'')+'">'+it.label+'</button>';
       }).join('');
       var trig=opts.label
@@ -1554,6 +1569,15 @@ ${ROOT_TOKENS}
     //
     // Sin acentos graves en este comentario A PROPOSITO: vive dentro de una plantilla de texto y uno
     // solo la cerraria en seco. Esta escrito en CLAUDE.md y ya ha mordido dos veces.
+    // Los items de menu escritos con la clave act (ver rowMenu): el armazon cierra el menu y
+    // avisa; QUE hacer es cosa de cada pantalla, que escucha 'rowmenu:act'. Asi el armazon no
+    // conoce ninguna accion concreta, y la pantalla no necesita codigo en un atributo.
+    document.addEventListener('click',function(e){
+      var rm=e.target.closest('[data-rm]'); if(!rm) return;
+      window.closeRowMenus&&window.closeRowMenus();
+      document.dispatchEvent(new CustomEvent('rowmenu:act',{detail:{
+        act:rm.getAttribute('data-rm'), arg:rm.getAttribute('data-rm-arg'), el:rm }}));
+    });
     document.addEventListener('click',function(e){
       var el=e.target.closest('[data-act]'); if(!el) return;
       switch(el.getAttribute('data-act')){
