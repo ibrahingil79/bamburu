@@ -127,6 +127,7 @@ const SUPERFICIES_ESTRICTAS = [
   /^\/admin\/avisos$/,
   /^\/admin\/crm$/,
   /^\/admin\/crm\/cola$/,
+  /^\/admin\/citas$/,
 ];
 
 export function securityHeaders() {

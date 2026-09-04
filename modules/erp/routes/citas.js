@@ -1548,12 +1548,12 @@ function vistaAgenda(c, db) {
              —pulsar ‹ pasaba de agosto a julio—, pero estaban a 624 px de lo que mueven, así que no
              había forma de saber que servían para cambiar de mes. -->
         <div style="display:flex;align-items:center;gap:.15rem;flex-wrap:wrap">
-          <button type="button" class="ag-tit" id="agTitulo" onclick="abrirFecha()" aria-expanded="false" aria-label="Cambiar de mes o de año">
+          <button type="button" class="ag-tit" id="agTitulo" data-ag="fecha" aria-expanded="false" aria-label="Cambiar de mes o de año">
             <span class="mes">Agenda</span>
           </button>
-          <button type="button" class="ag-nav" onclick="agMover(-1)" aria-label="Mes o día anterior">&lsaquo;</button>
-          <button type="button" class="ag-nav" onclick="agMover(1)" aria-label="Mes o día siguiente">&rsaquo;</button>
-          <button type="button" class="ag-hoy" onclick="agHoy()">Hoy</button>
+          <button type="button" class="ag-nav" data-ag="mover" data-d="-1" aria-label="Mes o día anterior">&lsaquo;</button>
+          <button type="button" class="ag-nav" data-ag="mover" data-d="1" aria-label="Mes o día siguiente">&rsaquo;</button>
+          <button type="button" class="ag-hoy" data-ag="hoy">Hoy</button>
         </div>
         <input type="hidden" id="agFecha">
         <!-- EL SALTO DE FECHA — MESES Y AÑOS, no una casilla para teclear una fecha (21 ago 2026).
@@ -1563,18 +1563,18 @@ function vistaAgenda(c, db) {
              de esa hoja y salen los AÑOS; eliges y bajas de nuevo a meses. Se navega, no se teclea. -->
         <div id="agSalto" class="ag-salto" hidden>
           <div class="ag-salto-cab">
-            <button type="button" class="ag-nav" onclick="saltoMueve(-1)" aria-label="Anterior">&lsaquo;</button>
-            <button type="button" class="ag-salto-tit" id="agSaltoTit" onclick="saltoSube()"></button>
-            <button type="button" class="ag-nav" onclick="saltoMueve(1)" aria-label="Siguiente">&rsaquo;</button>
+            <button type="button" class="ag-nav" data-ag="salto" data-d="-1" aria-label="Anterior">&lsaquo;</button>
+            <button type="button" class="ag-salto-tit" id="agSaltoTit" data-ag="salto-sube"></button>
+            <button type="button" class="ag-nav" data-ag="salto" data-d="1" aria-label="Siguiente">&rsaquo;</button>
           </div>
           <div class="ag-salto-rej" id="agSaltoRej"></div>
         </div>
       </div>
       <div style="display:flex;gap:.35rem;flex-wrap:wrap;align-items:center">
         <div class="segmented" role="tablist" aria-label="Vista">
-          <button type="button" role="tab" id="vbDia" onclick="setVista('dia')">Día</button>
-          <button type="button" role="tab" id="vbSemana" onclick="setVista('semana')">Semana</button>
-          <button type="button" role="tab" id="vbMes" onclick="setVista('mes')">Mes</button>
+          <button type="button" role="tab" id="vbDia" data-ag="vista" data-v="dia">Día</button>
+          <button type="button" role="tab" id="vbSemana" data-ag="vista" data-v="semana">Semana</button>
+          <button type="button" role="tab" id="vbMes" data-ag="vista" data-v="mes">Mes</button>
         </div>
         <!-- ZOOM: compacto / normal / amplio. El paso se recuerda por usuario, en agPrefs, con la
              vista y los filtros — el mismo sitio, no un segundo sistema de preferencias.
@@ -1586,14 +1586,14 @@ function vistaAgenda(c, db) {
         <div class="ag-zoomwrap">
           <span class="ag-zoomlbl" aria-hidden="true">Alto</span>
           <div class="segmented" role="group" id="agZoom" aria-label="Alto de la hora en la rejilla">
-            <button type="button" id="zb48" onclick="setZoom(48)" title="Horas compactas" aria-label="Horas compactas">S</button>
-            <button type="button" id="zb72" onclick="setZoom(72)" title="Alto normal" aria-label="Alto normal">M</button>
-            <button type="button" id="zb96" onclick="setZoom(96)" title="Horas amplias" aria-label="Horas amplias">L</button>
+            <button type="button" id="zb48" data-ag="zoom" data-z="48" title="Horas compactas" aria-label="Horas compactas">S</button>
+            <button type="button" id="zb72" data-ag="zoom" data-z="72" title="Alto normal" aria-label="Alto normal">M</button>
+            <button type="button" id="zb96" data-ag="zoom" data-z="96" title="Horas amplias" aria-label="Horas amplias">L</button>
           </div>
         </div>
-        <button type="button" class="ag-disc" id="agLeyBtn" onclick="openModal('mLeyenda')" title="Qué significa cada color" aria-label="Qué significa cada color"><i class="ti ti-info-circle"></i></button>
-        <button type="button" class="ag-disc" onclick="toggleControles()">Filtros</button>
-        ${editable ? '<button type="button" class="ag-disc" onclick="openBloqueo()">Bloquear un rato</button><button class="btn btn-primary" onclick="openNuevaCita()">Nueva cita</button>' : ''}
+        <button type="button" class="ag-disc" id="agLeyBtn" data-ag="leyenda" title="Qué significa cada color" aria-label="Qué significa cada color"><i class="ti ti-info-circle"></i></button>
+        <button type="button" class="ag-disc" data-ag="controles">Filtros</button>
+        ${editable ? '<button type="button" class="ag-disc" data-ag="bloqueo">Bloquear un rato</button><button class="btn btn-primary" data-ag="nueva">Nueva cita</button>' : ''}
       </div>
     </div>
     <!-- CABO 5 · el filtro por cliente, VISIBLE y quitable. Fuera de la caja de los filtros de eje:
@@ -1606,8 +1606,8 @@ function vistaAgenda(c, db) {
            deja de guardarse en un '<select>' del DOM y pasa a una variable ('AG_VISTA'), que es lo
            que era en realidad: estado, no un control. «Por puesto» y «Ver todo el equipo» SE QUEDAN
            —no son duplicados de nada— y por eso esta caja de filtros sigue existiendo. -->
-      <select class="form-control" id="agEje" style="width:auto" onchange="agCargar()"><option value="persona">Por persona</option><option value="recurso">Por ${escHtml(aj.puesto_sing.toLowerCase())}</option></select>
-      <label style="font-size:.85rem;display:flex;align-items:center;gap:.35rem"><input type="checkbox" id="agVerTodo" onchange="agCargar()"> Ver todo el equipo</label>
+      <select class="form-control" id="agEje" style="width:auto"><option value="persona">Por persona</option><option value="recurso">Por ${escHtml(aj.puesto_sing.toLowerCase())}</option></select>
+      <label style="font-size:.85rem;display:flex;align-items:center;gap:.35rem"><input type="checkbox" id="agVerTodo"> Ver todo el equipo</label>
     </div>
     <!-- AGENDA SIN HORARIO: se dice lo que PASA, no lo que "falta". El negocio NO está bloqueado —
          el motor le abre el día por defecto (8:00–21:00) para que pueda reservar sin configurar nada
@@ -1618,7 +1618,7 @@ function vistaAgenda(c, db) {
       ¿Abres a otras horas? <a href="/admin/citas/horarios" style="font-weight:700">Define tu horario →</a>
       <!-- Se puede cerrar, y se recuerda. Sigue apareciendo solo mientras NO haya horario propio: el
            día que el negocio defina el suyo, el aviso deja de tener sentido y desaparece por sí. -->
-      <button type="button" class="ag-disc" onclick="cerrarSinHorario()" aria-label="Cerrar este aviso"
+      <button type="button" class="ag-disc" data-ag="cerrar-sin-horario" aria-label="Cerrar este aviso"
               style="position:absolute;top:.3rem;right:.35rem;font-size:1rem;line-height:1;padding:.15rem .35rem">&times;</button>
     </div>
     <div id="agTira" class="ag-tira" hidden></div>
@@ -1634,7 +1634,7 @@ function vistaAgenda(c, db) {
          sitio para decir qué es cada estado, no solo cómo se llama. Los colores salen de
          ESTADOS_COLOR, la fuente única: no hay una segunda tabla que pueda desincronizarse. -->
     <div class="modal-overlay" id="mLeyenda"><div class="modal" style="max-width:460px">
-      <div class="modal-head"><h3>Qué significa cada color</h3><button class="modal-close" onclick="closeModal('mLeyenda')">✕</button></div>
+      <div class="modal-head"><h3>Qué significa cada color</h3><button class="modal-close" data-ag="cerrar-leyenda">✕</button></div>
       <div class="modal-body">
         <div class="ley-lista">
           ${[['pedida', 'La ha pedido el ' + aj.cliente_sing.toLowerCase() + ' o la has apuntado tú, y todavía nadie la ha confirmado.'],
@@ -1653,7 +1653,7 @@ function vistaAgenda(c, db) {
         <p style="color:var(--text2);font-size:.8rem;margin:.9rem 0 0">Las citas <b>anuladas</b> no se pintan en la agenda.</p>
       </div>
     </div></div>
-    <script>window.CITAS_EDIT=${editable ? 'true' : 'false'};window.HC_PUEDE=${(tieneHistorial(db) && puedeHistorial(db, c.get('session'))) ? 'true' : 'false'};window.CITA_ESTADOS=${jsonForScript(ESTADOS_COLOR)};window.AG_GRID=${Number(aj.grid) || 30};window.QUIEN_ANULA=${jsonForScript(ANULADA_POR_LABEL)};${jsVoz(aj)}${JS_AGENDA}</script>`;
+    <script nonce="${c.get('cspNonce')}">window.CITAS_EDIT=${editable ? 'true' : 'false'};window.HC_PUEDE=${(tieneHistorial(db) && puedeHistorial(db, c.get('session'))) ? 'true' : 'false'};window.CITA_ESTADOS=${jsonForScript(ESTADOS_COLOR)};window.AG_GRID=${Number(aj.grid) || 30};window.QUIEN_ANULA=${jsonForScript(ANULADA_POR_LABEL)};${jsVoz(aj)}${JS_AGENDA}</script>`;
   return adminLayout('Agenda', content, 'citas', c.get('session')?.csrfToken || '', c);
 }
 // ── COLOR DE ESTADO — FUENTE ÚNICA ───────────────────────────────────────────────────────────────
@@ -2067,16 +2067,16 @@ pbCargar();
 // ── Modales (HTML) ────────────────────────────────────────────────────────────────────────────────
 const modalNuevaCita = (puestoSing = 'Puesto', clienteSing = 'Cliente') => `
   <div class="modal-overlay" id="mCita"><div class="modal" style="max-width:520px">
-    <div class="modal-head"><h3 id="mCitaTitle">Nueva cita</h3><button class="modal-close" onclick="closeModal('mCita')">✕</button></div>
+    <div class="modal-head"><h3 id="mCitaTitle">Nueva cita</h3><button class="modal-close" data-ag="cerrar-cita">✕</button></div>
     <div class="modal-body">
       <input type="hidden" id="cId"><input type="hidden" id="cCliente"><input type="hidden" id="cSueltoNombre"><input type="hidden" id="cSueltoMovilVal">
       <div id="cContexto" style="font-size:.9rem;font-weight:600;margin-bottom:.75rem"></div>
       <div class="form-group"><label class="form-label">${escHtml(clienteSing)} *</label>
-        <input class="form-control" id="cBusca" placeholder="Escribe el nombre…" autocomplete="off" oninput="cFiltra()">
+        <input class="form-control" id="cBusca" placeholder="Escribe el nombre…" autocomplete="off">
         <div id="cResultados"></div>
         <div id="cNuevo" style="display:none;margin-top:.4rem">
           <input class="form-control" id="cSueltoMovil" placeholder="Móvil (+34…, opcional)" style="margin-bottom:.35rem">
-          <button type="button" class="btn btn-secondary btn-sm" onclick="cUsarNuevo()">＋ Usar «<span id="cNuevoNombre"></span>» como ${escHtml(clienteSing.toLowerCase())} nuevo</button>
+          <button type="button" class="btn btn-secondary btn-sm" data-ag="usar-nuevo">＋ Usar «<span id="cNuevoNombre"></span>» como ${escHtml(clienteSing.toLowerCase())} nuevo</button>
         </div>
         <div id="cElegido" style="display:none;font-size:.85rem;margin-top:.35rem;color:var(--ok)"></div>
       </div>
@@ -2089,13 +2089,13 @@ const modalNuevaCita = (puestoSing = 'Puesto', clienteSing = 'Cliente') => `
            se pinte, para que cGuardar/cRecalc/cSugerir sigan leyendo user_id sin un solo caso especial
            ("se asigna solo" sale de que el select ya trae preseleccionada a la única persona). -->
       <div class="form-row" id="cCuando">
-        <div class="form-group"><label class="form-label">Día</label><input class="form-control" type="date" id="cFecha" onchange="cRecalc()"></div>
-        <div class="form-group"><label class="form-label">Hora</label><select class="form-control" id="cHueco" onchange="cSugerir()"></select></div>
+        <div class="form-group"><label class="form-label">Día</label><input class="form-control" type="date" id="cFecha"></div>
+        <div class="form-group"><label class="form-label">Hora</label><select class="form-control" id="cHueco"></select></div>
       </div>
-      <div class="form-group" id="cQuien"><label class="form-label">Con quién</label><select class="form-control" id="cPersona" onchange="cRecalc()"></select></div>
+      <div class="form-group" id="cQuien"><label class="form-label">Con quién</label><select class="form-control" id="cPersona"></select></div>
       <details id="cMas"><summary style="cursor:pointer;font-weight:600;font-size:.85rem;color:var(--accent)">Más opciones</summary>
         <div class="form-row" style="margin-top:.6rem">
-          <div class="form-group" id="cRecursoWrap"><label class="form-label" id="cPuestoLbl">${escHtml(puestoSing)}</label><select class="form-control" id="cRecurso" onchange="cSugerir()"><option value="">— Automático —</option></select></div>
+          <div class="form-group" id="cRecursoWrap"><label class="form-label" id="cPuestoLbl">${escHtml(puestoSing)}</label><select class="form-control" id="cRecurso"><option value="">— Automático —</option></select></div>
           <!-- PROYECTO — solo se PINTA si el oficio lo usa (asesoría; y "otro", que son los negocios de
                antes y no pueden perder lo que ya veían). NUNCA se saca del DOM: editCitaSvc escribe
                project_id=? con lo que llegue, así que un campo ausente le borraría el proyecto a la
@@ -2106,12 +2106,12 @@ const modalNuevaCita = (puestoSing = 'Puesto', clienteSing = 'Cliente') => `
         <div class="form-group"><label style="font-size:.85rem"><input type="checkbox" id="cAvisar"> Avisar al cliente al guardar</label></div>
       </details>
     </div>
-    <div class="modal-foot"><button class="btn btn-secondary" onclick="closeModal('mCita')">Cancelar</button><button class="btn btn-primary" onclick="cGuardar()">Guardar</button></div>
+    <div class="modal-foot"><button class="btn btn-secondary" data-ag="cerrar-cita">Cancelar</button><button class="btn btn-primary" data-ag="guardar-cita">Guardar</button></div>
   </div></div>`;
 
 const modalDetalle = () => `
   <div class="modal-overlay" id="mDet"><div class="modal" style="max-width:560px">
-    <div class="modal-head"><h3 id="mDetTitle">Cita</h3><button class="modal-close" onclick="closeModal('mDet')">✕</button></div>
+    <div class="modal-head"><h3 id="mDetTitle">Cita</h3><button class="modal-close" data-ag="cerrar-det">✕</button></div>
     <div class="modal-body" id="mDetBody"></div>
   </div></div>
   <!-- CABO 4 · QUIÉN ANULA. Dos botones, ninguno preseleccionado: sin elegir no se anula. Si hubiera
@@ -2134,7 +2134,7 @@ const modalDetalle = () => `
 
 const modalBloqueo = (puestoSing = 'Puesto') => `
   <div class="modal-overlay" id="mBloq"><div class="modal" style="max-width:520px">
-    <div class="modal-head"><h3>Bloquear un rato</h3><button class="modal-close" onclick="closeModal('mBloq')">✕</button></div>
+    <div class="modal-head"><h3>Bloquear un rato</h3><button class="modal-close" data-ag="cerrar-bloq">✕</button></div>
     <div class="modal-body">
       <div class="form-row">
         <div class="form-group"><label class="form-label">Persona</label><select class="form-control" id="bPersona"><option value="">— Ninguna —</option></select></div>
@@ -2147,12 +2147,12 @@ const modalBloqueo = (puestoSing = 'Puesto') => `
       </div>
       <div class="form-group"><label class="form-label">Motivo</label><input class="form-control" id="bMotivo" placeholder="Comida, recado…"></div>
     </div>
-    <div class="modal-foot"><button class="btn btn-secondary" onclick="closeModal('mBloq')">Cancelar</button><button class="btn btn-primary" onclick="bGuardar()">Bloquear</button></div>
+    <div class="modal-foot"><button class="btn btn-secondary" data-ag="cerrar-bloq">Cancelar</button><button class="btn btn-primary" data-ag="guardar-bloqueo">Bloquear</button></div>
   </div></div>`;
 
 const modalAvisos = () => `
   <div class="modal-overlay" id="mAviso"><div class="modal" style="max-width:520px">
-    <div class="modal-head"><h3>Avisar al cliente</h3><button class="modal-close" onclick="closeModal('mAviso')">✕</button></div>
+    <div class="modal-head"><h3>Avisar al cliente</h3><button class="modal-close" data-ag="cerrar-aviso">✕</button></div>
     <div class="modal-body" id="mAvisoBody"></div>
   </div></div>`;
 
@@ -2388,7 +2388,7 @@ function pintaTira(vista){
   for(var i=0;i<7;i++){
     var f=ymd(new Date(lun.getTime()+i*86400000));
     var findes=(noLab&&noLab.indexOf((i+1)%7)<0) || (!noLab && i>=5);
-    h+='<button type="button" class="'+(f===hoy?'hoy ':'')+(f===sel?'sel ':'')+(findes?'findes':'')+'" data-fecha="'+f+'" onclick="irA(\''+f+'\')" aria-label="'+esc(fLargoDia(f))+'">'
+    h+='<button type="button" class="'+(f===hoy?'hoy ':'')+(f===sel?'sel ':'')+(findes?'findes':'')+'" data-fecha="'+f+'" data-ag="ir" data-fecha="'+f+'" aria-label="'+esc(fLargoDia(f))+'">'
       +'<span class="dow">'+lab[i]+'</span><span class="n">'+f.slice(8).replace(/^0/,'')+'</span></button>';
   }
   t.innerHTML=h;
@@ -2410,7 +2410,7 @@ function pintaChipCliente(cli){
   if(!AG_CLIENTE || !cli){ box.style.display='none'; box.innerHTML=''; return; }
   box.style.display='flex';
   box.innerHTML='<span class="ag-chip">Solo las citas de <b>'+esc(cli.name)+'</b>'
-    +'<button type="button" title="Quitar el filtro" onclick="quitaChipCliente()">✕</button></span>';
+    +'<button type="button" title="Quitar el filtro" data-ag="quitar-chip">✕</button></span>';
 }
 function quitaChipCliente(){ location.href='/admin/citas'; }
 function mesToqueIni(ev){
@@ -2600,7 +2600,7 @@ function renderMes(data, fechaSel){
     if(!b){ pie.innerHTML=''; return; }
     pie.innerHTML='<span class="d">'+esc(fLargoDia(f))+'</span>'
       +'<span class="s">'+esc(b.getAttribute('data-res'))+'</span>'
-      +(b.disabled?'':'<button type="button" class="a" onclick="abrirDia(\''+f+'\')">Abrir el día &rarr;</button>');
+      +(b.disabled?'':'<button type="button" class="a" data-ag="abrir-dia" data-fecha="'+f+'">Abrir el día &rarr;</button>');
   }
   pintaPie(fechaSel);
   [].forEach.call(box.querySelectorAll('.mesdia'), function(b){
@@ -2841,8 +2841,8 @@ function render(data, desde, hasta, vista, eje){
     for(var t2=START;t2<END;t2+=STEP){
       var attrs = vista==='semana' ? 'data-fecha="'+col.key+'"' : ('data-fecha="'+desde+'" data-col="'+(col.colId==null?'':col.colId)+'"');
       celdas+='<div class="agcell'+(clickable?' libre':'')+'" '+attrs+' data-min="'+t2+'"'
-        +(clickable?' onclick="cellNueva(this)" tabindex="0" role="button" aria-label="Crear cita a las '+fhhmm(t2)+'"':'')
-        +' style="top:'+((t2-START)*PXMIN)+'px;height:'+(STEP*PXMIN)+'px" ondragover="event.preventDefault()" ondrop="onDrop(event)"></div>';
+        +(clickable?' tabindex="0" role="button" aria-label="Crear cita a las '+fhhmm(t2)+'"':'')
+        +' style="top:'+((t2-START)*PXMIN)+'px;height:'+(STEP*PXMIN)+'px"></div>';
     }
     html+='<div class="ag-col" data-colkey="'+esc(col.key)+'" data-fecha="'+esc(fecha)+'">'+celdas+'</div>';
   }
@@ -3063,13 +3063,15 @@ function colocaScroll(START, PXMIN, dates){
 }
 function cellNueva(cell){ if(!window.CITAS_EDIT) return; var uid=cell.dataset.col; if(!uid) return; openQuickCita(uid, cell.dataset.fecha, parseInt(cell.dataset.min)); }
 function esc(s){return String(s==null?'':s).replace(/[<>&"]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));}
-async function onDrop(ev){
+// 4 SEP 2026 — la celda llega COMO ARGUMENTO: con el oyente en el documento, ev.currentTarget
+// seria el documento, no la celda sobre la que se suelta.
+async function onDrop(ev, celda){
   ev.preventDefault(); if(!window.CITAS_EDIT) return;
   var id=ev.dataTransfer.getData('text/plain'); if(!id) return;
   // Un SOLO camino de guardado para el ratón y para el dedo (ver moverCitaAHueco). Antes esta
   // función tenía su propia copia del cuerpo de la petición; dos copias de lo mismo se separan en
   // cuanto alguien toca una, y entonces mover con el dedo y con el ratón dejarían de hacer lo mismo.
-  await moverCitaAHueco(id, ev.currentTarget);
+  await moverCitaAHueco(id, celda);
 }
 // ── NUEVA CITA — panel rápido (3 toques desde un hueco de la rejilla) ─────────
 function fillSelect(el,rows,val,label,placeholder){ el.innerHTML=(placeholder!=null?'<option value="">'+placeholder+'</option>':'')+rows.map(r=>'<option value="'+r[val]+'">'+esc(r[label])+'</option>').join(''); }
@@ -3088,7 +3090,7 @@ function cRellenaComunes(){
   // Si no hay puestos, el motor ya no exige ninguno y no hay nada que elegir.
   var rw=document.getElementById('cRecursoWrap');
   if(rw) rw.style.display = (META.recursos && META.recursos.length) ? '' : 'none';
-  document.getElementById('cServicios').innerHTML=META.servicios.map(s=>'<label style="font-size:.85rem"><input type="checkbox" class="csvc" value="'+s.id+'" onchange="cServChange()"> '+esc(s.name)+' ('+svcMin(s)+' min)</label>').join('')||'<div style="color:var(--muted);font-size:.85rem;line-height:1.5">Aún no tienes servicios.<br><a href="/admin/citas/servicios" style="color:var(--accent);font-weight:600">＋ Crear o configurar tus servicios →</a></div>';
+  document.getElementById('cServicios').innerHTML=META.servicios.map(s=>'<label style="font-size:.85rem"><input type="checkbox" class="csvc" value="'+s.id+'"> '+esc(s.name)+' ('+svcMin(s)+' min)</label>').join('')||'<div style="color:var(--muted);font-size:.85rem;line-height:1.5">Aún no tienes servicios.<br><a href="/admin/citas/servicios" style="color:var(--accent);font-weight:600">＋ Crear o configurar tus servicios →</a></div>';
 }
 function cReset(){
   document.getElementById('cId').value=''; document.getElementById('cCliente').value=''; document.getElementById('cSueltoNombre').value=''; document.getElementById('cSueltoMovilVal').value='';
@@ -3133,7 +3135,7 @@ function cFiltra(){
   var box=document.getElementById('cResultados'), nuevo=document.getElementById('cNuevo');
   if(!q){ box.innerHTML=''; nuevo.style.display='none'; return; }
   var m=META.clientes.filter(c=>(c.name||'').toLowerCase().includes(q)).slice(0,6);
-  box.innerHTML=m.map(c=>'<div class="cliOpt" style="padding:.35rem .5rem;cursor:pointer;border-bottom:1px solid var(--border);font-size:.9rem" onclick="cPick('+c.id+',this)">'+esc(c.name)+'</div>').join('');
+  box.innerHTML=m.map(c=>'<div class="cliOpt" style="padding:.35rem .5rem;cursor:pointer;border-bottom:1px solid var(--border);font-size:.9rem" data-ag="cli-pick" data-id="'+c.id+'">'+esc(c.name)+'</div>').join('');
   document.getElementById('cNuevoNombre').textContent=document.getElementById('cBusca').value.trim();
   nuevo.style.display='';
 }
@@ -3213,7 +3215,7 @@ async function cGuardar(){
 function cErrorChoque(d){
   var alt=d.huecos||[];
   var box=document.getElementById('cResumen');
-  box.innerHTML='<span style="color:var(--danger)">'+esc(d.error||'No cabe a esa hora')+'</span>'+(alt.length?'<br><span style="font-size:.85rem">Huecos cerca: '+alt.map(h=>'<a href="#" onclick="cElegirHora('+h.min+');return false" style="color:var(--accent);font-weight:600;margin-right:.5rem">'+h.hora+'</a>').join('')+'</span>':'');
+  box.innerHTML='<span style="color:var(--danger)">'+esc(d.error||'No cabe a esa hora')+'</span>'+(alt.length?'<br><span style="font-size:.85rem">Huecos cerca: '+alt.map(h=>'<a href="#" data-ag="elegir-hora" data-min="'+h.min+'" style="color:var(--accent);font-weight:600;margin-right:.5rem">'+h.hora+'</a>').join('')+'</span>':'');
   document.getElementById('cMas').open=true;
 }
 function cElegirHora(min){ QUICK_MIN=min; var sel=document.getElementById('cHueco'); var opt=[...sel.options].find(o=>o.value==String(min)); if(!opt){ opt=document.createElement('option'); opt.value=String(min); opt.textContent=fhhmm(min); sel.appendChild(opt); } sel.value=String(min); document.getElementById('cContexto').textContent=document.getElementById('cContexto').textContent.replace(/·[^·]*$/, '· '+fhhmm(min)); cSugerir(); }
@@ -3237,22 +3239,22 @@ async function verCita(id){
   var e=esc; var puede=window.CITAS_EDIT;
   var acc='';
   if(puede){
-    if(c.estado==='pedida') acc+='<button class="btn btn-secondary btn-sm" onclick="estado('+id+',\'confirmada\')">Confirmar</button> ';
-    if(c.estado==='pedida'||c.estado==='confirmada'){ acc+='<button class="btn btn-primary btn-sm" onclick="atender('+id+')">Atender / cobrar</button> '; acc+='<button class="btn btn-secondary btn-sm" onclick="estado('+id+',\'no_show\')">No se presentó</button> '; }
-    if(c.estado!=='anulada'&&c.estado!=='atendida') acc+='<button class="btn btn-secondary btn-sm" onclick="editCita('+id+')">Editar</button> ';
-    acc+='<button class="btn btn-secondary btn-sm" onclick="abrirAvisos('+id+')">Avisar</button> ';
+    if(c.estado==='pedida') acc+='<button class="btn btn-secondary btn-sm" data-ag="estado" data-id="'+id+'" data-e="confirmada">Confirmar</button> ';
+    if(c.estado==='pedida'||c.estado==='confirmada'){ acc+='<button class="btn btn-primary btn-sm" data-ag="atender" data-id="'+id+'">Atender / cobrar</button> '; acc+='<button class="btn btn-secondary btn-sm" data-ag="estado" data-id="'+id+'" data-e="no_show">No se presentó</button> '; }
+    if(c.estado!=='anulada'&&c.estado!=='atendida') acc+='<button class="btn btn-secondary btn-sm" data-ag="editar" data-id="'+id+'">Editar</button> ';
+    acc+='<button class="btn btn-secondary btn-sm" data-ag="avisar" data-id="'+id+'">Avisar</button> ';
     // PELDAÑO 8 · LA NOTA CLÍNICA, EN UN CLIC. Solo en el oficio de salud y solo con el permiso.
     // Si la cita es DE PASO —solo un nombre suelto, sin ficha— no puede colgar de ella una nota
     // clínica: no hay paciente al que enlazarla. En vez de esconder el botón sin más, se dice por qué
     // y se ofrece crear la ficha ahí mismo; al crearla, la cita queda enlazada y la nota ya se puede.
     if(window.HC_PUEDE){
       if(c.cliente_id){
-        acc+='<button class="btn btn-secondary btn-sm" onclick="notaClinica('+id+','+c.cliente_id+')">Nota clínica</button> ';
+        acc+='<button class="btn btn-secondary btn-sm" data-ag="nota" data-id="'+id+'" data-cli="'+c.cliente_id+'">Nota clínica</button> ';
       } else {
-        acc+='<button class="btn btn-secondary btn-sm" onclick="fichaDesdeCita('+id+')" title="Esta cita no tiene ficha de paciente">Crear ficha del paciente</button> ';
+        acc+='<button class="btn btn-secondary btn-sm" data-ag="ficha" data-id="'+id+'" title="Esta cita no tiene ficha de paciente">Crear ficha del paciente</button> ';
       }
     }
-    if(c.estado!=='anulada') acc+='<button class="btn btn-danger btn-sm" onclick="anular('+id+')">Anular</button>';
+    if(c.estado!=='anulada') acc+='<button class="btn btn-danger btn-sm" data-ag="anular" data-id="'+id+'">Anular</button>';
   }
   document.getElementById('mDetBody').innerHTML=
     '<div class="row" style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:1rem">'
@@ -3340,9 +3342,9 @@ async function abrirAvisos(id){
   var d=await api('GET','/api/erp/citas/'+id+'/aviso-links');
   var canal=d.canal_defecto;
   var block=function(tipo,data){
-    var wa=data.wa?'<a class="btn btn-primary btn-sm" href="'+data.wa+'" target="_blank" onclick="marcar('+id+',\''+tipo+'\',\'whatsapp\')">WhatsApp</a>':'<span class="btn btn-secondary btn-sm" style="opacity:.4">WhatsApp (sin móvil)</span>';
-    var sms=data.sms?'<a class="btn btn-secondary btn-sm" href="'+data.sms+'" onclick="marcar('+id+',\''+tipo+'\',\'sms\')">SMS</a>':'';
-    var em=d.contacto.email?'<button class="btn btn-secondary btn-sm" onclick="marcar('+id+',\''+tipo+'\',\'email\',true)">Enviar email</button>':'<span class="btn btn-secondary btn-sm" style="opacity:.4">Email (sin correo)</span>';
+    var wa=data.wa?'<a class="btn btn-primary btn-sm" href="'+data.wa+'" target="_blank" data-ag="marcar" data-id="'+id+'" data-tipo="'+tipo+'" data-canal="whatsapp">WhatsApp</a>':'<span class="btn btn-secondary btn-sm" style="opacity:.4">WhatsApp (sin móvil)</span>';
+    var sms=data.sms?'<a class="btn btn-secondary btn-sm" href="'+data.sms+'" data-ag="marcar" data-id="'+id+'" data-tipo="'+tipo+'" data-canal="sms">SMS</a>':'';
+    var em=d.contacto.email?'<button class="btn btn-secondary btn-sm" data-ag="marcar" data-id="'+id+'" data-tipo="'+tipo+'" data-canal="email">Enviar email</button>':'<span class="btn btn-secondary btn-sm" style="opacity:.4">Email (sin correo)</span>';
     return '<div style="margin-bottom:1rem"><div class="form-label" style="text-transform:capitalize">'+tipo+'</div><div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.3rem">'+wa+' '+sms+' '+em+'</div><textarea class="form-control" rows="3" readonly style="font-size:.8rem">'+esc(data.texto)+'</textarea></div>';
   };
   document.getElementById('mAvisoBody').innerHTML=
@@ -3390,6 +3392,73 @@ async function bGuardar(){
   document.addEventListener('touchmove', mesToqueMueve, { passive:false });
   document.addEventListener('touchend', mesToqueFin, { passive:true });
   pintaBotonesVista(vistaActual()); agCargar(); })();
+
+// ── 4 SEP 2026 (csp-erp-migrar-handlers) — ENGANCHE DE LA AGENDA ───────────────────────────────
+// La rejilla son ~300 celdas que se repintan en CADA carga del dia, y las fichas de cita, los
+// avisos y las sugerencias se pintan al abrir cada ventana: todo eso va por DELEGACION, que es lo
+// unico que sobrevive a un repintado. Lo fijo de la cabecera y de las cuatro ventanas se engancha
+// una vez. Los ids vuelven a numero: estado/atender/anular los meten en la direccion, y cElegirHora
+// compara el minuto con el valor de un desplegable.
+document.addEventListener('click', function(e){
+  var t = e.target.closest('[data-ag]');
+  if (t) {
+    var a = t.getAttribute('data-ag'), id = Number(t.getAttribute('data-id'));
+    if (a === 'fecha') abrirFecha();
+    else if (a === 'mover') agMover(Number(t.getAttribute('data-d')));
+    else if (a === 'hoy') agHoy();
+    else if (a === 'salto') saltoMueve(Number(t.getAttribute('data-d')));
+    else if (a === 'salto-sube') saltoSube();
+    else if (a === 'vista') setVista(t.getAttribute('data-v'));
+    else if (a === 'zoom') setZoom(Number(t.getAttribute('data-z')));
+    else if (a === 'leyenda') openModal('mLeyenda');
+    else if (a === 'cerrar-leyenda') closeModal('mLeyenda');
+    else if (a === 'controles') toggleControles();
+    else if (a === 'bloqueo') openBloqueo();
+    else if (a === 'nueva') openNuevaCita();
+    else if (a === 'cerrar-sin-horario') cerrarSinHorario();
+    else if (a === 'cerrar-cita') closeModal('mCita');
+    else if (a === 'usar-nuevo') cUsarNuevo();
+    else if (a === 'guardar-cita') cGuardar();
+    else if (a === 'cerrar-det') closeModal('mDet');
+    else if (a === 'cerrar-bloq') closeModal('mBloq');
+    else if (a === 'guardar-bloqueo') bGuardar();
+    else if (a === 'cerrar-aviso') closeModal('mAviso');
+    else if (a === 'ir') irA(t.getAttribute('data-fecha'));
+    else if (a === 'abrir-dia') abrirDia(t.getAttribute('data-fecha'));
+    else if (a === 'quitar-chip') quitaChipCliente();
+    else if (a === 'cli-pick') cPick(id, t);
+    else if (a === 'elegir-hora') { e.preventDefault(); cElegirHora(Number(t.getAttribute('data-min'))); }
+    else if (a === 'estado') estado(id, t.getAttribute('data-e'));
+    else if (a === 'atender') atender(id);
+    else if (a === 'editar') editCita(id);
+    else if (a === 'avisar') abrirAvisos(id);
+    else if (a === 'nota') notaClinica(id, Number(t.getAttribute('data-cli')));
+    else if (a === 'ficha') fichaDesdeCita(id);
+    else if (a === 'anular') anular(id);
+    else if (a === 'marcar') { var canal = t.getAttribute('data-canal');
+                               marcar(id, t.getAttribute('data-tipo'), canal, canal === 'email'); }
+    return;
+  }
+  var celda = e.target.closest('.agcell.libre');
+  if (celda) cellNueva(celda);
+});
+document.addEventListener('change', function(e){
+  if (e.target.closest('.csvc')) { cServChange(); return; }
+  var id = e.target.id;
+  if (id === 'agEje' || id === 'agVerTodo') agCargar();
+  else if (id === 'cFecha' || id === 'cPersona') cRecalc();
+  else if (id === 'cHueco' || id === 'cRecurso') cSugerir();
+});
+document.addEventListener('input', function(e){
+  if (e.target.id === 'cBusca') cFiltra();
+});
+document.addEventListener('dragover', function(e){
+  if (e.target.closest('.agcell')) e.preventDefault();
+});
+document.addEventListener('drop', function(e){
+  var celda = e.target.closest('.agcell');
+  if (celda) onDrop(e, celda);
+});
 `;
 
 // ── LA CARA DE «RECORDATORIOS A CLIENTES» ────────────────────────────────────────────────────────

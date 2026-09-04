@@ -708,6 +708,54 @@ try {
   ok(cola.filtra, '  y escribir en el buscador filtra las filas');
   ok((await violaciones(p13)).length === 0, '  y la cola, sin una violación de CSP');
 
+
+  // /admin/citas — la agenda, la pantalla más cargada de la cola (35 handlers servidos, ~330 en el
+  // DOM porque la rejilla son cientos de celdas). Se prueban los tres caminos que se rompen de
+  // forma distinta: un control fijo de la cabecera, una CELDA de la rejilla (repintada en cada
+  // carga) y una ventana. No se guarda ninguna cita: se abre el hueco y se cierra.
+  const r13f = await p13.goto(ERP_BASE + '/admin/citas', { waitUntil: 'networkidle0' });
+  ok(/script-src[^;]*'nonce-/.test(cabecera(r13f)), '/admin/citas — endurecida');
+  await new Promise(x => setTimeout(x, 1500));
+  const ag = await p13.evaluate(async () => {
+    const res = {};
+    res.celdas = document.querySelectorAll('.agcell').length;
+    // 1 · un control fijo: el zoom cambia la altura de la rejilla
+    const antes = document.querySelector('.agcell')?.getBoundingClientRect().height || 0;
+    document.querySelector('[data-ag="zoom"][data-z="96"]')?.click();
+    await new Promise(r => setTimeout(r, 500));
+    res.zoom = (document.querySelector('.agcell')?.getBoundingClientRect().height || 0) !== antes;
+    // 2 · la vista: pasar a mes repinta la agenda
+    document.querySelector('[data-ag="vista"][data-v="mes"]')?.click();
+    await new Promise(r => setTimeout(r, 900));
+    res.vistaMes = !!document.querySelector('.agmes, .ag-mes, [class*="mes"]');
+    document.querySelector('[data-ag="vista"][data-v="dia"]')?.click();
+    await new Promise(r => setTimeout(r, 900));
+    // 3 · UNA CELDA de la rejilla, que es lo que se repinta: abre la ventana de cita nueva
+    const libre = document.querySelector('.agcell.libre');
+    res.hayCeldaLibre = !!libre;
+    if (libre) {
+      libre.click(); await new Promise(r => setTimeout(r, 700));
+      res.abreCita = !!document.getElementById('mCita')?.classList.contains('open');
+      document.querySelector('[data-ag="cerrar-cita"]')?.click();
+      await new Promise(r => setTimeout(r, 300));
+      res.cierraCita = !document.getElementById('mCita')?.classList.contains('open');
+    }
+    // 4 · la ventana de la leyenda, que es markup fijo
+    document.querySelector('[data-ag="leyenda"]')?.click();
+    await new Promise(r => setTimeout(r, 400));
+    res.abreLeyenda = !!document.getElementById('mLeyenda')?.classList.contains('open');
+    document.querySelector('[data-ag="cerrar-leyenda"]')?.click();
+    return res;
+  });
+  ok(ag.celdas > 50, '  la rejilla pintó sus celdas', String(ag.celdas));
+  ok(ag.zoom, '  PULSAR el zoom cambia la altura de la rejilla');
+  ok(ag.vistaMes, '  y cambiar a vista de mes la repinta');
+  ok(ag.hayCeldaLibre, '  hay una celda libre en la rejilla');
+  ok(ag.abreCita, '  PULSAR una celda (repintada en cada carga) abre la ventana de cita nueva');
+  ok(ag.cierraCita, '  y se cierra');
+  ok(ag.abreLeyenda, '  la ventana de la leyenda, que es markup fijo, también abre');
+  ok((await violaciones(p13)).length === 0, '  y la agenda entera, sin una violación de CSP');
+
   const todas = [...(await violaciones(p3)), ...(await violaciones(p4)),
                  ...(await violaciones(p11)), ...(await violaciones(p12)), ...(await violaciones(p13)),
                  ...(await violaciones(p9)),
