@@ -13,7 +13,7 @@
 export function pagoModalHtml() {
   return `<div class="modal-overlay" id="pagoModal">
     <div class="modal" style="max-width:640px">
-      <div class="modal-head"><h3 id="pagoTitle">Pagos</h3><button class="modal-close" onclick="closeModal('pagoModal')">✕</button></div>
+      <div class="modal-head"><h3 id="pagoTitle">Pagos</h3><button class="modal-close" data-act="pm-cerrar">✕</button></div>
       <div class="modal-body" id="pagoBody"></div>
     </div>
   </div>`;
@@ -25,7 +25,7 @@ export function pagoModalHtml() {
 export function pagoCuentaModalHtml() {
   return `<div class="modal-overlay" id="pagoCuentaModal">
     <div class="modal" style="max-width:640px">
-      <div class="modal-head"><h3 id="pagoCuentaTitle">Pagar a cuenta</h3><button class="modal-close" onclick="closeModal('pagoCuentaModal')">✕</button></div>
+      <div class="modal-head"><h3 id="pagoCuentaTitle">Pagar a cuenta</h3><button class="modal-close" data-act="pm-cerrar-cuenta">✕</button></div>
       <div class="modal-body" id="pagoCuentaBody"></div>
     </div>
   </div>`;
@@ -49,7 +49,7 @@ export function pagoModalScript(sym) {
         running = Math.round((running+Number(p.amount))*100)/100;
         const saldo = Math.round((Number(inv.total)-running)*100)/100;
         return '<tr><td>'+p.paid_date+'</td><td style="text-align:right">'+dineroEs(p.amount, SYM)+'</td><td>'+escHtml(p.payment_method||'—')+'</td><td>'+escHtml(p.note||'')+'</td><td style="text-align:right;color:var(--muted)">'+dineroEs(saldo, SYM)+'</td>'
-          +'<td style="text-align:right"><button class="btn btn-secondary btn-sm" title="Deshacer este pago" onclick="deshacerPago('+inv.id+','+p.id+')">Deshacer</button></td></tr>';
+          +'<td style="text-align:right"><button class="btn btn-secondary btn-sm" title="Deshacer este pago" data-act="pm-deshacer" data-inv="'+inv.id+'" data-pago="'+p.id+'">Deshacer</button></td></tr>';
       }).join('') : '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:1rem">Sin pagos registrados</td></tr>';
       // El formulario solo si la factura admite pago (flag del motor: inv.pagable) y queda pendiente.
       const canRegister = inv.pagable && pg.pendiente > 0.0049;
@@ -61,7 +61,7 @@ export function pagoModalScript(sym) {
           +'<div class="form-group"><label class="form-label">Importe</label><input type="number" id="spay-amount" class="form-control" step="0.01" min="0.01" value="'+Number(pg.pendiente||0).toFixed(2)+'" style="width:120px"></div>'
           +'<div class="form-group"><label class="form-label">Forma</label><select id="spay-method" class="form-control"><option value="">—</option>'+methodOpt('transferencia','Transferencia')+methodOpt('efectivo','Efectivo')+methodOpt('tarjeta','Tarjeta')+methodOpt('domiciliacion','Domiciliación')+'</select></div>'
           +'<div class="form-group" style="flex:1;min-width:140px"><label class="form-label">Nota</label><input type="text" id="spay-note" class="form-control" placeholder="(opcional)"></div>'
-          +'<button class="btn btn-primary" onclick="registrarPago('+inv.id+')">Registrar pago</button>'
+          +'<button class="btn btn-primary" data-act="pm-registrar" data-inv="'+inv.id+'">Registrar pago</button>'
           +'</div>'
         : '<p style="color:var(--muted);margin:0">'+(pg.estado==='pagada'?'Factura pagada por completo.':(inv.status==='anulada'?'Factura anulada: no admite pagos.':'Esta factura no admite registrar más pagos.'))+'</p>';
       document.getElementById('pagoBody').innerHTML =
@@ -103,7 +103,7 @@ export function pagoModalScript(sym) {
       const pteCredito = Math.abs(Number(pg.pendiente)||0);   // crédito sin reembolsar
       const refRows = (inv.payments && inv.payments.length) ? inv.payments.map(function(p){
         return '<tr><td>'+p.paid_date+'</td><td style="text-align:right">'+dineroEs(Math.abs(Number(p.amount)), SYM)+'</td><td>'+escHtml(p.payment_method||'—')+'</td><td>'+escHtml(p.note||'')+'</td>'
-          +'<td style="text-align:right"><button class="btn btn-secondary btn-sm" onclick="deshacerPago('+inv.id+','+p.id+')">Deshacer</button></td></tr>';
+          +'<td style="text-align:right"><button class="btn btn-secondary btn-sm" data-act="pm-deshacer" data-inv="'+inv.id+'" data-pago="'+p.id+'">Deshacer</button></td></tr>';
       }).join('') : '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:1rem">Sin reembolsos registrados</td></tr>';
       const canRefund = inv.refundable && pteCredito > 0.0049;
       const form = canRefund
@@ -112,7 +112,7 @@ export function pagoModalScript(sym) {
           +'<div class="form-group"><label class="form-label">Importe reembolsado</label><input type="number" id="ref-amount" class="form-control" step="0.01" min="0.01" value="'+pteCredito.toFixed(2)+'" style="width:130px"></div>'
           +'<div class="form-group"><label class="form-label">Forma</label><select id="ref-method" class="form-control"><option value="">—</option><option value="transferencia">Transferencia</option><option value="efectivo">Efectivo</option><option value="tarjeta">Tarjeta</option></select></div>'
           +'<div class="form-group" style="flex:1;min-width:140px"><label class="form-label">Nota</label><input type="text" id="ref-note" class="form-control" placeholder="(opcional)"></div>'
-          +'<button class="btn btn-primary" onclick="registrarReembolso('+inv.id+')">Registrar reembolso recibido</button>'
+          +'<button class="btn btn-primary" data-act="pm-reembolso" data-inv="'+inv.id+'">Registrar reembolso recibido</button>'
           +'</div>'
         : '<p style="color:var(--muted);margin:0">'+(pteCredito<=0.0049?'Crédito reembolsado por completo.':'Este abono no admite más reembolsos.')+'</p>';
       document.getElementById('pagoBody').innerHTML =
@@ -163,11 +163,11 @@ export function pagoModalScript(sym) {
         '<div style="margin-bottom:.75rem">Le debes <strong>'+dineroEs(pcAcct.deudaTotal, SYM)+'</strong> en '+vivas.length+' factura'+(vivas.length===1?'':'s')+'</div>'
         +listado
         +'<div class="form-row" style="gap:.5rem;align-items:end">'
-        +'<div class="form-group"><label class="form-label">Importe a pagar</label><input type="number" step="0.01" min="0.01" class="form-control" id="pc-importe" value="'+Number(pcAcct.deudaTotal).toFixed(2)+'" style="width:140px" oninput="pcRender()"></div>'
-        +'<div class="form-group"><label class="form-label">Reparto</label><select class="form-control" id="pc-modo" onchange="pcRender()"><option value="auto">Automático (más antigua primero)</option><option value="manual">Repartir a mano</option></select></div>'
+        +'<div class="form-group"><label class="form-label">Importe a pagar</label><input type="number" step="0.01" min="0.01" class="form-control" id="pc-importe" value="'+Number(pcAcct.deudaTotal).toFixed(2)+'" style="width:140px" data-act="pm-render"></div>'
+        +'<div class="form-group"><label class="form-label">Reparto</label><select class="form-control" id="pc-modo" data-act="pm-modo"><option value="auto">Automático (más antigua primero)</option><option value="manual">Repartir a mano</option></select></div>'
         +'<div class="form-group"><label class="form-label">Forma</label><select class="form-control" id="pc-method"><option value="">—</option><option value="transferencia">Transferencia</option><option value="efectivo">Efectivo</option><option value="tarjeta">Tarjeta</option><option value="domiciliacion">Domiciliación</option></select></div>'
         +'</div><div id="pc-reparto"></div>'
-        +'<div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:.75rem"><button class="btn btn-secondary btn-sm" onclick="pcClose()">Cancelar</button><button class="btn btn-primary btn-sm" id="pc-btn" onclick="guardarPagoCuenta()">Registrar pago</button></div>';
+        +'<div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:.75rem"><button class="btn btn-secondary btn-sm" data-act="pm-cuenta-cancelar">Cancelar</button><button class="btn btn-primary btn-sm" id="pc-btn" data-act="pm-cuenta-guardar">Registrar pago</button></div>';
       pcRender();
       openModal('pagoCuentaModal');
     };
@@ -185,8 +185,8 @@ export function pagoModalScript(sym) {
         if(btn) btn.disabled=!(importe>0);
       } else {
         cont.innerHTML='<table style="width:100%;font-size:.85rem;margin-top:.5rem"><thead><tr><th style="text-align:left">Factura</th><th style="text-align:right">Pendiente</th><th style="text-align:right">Importe</th></tr></thead><tbody>'
-          +vivas.map(function(f){return '<tr><td>'+pcLabel(f)+'</td><td style="text-align:right;color:var(--muted)">'+dineroEs(f.pendiente, SYM)+'</td><td style="text-align:right"><input type="number" step="0.01" min="0" max="'+Number(f.pendiente).toFixed(2)+'" class="form-control pc-mf" data-id="'+f.supplier_invoice_id+'" data-pend="'+Number(f.pendiente).toFixed(2)+'" value="0" style="width:110px;text-align:right;display:inline-block" oninput="pcSum()"></td></tr>';}).join('')+'</tbody></table>'
-          +'<div style="display:flex;justify-content:space-between;align-items:center;margin-top:.4rem"><button class="btn btn-secondary btn-sm" type="button" onclick="pcAutoFill()">Auto por antigüedad</button><span id="pc-counter" style="font-size:.85rem"></span></div>';
+          +vivas.map(function(f){return '<tr><td>'+pcLabel(f)+'</td><td style="text-align:right;color:var(--muted)">'+dineroEs(f.pendiente, SYM)+'</td><td style="text-align:right"><input type="number" step="0.01" min="0" max="'+Number(f.pendiente).toFixed(2)+'" class="form-control pc-mf" data-id="'+f.supplier_invoice_id+'" data-pend="'+Number(f.pendiente).toFixed(2)+'" value="0" style="width:110px;text-align:right;display:inline-block" data-act="pm-suma"></td></tr>';}).join('')+'</tbody></table>'
+          +'<div style="display:flex;justify-content:space-between;align-items:center;margin-top:.4rem"><button class="btn btn-secondary btn-sm" type="button" data-act="pm-auto">Auto por antigüedad</button><span id="pc-counter" style="font-size:.85rem"></span></div>';
         pcSum();
       }
     };
@@ -221,5 +221,33 @@ export function pagoModalScript(sym) {
       } catch(e){ toast(e.message||'Error registrando el pago','err'); }
     };
   })();
-  `;
+  
+      // ── 4 SEP 2026 (csp-erp-migrar-handlers) — ENGANCHE DE LAS DOS VENTANAS DE PAGO ───────────
+      // TODO lo de dentro se pinta al abrir la ventana (la lista de pagos, el reparto a cuenta),
+      // asi que va entero por delegacion. Los ids de factura y de pago vuelven a numero.
+      if (!window.__pagoModalDeleg) {
+        window.__pagoModalDeleg = true;
+        document.addEventListener('click', function(e){
+          var t = e.target.closest('[data-act^="pm-"]'); if (!t) return;
+          var a = t.getAttribute('data-act');
+          if (a === 'pm-cerrar') closeModal('pagoModal');
+          else if (a === 'pm-cerrar-cuenta') closeModal('pagoCuentaModal');
+          else if (a === 'pm-deshacer') deshacerPago(Number(t.getAttribute('data-inv')), Number(t.getAttribute('data-pago')));
+          else if (a === 'pm-registrar') registrarPago(Number(t.getAttribute('data-inv')));
+          else if (a === 'pm-reembolso') registrarReembolso(Number(t.getAttribute('data-inv')));
+          else if (a === 'pm-cuenta-cancelar') pcClose();
+          else if (a === 'pm-cuenta-guardar') guardarPagoCuenta();
+          else if (a === 'pm-auto') pcAutoFill();
+        });
+        document.addEventListener('input', function(e){
+          var t = e.target.closest('[data-act="pm-render"], [data-act="pm-suma"]'); if (!t) return;
+          if (t.getAttribute('data-act') === 'pm-render') pcRender(); else pcSum();
+        });
+        document.addEventListener('change', function(e){
+          // Solo el desplegable del reparto. La casilla del importe ya repinta con 'input': si
+          // tambien escuchara aqui, repintaria dos veces al salir del campo.
+          if (e.target.closest('[data-act="pm-modo"]')) pcRender();
+        });
+      }
+`;
 }

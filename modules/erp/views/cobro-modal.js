@@ -12,13 +12,13 @@
 export function cobroModalHtml() {
   return `<div class="modal-overlay" id="cobroModal">
     <div class="modal" style="max-width:640px">
-      <div class="modal-head"><h3 id="cobroTitle">Cobros</h3><button class="modal-close" onclick="closeModal('cobroModal')">✕</button></div>
+      <div class="modal-head"><h3 id="cobroTitle">Cobros</h3><button class="modal-close" data-act="cm-cerrar">✕</button></div>
       <div class="modal-body" id="cobroBody"></div>
     </div>
   </div>
   <div class="modal-overlay" id="gestionModal">
     <div class="modal" style="max-width:640px">
-      <div class="modal-head"><h3 id="gestionTitle">Gestión de cobro</h3><button class="modal-close" onclick="closeModal('gestionModal')">✕</button></div>
+      <div class="modal-head"><h3 id="gestionTitle">Gestión de cobro</h3><button class="modal-close" data-act="cm-cerrar-gestion">✕</button></div>
       <div class="modal-body" id="gestionBody"></div>
     </div>
   </div>`;
@@ -50,7 +50,7 @@ export function cobroModalScript(sym) {
         running = Math.round((running+Number(p.amount))*100)/100;
         const saldo = Math.round((Number(inv.total)-running)*100)/100;
         return '<tr><td>'+p.paid_date+'</td><td style="text-align:right">'+dineroEs(p.amount, SYM)+'</td><td>'+escHtml(p.payment_method||'—')+'</td><td>'+escHtml(p.note||'')+'</td><td style="text-align:right;color:var(--muted)">'+dineroEs(saldo, SYM)+'</td>'
-          +'<td style="text-align:right"><button class="btn btn-secondary btn-sm" title="Deshacer este cobro" onclick="deshacerCobro('+inv.id+','+p.id+')">Deshacer</button></td></tr>';
+          +'<td style="text-align:right"><button class="btn btn-secondary btn-sm" title="Deshacer este cobro" data-act="cm-deshacer" data-inv="'+inv.id+'" data-cobro="'+p.id+'">Deshacer</button></td></tr>';
       }).join('') : '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:1rem">Sin cobros registrados</td></tr>';
       // El formulario solo si la factura admite cobro (flag del motor: inv.cobrable) y queda pendiente.
       const canRegister = inv.cobrable && co.pendiente > 0.0049;
@@ -63,7 +63,7 @@ export function cobroModalScript(sym) {
           +'<div class="form-group"><label class="form-label">Importe</label><input type="number" id="pay-amount" class="form-control" step="0.01" min="0.01" value="'+Number(co.pendiente||0).toFixed(2)+'" style="width:120px"></div>'
           +'<div class="form-group"><label class="form-label">Forma</label><select id="pay-method" class="form-control"><option value="">—</option>'+methodOpt('transferencia','Transferencia')+methodOpt('efectivo','Efectivo')+methodOpt('tarjeta','Tarjeta')+methodOpt('domiciliacion','Domiciliación')+'</select></div>'
           +'<div class="form-group" style="flex:1;min-width:140px"><label class="form-label">Nota</label><input type="text" id="pay-note" class="form-control" placeholder="(opcional)"></div>'
-          +'<button class="btn btn-primary" onclick="registrarCobro('+inv.id+')">Registrar cobro</button>'
+          +'<button class="btn btn-primary" data-act="cm-registrar" data-inv="'+inv.id+'">Registrar cobro</button>'
           +'</div>'
         : '<p style="color:var(--muted);margin:0">'+(co.estado==='cobrada'?'Factura cobrada por completo.':'Esta factura no admite registrar más cobros.')+'</p>';
       document.getElementById('cobroBody').innerHTML =
@@ -131,10 +131,10 @@ export function cobroModalScript(sym) {
         : '';
       const canCobro = inv.cobrable && co.pendiente>0.0049;
       const buttons = '<div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.5rem">'
-        +(canCobro?'<button class="btn btn-secondary btn-sm" onclick="openCobros('+id+')">Registrar cobro</button>':'')
-        +(canCobro?'<button class="btn btn-primary btn-sm" onclick="formRecordatorio('+id+')">Mandar recordatorio</button>':'')
-        +(canCobro?'<button class="btn btn-secondary btn-sm" onclick="formContacto('+id+')">Registrar contacto</button>':'')
-        +(canCobro?'<button class="btn btn-secondary btn-sm" onclick="formPromesa('+id+')">Registrar promesa de pago</button>':'')
+        +(canCobro?'<button class="btn btn-secondary btn-sm" data-act="cm-abrir-cobros" data-id="'+id+'">Registrar cobro</button>':'')
+        +(canCobro?'<button class="btn btn-primary btn-sm" data-act="cm-form-recordatorio" data-id="'+id+'">Mandar recordatorio</button>':'')
+        +(canCobro?'<button class="btn btn-secondary btn-sm" data-act="cm-form-contacto" data-id="'+id+'">Registrar contacto</button>':'')
+        +(canCobro?'<button class="btn btn-secondary btn-sm" data-act="cm-form-promesa" data-id="'+id+'">Registrar promesa de pago</button>':'')
         +'</div>';
       document.getElementById('gestionBody').innerHTML =
         '<div style="margin-bottom:.75rem">Pendiente <strong>'+dineroEs(co.pendiente||0, SYM)+'</strong> de '+dineroEs(inv.total||0, SYM)+'</div>'
@@ -151,7 +151,7 @@ export function cobroModalScript(sym) {
         +'<div class="form-group"><label class="form-label">Para</label><input class="form-control" value="'+escHtml(prev.to)+'" disabled></div>'
         +'<div class="form-group"><label class="form-label">Asunto</label><input class="form-control" id="em-subject" value="'+escHtml(prev.subject)+'"></div>'
         +'<div class="form-group"><label class="form-label">Mensaje (editable antes de enviar)</label><textarea class="form-control" id="em-text" rows="9">'+escHtml(prev.text)+'</textarea></div>'
-        +'<div style="display:flex;gap:.5rem;justify-content:flex-end"><button class="btn btn-secondary btn-sm" onclick="document.getElementById(\\'gestionForm\\').innerHTML=\\'\\'">Cancelar</button><button class="btn btn-primary btn-sm" onclick="enviarRecordatorio('+id+')">Enviar email</button></div>'
+        +'<div style="display:flex;gap:.5rem;justify-content:flex-end"><button class="btn btn-secondary btn-sm" data-act="cm-limpiar-gestion">Cancelar</button><button class="btn btn-primary btn-sm" data-act="cm-enviar-recordatorio" data-id="'+id+'">Enviar email</button></div>'
         +'</div></div>';
     };
     window.enviarRecordatorio = async function(id){
@@ -169,7 +169,7 @@ export function cobroModalScript(sym) {
         '<div class="card" style="margin-top:.5rem"><div class="card-body"><div class="form-row" style="gap:.5rem">'
         +'<div class="form-group"><label class="form-label">Canal</label><select class="form-control" id="ct-channel"><option value="telefono">Teléfono</option><option value="whatsapp">WhatsApp</option><option value="otro">Otro</option></select></div>'
         +'<div class="form-group" style="flex:1"><label class="form-label">Nota</label><input class="form-control" id="ct-note" placeholder="Qué hablasteis (opcional)"></div>'
-        +'</div><div style="display:flex;gap:.5rem;justify-content:flex-end"><button class="btn btn-secondary btn-sm" onclick="document.getElementById(\\'gestionForm\\').innerHTML=\\'\\'">Cancelar</button><button class="btn btn-primary btn-sm" onclick="guardarContacto('+id+')">Registrar contacto</button></div></div></div>';
+        +'</div><div style="display:flex;gap:.5rem;justify-content:flex-end"><button class="btn btn-secondary btn-sm" data-act="cm-limpiar-gestion">Cancelar</button><button class="btn btn-primary btn-sm" data-act="cm-guardar-contacto" data-id="'+id+'">Registrar contacto</button></div></div></div>';
     };
     window.guardarContacto = async function(id){
       const channel=document.getElementById('ct-channel').value;
@@ -187,7 +187,7 @@ export function cobroModalScript(sym) {
         '<div class="card" style="margin-top:.5rem"><div class="card-body"><div class="form-row" style="gap:.5rem">'
         +'<div class="form-group"><label class="form-label">Promete pagar el</label><input type="date" class="form-control" id="pr-date" value="'+today+'"></div>'
         +'<div class="form-group" style="flex:1"><label class="form-label">Nota</label><input class="form-control" id="pr-note" placeholder="(opcional)"></div>'
-        +'</div><div style="display:flex;gap:.5rem;justify-content:flex-end"><button class="btn btn-secondary btn-sm" onclick="document.getElementById(\\'gestionForm\\').innerHTML=\\'\\'">Cancelar</button><button class="btn btn-primary btn-sm" onclick="guardarPromesa('+id+')">Registrar promesa</button></div></div></div>';
+        +'</div><div style="display:flex;gap:.5rem;justify-content:flex-end"><button class="btn btn-secondary btn-sm" data-act="cm-limpiar-gestion">Cancelar</button><button class="btn btn-primary btn-sm" data-act="cm-guardar-promesa" data-id="'+id+'">Registrar promesa</button></div></div></div>';
     };
     window.guardarPromesa = async function(id){
       const promised_date=document.getElementById('pr-date').value;
@@ -224,9 +224,9 @@ export function cobroModalScript(sym) {
         +vivas.map(function(f){return '<tr><td>'+escHtml(f.invoice_number)+'</td><td style="color:var(--muted);font-size:.8rem">'+escHtml(f.due_date||'-')+'</td><td style="text-align:right">'+dineroEs(f.pendiente, SYM)+'</td></tr>';}).join('')
         +'<tr><td colspan="2" style="font-weight:700;border-top:1px solid var(--border)">Total adeudado</td><td style="text-align:right;font-weight:700;border-top:1px solid var(--border)">'+dineroEs(acct.deudaTotal, SYM)+'</td></tr></tbody></table></div>';
       const buttons = '<div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.5rem">'
-        +'<button class="btn btn-primary btn-sm" onclick="formRecordatorioCuenta()">Mandar recordatorio</button>'
-        +'<button class="btn btn-secondary btn-sm" onclick="formPromesaCuenta()">Registrar promesa</button>'
-        +'<button class="btn btn-secondary btn-sm" onclick="formCobroCuenta()">Registrar cobro a cuenta</button>'
+        +'<button class="btn btn-primary btn-sm" data-act="cm-form-recordatorio-cuenta">Mandar recordatorio</button>'
+        +'<button class="btn btn-secondary btn-sm" data-act="cm-form-promesa-cuenta">Registrar promesa</button>'
+        +'<button class="btn btn-secondary btn-sm" data-act="cm-form-cobro-cuenta">Registrar cobro a cuenta</button>'
         +'</div>';
       document.getElementById('gestionBody').innerHTML =
         '<div style="margin-bottom:.75rem">Te debe <strong>'+dineroEs(acct.deudaTotal, SYM)+'</strong> en '+vivas.length+' factura'+(vivas.length===1?'':'s')+'</div>'
@@ -241,7 +241,7 @@ export function cobroModalScript(sym) {
         +'<div class="form-group"><label class="form-label">Para</label><input class="form-control" value="'+escHtml(prev.to)+'" disabled></div>'
         +'<div class="form-group"><label class="form-label">Asunto</label><input class="form-control" id="acct-subject" value="'+escHtml(prev.subject)+'"></div>'
         +'<div class="form-group"><label class="form-label">Mensaje (un solo email de toda la cuenta, editable)</label><textarea class="form-control" id="acct-text" rows="10">'+escHtml(prev.text)+'</textarea></div>'
-        +'<div style="display:flex;gap:.5rem;justify-content:flex-end"><button class="btn btn-secondary btn-sm" onclick="document.getElementById(\\'acctForm\\').innerHTML=\\'\\'">Cancelar</button><button class="btn btn-primary btn-sm" onclick="enviarRecordatorioCuenta()">Enviar email</button></div>'
+        +'<div style="display:flex;gap:.5rem;justify-content:flex-end"><button class="btn btn-secondary btn-sm" data-act="cm-limpiar-cuenta">Cancelar</button><button class="btn btn-primary btn-sm" data-act="cm-enviar-recordatorio-cuenta">Enviar email</button></div>'
         +'</div></div>';
     };
     window.enviarRecordatorioCuenta = async function(){
@@ -261,7 +261,7 @@ export function cobroModalScript(sym) {
         +'<div class="form-group"><label class="form-label">Promete pagar el</label><input type="date" class="form-control" id="acct-pr-date" value="'+today+'"></div>'
         +'<div class="form-group" style="flex:1"><label class="form-label">Nota</label><input class="form-control" id="acct-pr-note" placeholder="(opcional)"></div>'
         +'</div><p style="color:var(--muted);font-size:.8rem;margin:.25rem 0">Pospone la próxima acción de TODAS las facturas vivas.</p>'
-        +'<div style="display:flex;gap:.5rem;justify-content:flex-end"><button class="btn btn-secondary btn-sm" onclick="document.getElementById(\\'acctForm\\').innerHTML=\\'\\'">Cancelar</button><button class="btn btn-primary btn-sm" onclick="guardarPromesaCuenta()">Registrar promesa</button></div></div></div>';
+        +'<div style="display:flex;gap:.5rem;justify-content:flex-end"><button class="btn btn-secondary btn-sm" data-act="cm-limpiar-cuenta">Cancelar</button><button class="btn btn-primary btn-sm" data-act="cm-guardar-promesa-cuenta">Registrar promesa</button></div></div></div>';
     };
     window.guardarPromesaCuenta = async function(){
       const promised_date=document.getElementById('acct-pr-date').value;
@@ -278,10 +278,10 @@ export function cobroModalScript(sym) {
       document.getElementById('acctForm').innerHTML =
         '<div class="card" style="margin-top:.5rem"><div class="card-body">'
         +'<div class="form-row" style="gap:.5rem;align-items:end">'
-        +'<div class="form-group"><label class="form-label">Importe a cuenta</label><input type="number" step="0.01" min="0.01" class="form-control" id="acct-importe" value="'+Number(acct.deudaTotal).toFixed(2)+'" style="width:140px" oninput="renderReparto()"></div>'
-        +'<div class="form-group"><label class="form-label">Reparto</label><select class="form-control" id="acct-modo" onchange="renderReparto()"><option value="auto">Automático (más antigua primero)</option><option value="manual">Repartir a mano</option></select></div>'
+        +'<div class="form-group"><label class="form-label">Importe a cuenta</label><input type="number" step="0.01" min="0.01" class="form-control" id="acct-importe" value="'+Number(acct.deudaTotal).toFixed(2)+'" style="width:140px" data-act="cm-reparto"></div>'
+        +'<div class="form-group"><label class="form-label">Reparto</label><select class="form-control" id="acct-modo" data-act="cm-modo"><option value="auto">Automático (más antigua primero)</option><option value="manual">Repartir a mano</option></select></div>'
         +'</div><div id="acct-reparto"></div>'
-        +'<div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:.5rem"><button class="btn btn-secondary btn-sm" onclick="document.getElementById(\\'acctForm\\').innerHTML=\\'\\'">Cancelar</button><button class="btn btn-primary btn-sm" id="acct-cobro-btn" onclick="guardarCobroCuenta()">Registrar cobro</button></div>'
+        +'<div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:.5rem"><button class="btn btn-secondary btn-sm" data-act="cm-limpiar-cuenta">Cancelar</button><button class="btn btn-primary btn-sm" id="acct-cobro-btn" data-act="cm-guardar-cobro-cuenta">Registrar cobro</button></div>'
         +'</div></div>';
       renderReparto();
     };
@@ -299,8 +299,8 @@ export function cobroModalScript(sym) {
         if(btn) btn.disabled=!(importe>0);
       } else {
         cont.innerHTML='<table style="width:100%;font-size:.85rem;margin-top:.5rem"><thead><tr><th style="text-align:left">Factura</th><th style="text-align:right">Pendiente</th><th style="text-align:right">Importe</th></tr></thead><tbody>'
-          +vivas.map(function(f){return '<tr><td>'+escHtml(f.invoice_number)+'</td><td style="text-align:right;color:var(--muted)">'+dineroEs(f.pendiente, SYM)+'</td><td style="text-align:right"><input type="number" step="0.01" min="0" max="'+Number(f.pendiente).toFixed(2)+'" class="form-control acct-mf" data-id="'+f.invoice_id+'" data-pend="'+Number(f.pendiente).toFixed(2)+'" value="0" style="width:110px;text-align:right;display:inline-block" oninput="sumManual()"></td></tr>';}).join('')+'</tbody></table>'
-          +'<div style="display:flex;justify-content:space-between;align-items:center;margin-top:.4rem"><button class="btn btn-secondary btn-sm" type="button" onclick="autoFillManual()">Auto por antigüedad</button><span id="acct-counter" style="font-size:.85rem"></span></div>';
+          +vivas.map(function(f){return '<tr><td>'+escHtml(f.invoice_number)+'</td><td style="text-align:right;color:var(--muted)">'+dineroEs(f.pendiente, SYM)+'</td><td style="text-align:right"><input type="number" step="0.01" min="0" max="'+Number(f.pendiente).toFixed(2)+'" class="form-control acct-mf" data-id="'+f.invoice_id+'" data-pend="'+Number(f.pendiente).toFixed(2)+'" value="0" style="width:110px;text-align:right;display:inline-block" data-act="cm-suma"></td></tr>';}).join('')+'</tbody></table>'
+          +'<div style="display:flex;justify-content:space-between;align-items:center;margin-top:.4rem"><button class="btn btn-secondary btn-sm" type="button" data-act="cm-auto">Auto por antigüedad</button><span id="acct-counter" style="font-size:.85rem"></span></div>';
         sumManual();
       }
     };
@@ -336,5 +336,44 @@ export function cobroModalScript(sym) {
       } catch(e){ toast(e.message||'Error registrando el cobro','err'); }
     };
   })();
-  `;
+  
+      // ── 4 SEP 2026 (csp-erp-migrar-handlers) — ENGANCHE DE LAS VENTANAS DE COBRO Y GESTION ────
+      // Aqui dentro NADA esta en el HTML de salida: la lista de cobros, los formularios de gestion
+      // y el reparto a cuenta se pintan al abrir. Todo por delegacion, y los ids a numero.
+      if (!window.__cobroModalDeleg) {
+        window.__cobroModalDeleg = true;
+        var _num = function(t, k){ return Number(t.getAttribute(k)); };
+        document.addEventListener('click', function(e){
+          var t = e.target.closest('[data-act^="cm-"]'); if (!t) return;
+          var a = t.getAttribute('data-act'), id = _num(t, 'data-id');
+          if (a === 'cm-cerrar') closeModal('cobroModal');
+          else if (a === 'cm-cerrar-gestion') closeModal('gestionModal');
+          else if (a === 'cm-deshacer') deshacerCobro(_num(t, 'data-inv'), _num(t, 'data-cobro'));
+          else if (a === 'cm-registrar') registrarCobro(_num(t, 'data-inv'));
+          else if (a === 'cm-abrir-cobros') openCobros(id);
+          else if (a === 'cm-form-recordatorio') formRecordatorio(id);
+          else if (a === 'cm-form-contacto') formContacto(id);
+          else if (a === 'cm-form-promesa') formPromesa(id);
+          else if (a === 'cm-enviar-recordatorio') enviarRecordatorio(id);
+          else if (a === 'cm-guardar-contacto') guardarContacto(id);
+          else if (a === 'cm-guardar-promesa') guardarPromesa(id);
+          else if (a === 'cm-form-recordatorio-cuenta') formRecordatorioCuenta();
+          else if (a === 'cm-form-promesa-cuenta') formPromesaCuenta();
+          else if (a === 'cm-form-cobro-cuenta') formCobroCuenta();
+          else if (a === 'cm-enviar-recordatorio-cuenta') enviarRecordatorioCuenta();
+          else if (a === 'cm-guardar-promesa-cuenta') guardarPromesaCuenta();
+          else if (a === 'cm-guardar-cobro-cuenta') guardarCobroCuenta();
+          else if (a === 'cm-auto') autoFillManual();
+          else if (a === 'cm-limpiar-gestion') document.getElementById('gestionForm').innerHTML = '';
+          else if (a === 'cm-limpiar-cuenta') document.getElementById('acctForm').innerHTML = '';
+        });
+        document.addEventListener('input', function(e){
+          var t = e.target.closest('[data-act="cm-reparto"], [data-act="cm-suma"]'); if (!t) return;
+          if (t.getAttribute('data-act') === 'cm-reparto') renderReparto(); else sumManual();
+        });
+        document.addEventListener('change', function(e){
+          if (e.target.closest('[data-act="cm-modo"]')) renderReparto();
+        });
+      }
+`;
 }

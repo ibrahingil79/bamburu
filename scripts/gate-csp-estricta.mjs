@@ -481,8 +481,153 @@ try {
   ok(vivoCompra === 'ok', 'en la compra directa, Añadir línea pinta la fila y su buscador responde', vivoCompra);
   ok((await violaciones(p12)).length === 0, '  y todo el recorrido, sin una violación de CSP');
 
+
+  // ── 13 · LA COLA POR TAMAÑO: cada pantalla, pulsada donde duele ──
+  console.log('\n[13] Pantallas de la cola: se pulsan sus controles, no se cargan');
+  const p13 = await nuevaPagina();
+  await p13.setCookie({ name: 'asess', value: erpTok, domain: 'desarrollo-bamburu.localhost', path: '/' });
+
+  // /admin/citas/servicios — la tabla se pinta DESPUES de pedir la lista, asi que Configurar va por
+  // delegacion; el modal y su enlace plegado estaban en el HTML y van con oyente directo. Se pulsan
+  // los dos caminos, que son los dos que se rompen de forma distinta.
+  const r13 = await p13.goto(ERP_BASE + '/admin/citas/servicios', { waitUntil: 'networkidle0' });
+  ok(/script-src[^;]*'nonce-/.test(cabecera(r13)), '/admin/citas/servicios — endurecida');
+  await new Promise(x => setTimeout(x, 800));           // la tabla llega por API
+  const svc = await p13.evaluate(async () => {
+    const res = {};
+    const cfg = document.querySelector('[data-act="svc-edit"]');
+    res.hayFila = !!cfg;
+    if (cfg) {
+      cfg.click(); await new Promise(r => setTimeout(r, 400));
+      const m = document.getElementById('mSvc');
+      res.abreConfigurar = !!(m && m.classList.contains('open'));
+      res.tituloRelleno = (document.getElementById('mSvcTitle')?.textContent || '').trim().length > 0;
+      const a = document.getElementById('svcEsperaAdd');
+      if (a) { a.click(); await new Promise(r => setTimeout(r, 200));
+               res.despliegaEspera = document.getElementById('svcEsperaWrap')?.style.display !== 'none'; }
+      document.querySelector('[data-act="svc-cerrar"]')?.click();
+      await new Promise(r => setTimeout(r, 300));
+      res.cierra = !document.getElementById('mSvc')?.classList.contains('open');
+    }
+    document.querySelector('[data-act="ns-abrir"]')?.click();
+    await new Promise(r => setTimeout(r, 400));
+    res.abreNuevo = !!document.getElementById('mNuevoSvc')?.classList.contains('open');
+    document.querySelector('[data-act="ns-cerrar"]')?.click();
+    return res;
+  });
+  ok(svc.hayFila, '  hay al menos un servicio en la tabla que pintó el JavaScript');
+  ok(svc.abreConfigurar, '  PULSAR Configurar (fila pintada después) abre su ventana');
+  ok(svc.tituloRelleno, '  y la ventana viene RELLENA: el id llegó como número, no como texto');
+  ok(svc.despliegaEspera, '  el enlace plegado del tiempo de espera despliega su campo');
+  ok(svc.cierra, '  y el botón de cerrar la cierra');
+  ok(svc.abreNuevo, '  PULSAR «Nuevo servicio» abre su ventana');
+  ok((await violaciones(p13)).length === 0, '  todo el recorrido, sin una violación de CSP');
+
+
+  // /admin/mostrador — el TPV. Se pulsa un producto de la rejilla (que se pinta después), se cambia
+  // la cantidad, se quita la línea y se abre la ventana de cobro. NO se confirma la venta: eso
+  // emitiría un ticket de verdad. El carrito vive en el navegador, así que nada de esto deja rastro.
+  const r13b = await p13.goto(ERP_BASE + '/admin/mostrador', { waitUntil: 'networkidle0' });
+  ok(/script-src[^;]*'nonce-/.test(cabecera(r13b)), '/admin/mostrador — endurecida');
+  await new Promise(x => setTimeout(x, 600));
+  const tpv = await p13.evaluate(async () => {
+    const res = {};
+    const tile = document.querySelector('[data-act="add-prod"]');
+    res.hayRejilla = !!tile;
+    if (!tile) return res;
+    // ⚠️ TODO va con `?.`. El rojo provocado del 4 sep hizo que el producto NO entrara en el
+    // ticket, y el paso siguiente reventó el gate entero: salió una traza y NI UN veredicto. Un
+    // gate que muere no dice «ha fallado», dice «no he podido probarlo», y eso se lee como verde.
+    tile.click(); await new Promise(r => setTimeout(r, 300));
+    res.entraAlTicket = document.querySelectorAll('[data-act="quitar-linea"]').length === 1;
+    res.cobrarSeActiva = document.getElementById('btn-cobrar')?.disabled === false;
+    const n = document.querySelector('[data-act="set-qty"]');
+    if (n) { n.value = '3'; n.dispatchEvent(new Event('change', { bubbles: true }));
+             await new Promise(r => setTimeout(r, 250));
+             res.cambiaCantidad = document.querySelector('[data-act="set-qty"]')?.value === '3'; }
+    document.getElementById('btn-cobrar')?.click(); await new Promise(r => setTimeout(r, 400));
+    res.abreCobro = !!document.getElementById('cobroModal')?.classList.contains('open');
+    document.querySelector('[data-act="cobro-cerrar"]')?.click(); await new Promise(r => setTimeout(r, 300));
+    res.cierraCobro = !document.getElementById('cobroModal')?.classList.contains('open');
+    document.querySelector('[data-act="quitar-linea"]')?.click(); await new Promise(r => setTimeout(r, 250));
+    res.quitaLinea = document.querySelectorAll('[data-act="quitar-linea"]').length === 0;
+    return res;
+  });
+  ok(tpv.hayRejilla, '  la rejilla de productos se pintó');
+  ok(tpv.entraAlTicket, '  PULSAR un producto lo mete en el ticket (el id llegó como número)');
+  ok(tpv.cobrarSeActiva, '  y el botón de Cobrar se activa');
+  ok(tpv.cambiaCantidad, '  cambiar la cantidad de la línea responde');
+  ok(tpv.abreCobro, '  PULSAR Cobrar abre la ventana de cobro');
+  ok(tpv.cierraCobro, '  y Cancelar la cierra');
+  ok(tpv.quitaLinea, '  quitar la línea la quita: el ticket queda vacío otra vez');
+  ok((await violaciones(p13)).length === 0, '  y el mostrador entero, sin una violación de CSP');
+
+
+  // /admin/avisos — la pantalla arrastra TRES ventanas compartidas (cobro, pago, stock) que viven
+  // en `views/` y las usan otras diez pantallas. Se abren y se cierran desde aquí; NO se pulsa nada
+  // que registre un cobro, un pago o un ajuste: eso movería dinero y existencias de verdad.
+  const r13c = await p13.goto(ERP_BASE + '/admin/avisos', { waitUntil: 'networkidle0' });
+  ok(/script-src[^;]*'nonce-/.test(cabecera(r13c)), '/admin/avisos — endurecida');
+  await new Promise(x => setTimeout(x, 1000));
+  const avi = await p13.evaluate(async () => {
+    const res = { abiertas: [], sinBoton: [] };
+    const pares = [['cm-abrir-cobros', 'cobroModal'], ['av-gestion', 'gestionModal'],
+                   ['av-pagos', 'pagoModal'], ['av-pago-cuenta', 'pagoCuentaModal']];
+    for (const [act, modal] of pares) {
+      const b = document.querySelector('[data-act="' + act + '"]');
+      if (!b) { res.sinBoton.push(act); continue; }
+      b.click(); await new Promise(r => setTimeout(r, 900));
+      const m = document.getElementById(modal);
+      if (m?.classList.contains('open')) {
+        res.abiertas.push(modal);
+        m.querySelector('.modal-close')?.click();
+        await new Promise(r => setTimeout(r, 300));
+        if (m.classList.contains('open')) res.noCierra = modal;
+      } else {
+        // ⚠️ 4 SEP 2026 — ESTA LISTA ES LA QUE HACE QUE EL ROJO CAIGA. Antes solo se contaba
+        // cuántas ventanas abrían («al menos dos»), y el rojo provocado —quitarle al despachador
+        // compartido la clave de cobros— siguió VERDE porque las otras tres seguían abriendo. Un
+        // botón que está en la pantalla y no responde es un fallo, aunque sus vecinos funcionen.
+        res.mudos = (res.mudos || []).concat(act);
+      }
+    }
+    res.filas = document.querySelectorAll('#avisosBody tr, .aviso-row').length;
+    return res;
+  });
+  ok(avi.abiertas.length >= 2, '  PULSAR sus botones abre las ventanas compartidas',
+     avi.abiertas.join(', ') + (avi.sinBoton.length ? ' · sin aviso de ese tipo hoy: ' + avi.sinBoton.join(', ') : ''));
+  ok(!avi.mudos, '  y NINGUNO de los que están en la pantalla se queda mudo', (avi.mudos || []).join(', '));
+  ok(!avi.noCierra, '  y el aspa de cada una la cierra', avi.noCierra || '');
+  ok((await violaciones(p13)).length === 0, '  y sin una sola violación de CSP');
+
+  // Y EL GUARDIA DE LAS OTRAS DIEZ. Las ventanas de `views/` las comparten pantallas que siguen en
+  // legado (inventario, productos, cobros, pagos, facturas…). Migrarlas allí no rompe nada solo si
+  // lo de DENTRO sigue respondiendo: se abre el kardex en una pantalla NO endurecida y se pulsa el
+  // botón migrado que vive dentro de él.
+  const rInv = await p13.goto(ERP_BASE + '/admin/inventory', { waitUntil: 'networkidle0' });
+  ok(/script-src[^;]*'unsafe-inline'/.test(cabecera(rInv)), '/admin/inventory sigue en legado (no es de esta cola)');
+  await new Promise(x => setTimeout(x, 900));
+  const kx = await p13.evaluate(async () => {
+    const res = {};
+    if (typeof openStockKardex !== 'function') return { sinKardex: true };
+    openStockKardex(1, 'ZZ'); await new Promise(r => setTimeout(r, 1400));
+    res.kardexAbre = !!document.getElementById('stockKardexModal')?.classList.contains('open');
+    const aj = document.querySelector('[data-act="sm-ajustar"]');
+    res.hayAjustar = !!aj;
+    if (aj) {
+      aj.click(); await new Promise(r => setTimeout(r, 800));
+      res.ajusteAbre = !!document.getElementById('stockAdjModal')?.classList.contains('open');
+      document.querySelector('[data-act="sm-cerrar-ajuste"]')?.click();
+    }
+    document.querySelector('[data-act="sm-cerrar-kardex"]')?.click();
+    return res;
+  });
+  ok(kx.kardexAbre, '  la ventana de stock abre en una pantalla en legado');
+  ok(kx.hayAjustar, '  y trae dentro el botón migrado de Ajustar stock');
+  ok(kx.ajusteAbre, '  PULSARLO abre el ajuste: la delegación compartida funciona en legado también');
+
   const todas = [...(await violaciones(p3)), ...(await violaciones(p4)),
-                 ...(await violaciones(p11)), ...(await violaciones(p12)),
+                 ...(await violaciones(p11)), ...(await violaciones(p12)), ...(await violaciones(p13)),
                  ...(await violaciones(p9)),
                  ...(await violaciones(p8)),
                  ...(await violaciones(p5)), ...(await violaciones(p6)), ...(await violaciones(p7))];

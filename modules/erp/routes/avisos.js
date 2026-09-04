@@ -164,8 +164,8 @@ export function createAvisosRoutes(db) {
     const content = `
       <div class="ph"><h2>Avisos</h2>
         <div style="display:flex;gap:.5rem">
-          <button class="btn btn-secondary" id="avVerTodos" onclick="marcarTodosVistos()"><i class="ti ti-checks"></i> Marcar todos como vistos</button>
-          <button class="btn btn-secondary" onclick="loadAvisos()"><i class="ti ti-refresh"></i> Actualizar</button>
+          <button class="btn btn-secondary" id="avVerTodos"><i class="ti ti-checks"></i> Marcar todos como vistos</button>
+          <button class="btn btn-secondary" data-act="av-refrescar"><i class="ti ti-refresh"></i> Actualizar</button>
         </div>
       </div>
       <div class="card" style="margin-bottom:1rem">
@@ -177,7 +177,7 @@ export function createAvisosRoutes(db) {
         </div>
       </div>
       <div class="card">
-        <div class="card-head"><h3>Todos tus avisos (más urgentes arriba)</h3><input class="search" id="searchBox" placeholder="Buscar cliente, proveedor, factura o producto..." oninput="filterRows()"></div>
+        <div class="card-head"><h3>Todos tus avisos (más urgentes arriba)</h3><input class="search" id="searchBox" data-act="av-buscar" placeholder="Buscar cliente, proveedor, factura o producto..."></div>
         <div class="table-wrap"><table>
           <thead><tr><th>Visto</th><th>Tipo</th><th>Aviso</th><th>Detalle</th><th>Acción</th></tr></thead>
           <tbody id="avBody">${skeletonRows(5)}</tbody>
@@ -197,7 +197,7 @@ export function createAvisosRoutes(db) {
       ${pagoModalHtml()}
       ${pagoCuentaModalHtml()}
       ${stockModalHtml()}
-      <script>
+      <script nonce="${c.get('cspNonce')}">
       ${cobroModalScript(sym)}
       ${pagoModalScript(sym)}
       ${stockModalScript(sym, warehouses)}
@@ -212,19 +212,19 @@ export function createAvisosRoutes(db) {
         const ver = a.href ? '<a class="btn btn-secondary btn-sm" href="'+a.href+'">Ver</a>' : '';
         if (a.tipo === 'cobro_vencido') {
           if (!PUEDE.cobro) return ver;
-          return '<button class="btn btn-primary btn-sm" onclick="openCobros('+r.invoice_id+')">Registrar cobro</button>'
-               + ' <button class="btn btn-secondary btn-sm" title="Recordatorio, promesa de pago…" onclick="openGestion('+r.invoice_id+')">Gestionar</button>';
+          return '<button class="btn btn-primary btn-sm" data-act="cm-abrir-cobros" data-id="'+r.invoice_id+'">Registrar cobro</button>'
+               + ' <button class="btn btn-secondary btn-sm" title="Recordatorio, promesa de pago…" data-act="av-gestion" data-id="'+r.invoice_id+'">Gestionar</button>';
         }
         if (a.tipo === 'vencimiento_proveedor') {
           if (!PUEDE.pago) return ver;
-          return '<button class="btn btn-primary btn-sm" onclick="openPagos('+r.supplier_invoice_id+')">Registrar pago</button>'
-               + ' <button class="btn btn-secondary btn-sm" title="Saldar varias facturas de este proveedor" onclick="openPagoCuenta('+r.supplier_id+')">A cuenta</button>';
+          return '<button class="btn btn-primary btn-sm" data-act="av-pagos" data-id="'+r.supplier_invoice_id+'">Registrar pago</button>'
+               + ' <button class="btn btn-secondary btn-sm" title="Saldar varias facturas de este proveedor" data-act="av-pago-cuenta" data-id="'+r.supplier_id+'">A cuenta</button>';
         }
         if (a.tipo === 'stock_bajo') {
           if (!PUEDE.stock) return ver;
           const nm = String(a.titulo||'').replace(/'/g,'');
-          return '<button class="btn btn-primary btn-sm" onclick="openAjustar('+r.product_id+',\\''+escHtml(nm)+'\\','+Number(r.disponible||0)+')">Ajustar stock</button>'
-               + ' <button class="btn btn-secondary btn-sm" onclick="openStockKardex('+r.product_id+',\\''+escHtml(nm)+'\\')">Ver stock</button>';
+          return '<button class="btn btn-primary btn-sm" data-act="sm-ajustar" data-id="'+r.product_id+'" data-nombre="'+escHtml(nm)+'" data-stock="'+Number(r.disponible||0)+'">Ajustar stock</button>'
+               + ' <button class="btn btn-secondary btn-sm" data-act="av-kardex" data-id="'+r.product_id+'" data-nombre="'+escHtml(nm)+'">Ver stock</button>';
         }
         // Recurrente en borrador: emitir crea una factura con valor legal → se revisa primero.
         if (a.tipo === 'factura_recurrente') {
@@ -247,8 +247,8 @@ export function createAvisosRoutes(db) {
         // que ir a los ajustes, buscar la casilla y guardar, "un clic" sería mentira. La fuente ya
         // exige citas.edit para verse, y el endpoint lo revalida.
         if (a.tipo === 'reserva_publica_encendida') {
-          return '<button class="btn btn-secondary btn-sm" onclick="apagarReservas()">Apágala</button>'
-               + ' <button class="btn btn-primary btn-sm" onclick="dejarReservas()">Déjala abierta</button>'
+          return '<button class="btn btn-secondary btn-sm" data-act="av-apagar">Apágala</button>'
+               + ' <button class="btn btn-primary btn-sm" data-act="av-dejar">Déjala abierta</button>'
                + ' ' + ver;
         }
         return ver;
@@ -332,7 +332,26 @@ export function createAvisosRoutes(db) {
       window.stockOnSaved = function(){ loadAvisos(); };
 
       loadAvisos();
-      </script>`;
+      
+      // ── 4 SEP 2026 (csp-erp-migrar-handlers) — ENGANCHE ───────────────────────────────────────
+      // Los avisos se piden y se pintan DESPUES, asi que sus botones van por delegacion. Los dos
+      // fijos de la cabecera ya estan en el HTML. Las ventanas de cobro, pago y stock traen su
+      // PROPIO enganche desde la carpeta views: aqui solo van los botones de ESTA pantalla, y los
+      // de la ventana de cobro se reaprovechan con su misma clave (cm-abrir-cobros).
+      document.getElementById('avVerTodos')?.addEventListener('click', () => marcarTodosVistos());
+      document.querySelector('[data-act="av-refrescar"]')?.addEventListener('click', () => loadAvisos());
+      document.getElementById('searchBox')?.addEventListener('input', () => filterRows());
+      document.addEventListener('click', (e) => {
+        const t = e.target.closest('[data-act^="av-"]'); if (!t) return;
+        const a = t.getAttribute('data-act'), id = Number(t.getAttribute('data-id'));
+        if (a === 'av-gestion') openGestion(id);
+        else if (a === 'av-pagos') openPagos(id);
+        else if (a === 'av-pago-cuenta') openPagoCuenta(id);
+        else if (a === 'av-kardex') openStockKardex(id, t.getAttribute('data-nombre'));
+        else if (a === 'av-apagar') apagarReservas();
+        else if (a === 'av-dejar') dejarReservas();
+      });
+</script>`;
     return c.html(adminLayout('Avisos', content, 'avisos', csrf, c));
   });
 

@@ -120,6 +120,11 @@ const SUPERFICIES_ESTRICTAS = [
   /^\/admin\/purchase-orders\/\d+\/receipts\/new$/,
   /^\/admin\/purchases\/\d+$/,
   /^\/admin\/purchases\/new$/,
+  // ⚙️ 4 SEP 2026, 6ª tanda — LA COLA POR TAMAÑO, de menos a más. Cada una migrada entera antes de
+  // entrar aquí, y comprobada PULSANDO en el gate, no cargando.
+  /^\/admin\/citas\/servicios$/,
+  /^\/admin\/mostrador$/,
+  /^\/admin\/avisos$/,
 ];
 
 export function securityHeaders() {

@@ -62,7 +62,7 @@ export function createMostradorRoutes(db) {
     const lastWh = db.prepare('SELECT last_warehouse_id FROM admin_users WHERE id=?').get(c.get('session')?.userId)?.last_warehouse_id;
     const selWh = (lastWh && warehouses.some(w => w.id === lastWh)) ? lastWh : defWh;
     const whSelector = warehouses.length > 1
-      ? `<select class="form-control" id="mWarehouse" style="width:auto;min-width:170px" onchange="onWhChange()">${warehouses.map(w => `<option value="${w.id}"${w.id === selWh ? ' selected' : ''}>${esc(w.name)}${w.is_default ? ' (principal)' : ''}</option>`).join('')}</select>`
+      ? `<select class="form-control" id="mWarehouse" style="width:auto;min-width:170px">${warehouses.map(w => `<option value="${w.id}"${w.id === selWh ? ' selected' : ''}>${esc(w.name)}${w.is_default ? ' (principal)' : ''}</option>`).join('')}</select>`
       : `<input type="hidden" id="mWarehouse" value="${selWh}">`;
 
     const content = `
@@ -74,9 +74,9 @@ export function createMostradorRoutes(db) {
       </div>
       <div class="grid g2" style="align-items:start">
         <div class="card"><div class="card-body">
-          <input class="search" id="prodSearch" placeholder="Buscar producto..." oninput="renderGrid()" style="width:100%;margin-bottom:1rem">
+          <input class="search" id="prodSearch" placeholder="Buscar producto..." style="width:100%;margin-bottom:1rem">
           <div id="prodGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:.6rem;max-height:60vh;overflow:auto">${Array.from({ length: 10 }, () => '<div class="skel skel-block"></div>').join('')}</div>
-          <div style="margin-top:1rem"><button class="btn btn-secondary btn-sm" onclick="addFreeLine()">+ Línea libre (concepto + importe, IVA 21%)</button></div>
+          <div style="margin-top:1rem"><button class="btn btn-secondary btn-sm" data-act="linea-libre">+ Línea libre (concepto + importe, IVA 21%)</button></div>
         </div></div>
         <div class="card"><div class="card-body">
           <h3 style="font-size:.95rem;margin:0 0 .75rem">Ticket</h3>
@@ -84,44 +84,44 @@ export function createMostradorRoutes(db) {
           <div id="stockWarn" style="display:none;margin:.75rem 0;padding:.6rem .8rem;border-radius:8px;background:var(--danger-s);color:var(--danger);font-size:.82rem;border:1px solid var(--danger-s)"></div>
           <div id="limitWarn" style="display:none;margin:.75rem 0;padding:.6rem .8rem;border-radius:8px;background:var(--warn-s);color:var(--warn);font-size:.82rem;border:1px solid var(--warn-s)"></div>
           <table style="width:100%;margin-top:.75rem;font-size:.9rem"><tfoot id="totals"></tfoot></table>
-          <button class="btn btn-primary" id="btn-cobrar" style="width:100%;margin-top:1rem" onclick="openCobro()" disabled>Cobrar</button>
+          <button class="btn btn-primary" id="btn-cobrar" style="width:100%;margin-top:1rem" disabled>Cobrar</button>
         </div></div>
       </div>
 
       <div class="modal-overlay" id="cobroModal">
         <div class="modal" style="max-width:420px">
-          <div class="modal-head"><h3>Cobrar <span id="cobroTotal"></span></h3><button class="modal-close" onclick="closeModal('cobroModal')">✕</button></div>
+          <div class="modal-head"><h3>Cobrar <span id="cobroTotal"></span></h3><button class="modal-close" data-act="cobro-cerrar">✕</button></div>
           <div class="modal-body">
             <div class="form-group"><label class="form-label">Método de pago</label>
               <div style="display:flex;gap:.5rem">
-                <button class="btn btn-secondary" id="pm-efectivo" style="flex:1" onclick="setMethod('efectivo')">Efectivo</button>
-                <button class="btn btn-secondary" id="pm-tarjeta" style="flex:1" onclick="setMethod('tarjeta')">Tarjeta</button>
+                <button class="btn btn-secondary" id="pm-efectivo" style="flex:1" data-act="pm-efectivo">Efectivo</button>
+                <button class="btn btn-secondary" id="pm-tarjeta" style="flex:1" data-act="pm-tarjeta">Tarjeta</button>
               </div>
             </div>
             <div class="form-group" id="efectivoWrap" style="display:none">
               <label class="form-label">Entregado</label>
-              <input type="number" class="form-control" id="entregado" step="0.01" min="0" oninput="calcCambio()" placeholder="0.00">
+              <input type="number" class="form-control" id="entregado" step="0.01" min="0" placeholder="0.00">
               <div id="cambio" style="margin-top:.5rem;font-weight:600"></div>
             </div>
             <div id="stockWarn2" style="display:none;margin-top:.5rem;padding:.6rem .8rem;border-radius:8px;background:var(--danger-s);color:var(--danger);font-size:.82rem;border:1px solid var(--danger-s)"></div>
             <div id="limitWarn2" style="display:none;margin-top:.5rem;padding:.6rem .8rem;border-radius:8px;background:var(--warn-s);color:var(--warn);font-size:.82rem;border:1px solid var(--warn-s)"></div>
           </div>
           <div class="modal-foot">
-            <button class="btn btn-secondary" onclick="closeModal('cobroModal')">Cancelar</button>
-            <button class="btn btn-primary" id="btn-confirmar" onclick="confirmarVenta()" disabled>Emitir ticket y cobrar</button>
+            <button class="btn btn-secondary" data-act="cobro-cerrar">Cancelar</button>
+            <button class="btn btn-primary" id="btn-confirmar" disabled>Emitir ticket y cobrar</button>
           </div>
         </div>
       </div>
 
       <div class="modal-overlay" id="ticketModal">
         <div class="modal" style="max-width:420px">
-          <div class="modal-head"><h3>Ticket emitido</h3><button class="modal-close" onclick="closeTicket()">✕</button></div>
+          <div class="modal-head"><h3>Ticket emitido</h3><button class="modal-close" data-act="ticket-cerrar">✕</button></div>
           <div class="modal-body" id="ticketBody"></div>
-          <div class="modal-foot"><button class="btn btn-primary" onclick="closeTicket()">Nueva venta</button></div>
+          <div class="modal-foot"><button class="btn btn-primary" data-act="ticket-cerrar">Nueva venta</button></div>
         </div>
       </div>
 
-      <script>
+      <script nonce="${c.get('cspNonce')}">
       const SYM=${JSON.stringify(sym)}, CSRF=${JSON.stringify(csrfToken)};
       const LIMIT=400;
       let catalog=[], whStock={}, cart=[], method=null;
@@ -148,7 +148,7 @@ export function createMostradorRoutes(db) {
         document.getElementById('prodGrid').innerHTML = list.length ? list.map(function(p){
           const s=stockOf(p);
           const stxt = s===null ? '' : '<div style="font-size:.7rem;color:'+(s<=0?'var(--danger)':'var(--muted)')+'">disp. '+s+'</div>';
-          return '<div onclick="addProduct('+p.id+')" style="border:1px solid var(--border2);border-radius:8px;padding:.55rem;cursor:pointer;background:var(--bg2)">'
+          return '<div data-act="add-prod" data-id="'+p.id+'" style="border:1px solid var(--border2);border-radius:8px;padding:.55rem;cursor:pointer;background:var(--bg2)">'
             +'<div style="font-size:.8rem;font-weight:500;line-height:1.2">'+escHtml(p.name)+'</div>'
             +'<div style="font-size:.82rem;color:var(--accent);font-weight:600;margin-top:.2rem">'+dineroEs(p.price||0, SYM)+'</div>'+stxt+'</div>';
         }).join('') : (q?'<div style="grid-column:1/-1">'+window.emptyState('No hay productos que coincidan con la búsqueda.',{icon:'ti-search'})+'</div>':'<div style="grid-column:1/-1">'+window.emptyState('No hay productos con stock en este almacén. Repón stock o añade productos al catálogo para vender aquí.',{cta:'Ir al catálogo',href:'/admin/products',soft:true})+'</div>');
@@ -197,9 +197,9 @@ export function createMostradorRoutes(db) {
           const overTxt = over ? '<br><span style="color:var(--danger);font-size:.72rem">⚠ hay '+a+', vendes '+l.qty+' — exceso de '+(l.qty-a)+'</span>' : '';
           return '<div style="display:flex;align-items:center;gap:.4rem;padding:.35rem 0;border-bottom:1px solid var(--border)">'
             +'<div style="flex:1;font-size:.85rem">'+escHtml(l.description)+(l.free?' <span style="color:var(--muted);font-size:.72rem">(libre 21%)</span>':'')+'<br><span style="color:var(--muted);font-size:.75rem">'+dineroEs(l.unit_price, SYM)+' · IVA '+l.tax_rate+'%</span>'+overTxt+'</div>'
-            +'<input type="number" min="1" value="'+l.qty+'" onchange="setQty('+i+',this.value)" style="width:52px;padding:.2rem .3rem;border:1px solid '+(over?'var(--danger)':'var(--border2)')+';border-radius:4px;font-size:.82rem">'
+            +'<input type="number" min="1" value="'+l.qty+'" data-act="set-qty" data-i="'+i+'" style="width:52px;padding:.2rem .3rem;border:1px solid '+(over?'var(--danger)':'var(--border2)')+';border-radius:4px;font-size:.82rem">'
             +'<span style="min-width:64px;text-align:right;font-size:.85rem">'+SYM+(l.qty*l.unit_price).toFixed(2)+'</span>'
-            +'<button class="btn btn-danger btn-sm" onclick="removeLine('+i+')">✕</button></div>';
+            +'<button class="btn btn-danger btn-sm" data-act="quitar-linea" data-i="'+i+'">✕</button></div>';
         }).join('') : '<div style="color:var(--muted);font-size:.85rem">Carrito vacío. Toca un producto.</div>';
         const exc=stockExcess(); const sw=document.getElementById('stockWarn');
         if(exc.length){ sw.style.display='block'; sw.innerHTML='⚠ Venta por encima del stock disponible: '+exc.map(function(x){return escHtml(x.name)+' (hay '+x.available+', vendes '+x.requested+')';}).join('; ')+'. Puedes continuar; al cobrar se pedirá confirmación.'; }
@@ -269,7 +269,33 @@ export function createMostradorRoutes(db) {
       }
       function closeTicket(){ closeModal('ticketModal'); }
       loadCatalog();
-      </script>`;
+      
+      // ── 4 SEP 2026 (csp-erp-migrar-handlers) — ENGANCHE ───────────────────────────────────────
+      // La rejilla de productos y las lineas del ticket se pintan DESPUES: delegacion. Lo fijo del
+      // mostrador y de las dos ventanas estaba en el HTML: oyente directo. Los ids vuelven a NUMERO
+      // porque addProduct compara con === y setQty/removeLine indexan el carrito.
+      const _m = (sel, ev, fn) => { const e = document.querySelector(sel); if (e) e.addEventListener(ev, fn); };
+      _m('#mWarehouse', 'change', () => onWhChange());
+      _m('#prodSearch', 'input', () => renderGrid());
+      _m('[data-act="linea-libre"]', 'click', () => addFreeLine());
+      _m('#btn-cobrar', 'click', () => openCobro());
+      _m('#pm-efectivo', 'click', () => setMethod('efectivo'));
+      _m('#pm-tarjeta', 'click', () => setMethod('tarjeta'));
+      _m('#entregado', 'input', () => calcCambio());
+      _m('#btn-confirmar', 'click', () => confirmarVenta());
+      document.querySelectorAll('[data-act="cobro-cerrar"]').forEach(b => b.addEventListener('click', () => closeModal('cobroModal')));
+      document.querySelectorAll('[data-act="ticket-cerrar"]').forEach(b => b.addEventListener('click', () => closeTicket()));
+      document.addEventListener('click', (e) => {
+        const t = e.target.closest('[data-act="add-prod"]');
+        if (t) { addProduct(Number(t.getAttribute('data-id'))); return; }
+        const q = e.target.closest('[data-act="quitar-linea"]');
+        if (q) removeLine(Number(q.getAttribute('data-i')));
+      });
+      document.addEventListener('change', (e) => {
+        const n = e.target.closest('[data-act="set-qty"]');
+        if (n) setQty(Number(n.getAttribute('data-i')), n.value);
+      });
+</script>`;
     return c.html(adminLayout('Mostrador', content, 'mostrador', csrfToken, c));
   });
 

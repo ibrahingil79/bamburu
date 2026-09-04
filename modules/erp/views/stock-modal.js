@@ -9,15 +9,15 @@ export function stockModalHtml() {
   const reasonOpts = ADJUST_REASONS.map(r => `<option value="${r}">${REASON_LABEL[r]}</option>`).join('');
   return `<div class="modal-overlay" id="stockAdjModal" style="z-index:320">
     <div class="modal" style="max-width:520px">
-      <div class="modal-head"><h3 id="stockAdjTitle">Ajustar stock</h3><button class="modal-close" onclick="closeModal('stockAdjModal')">✕</button></div>
+      <div class="modal-head"><h3 id="stockAdjTitle">Ajustar stock</h3><button class="modal-close" data-act="sm-cerrar-ajuste">✕</button></div>
       <div class="modal-body">
         <div class="form-group" id="stockAdjWhWrap"><label class="form-label">Almacén</label>
-          <select class="form-control" id="stockAdjWh" onchange="stockAdjWhChange()"></select>
+          <select class="form-control" id="stockAdjWh"></select>
         </div>
         <div style="margin-bottom:.75rem;color:var(--muted)">Stock actual en el almacén: <strong id="stockAdjCurrent">—</strong></div>
         <div class="form-row" style="gap:.5rem">
           <div class="form-group"><label class="form-label">Modo</label>
-            <select class="form-control" id="stockAdjMode" onchange="stockAdjLabel()">
+            <select class="form-control" id="stockAdjMode">
               <option value="set">Poner a</option>
               <option value="add">Sumar</option>
               <option value="sub">Restar</option>
@@ -32,12 +32,12 @@ export function stockModalHtml() {
         </div>
         <div class="form-group"><label class="form-label">Nota</label><input class="form-control" id="stockAdjNote" placeholder="(opcional)"></div>
       </div>
-      <div class="modal-foot"><button class="btn btn-secondary" onclick="closeModal('stockAdjModal')">Cancelar</button><button class="btn btn-primary" onclick="guardarAjuste()">Guardar ajuste</button></div>
+      <div class="modal-foot"><button class="btn btn-secondary" data-act="sm-cerrar-ajuste">Cancelar</button><button class="btn btn-primary" data-act="sm-guardar">Guardar ajuste</button></div>
     </div>
   </div>
   <div class="modal-overlay" id="stockKardexModal" style="z-index:300">
     <div class="modal" style="max-width:760px">
-      <div class="modal-head"><h3 id="stockKardexTitle">Stock</h3><button class="modal-close" onclick="closeModal('stockKardexModal')">✕</button></div>
+      <div class="modal-head"><h3 id="stockKardexTitle">Stock</h3><button class="modal-close" data-act="sm-cerrar-kardex">✕</button></div>
       <div class="modal-body" id="stockKardexBody"></div>
     </div>
   </div>`;
@@ -95,7 +95,7 @@ export function stockModalScript(sym, warehouses = []) {
         const motivo = m.reason_label ? escHtml(m.reason_label) : (m.is_reversal ? 'Reversión' : (TYPE_LABEL[m.type]||m.type));
         const revCell = m.reversed
           ? '<span class="badge b-gray">revertido</span>'
-          : '<button class="btn btn-secondary btn-sm" onclick="revertirMov('+m.id+')">Revertir</button>';
+          : '<button class="btn btn-secondary btn-sm" data-act="sm-revertir" data-id="'+m.id+'">Revertir</button>';
         return '<tr>'
           +'<td style="color:var(--muted);font-size:.8rem">'+escHtml((m.created_at||'').slice(0,16))+'</td>'
           +'<td><span class="badge '+badge(m.type)+'">'+escHtml(TYPE_LABEL[m.type]||m.type)+'</span></td>'
@@ -123,13 +123,13 @@ export function stockModalScript(sym, warehouses = []) {
       var verbosKardex = '<div style="display:inline-flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.8rem">'
         + '<a class="btn btn-secondary btn-sm" target="_blank" rel="noopener" href="/admin/listados/kardex/imprimir?producto_id=' + id + '"><i class="ti ti-printer"></i> Imprimir</a>'
         + '<a class="btn btn-secondary btn-sm" href="/admin/listados/kardex/pdf?producto_id=' + id + '"><i class="ti ti-download"></i> Descargar PDF</a>'
-        + '<button type="button" class="btn btn-secondary btn-sm" onclick="enviarListado(\\'kardex\\',\\'producto_id=' + id + '\\')"><i class="ti ti-mail"></i> Enviar por correo</button>'
+        + '<button type="button" class="btn btn-secondary btn-sm" data-act="sm-enviar" data-qs="producto_id=' + id + '"><i class="ti ti-mail"></i> Enviar por correo</button>'
         + '</div>';
       document.getElementById('stockKardexBody').innerHTML =
         verbosKardex
         + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">'
         +'<div>Stock actual: <strong style="font-size:1.4rem">'+data.stock+'</strong>'+resvTxt+'</div>'
-        +'<button class="btn btn-primary btn-sm" onclick="openAjustar('+id+',\\''+escHtml((name||'').replace(/\\'/g,''))+'\\','+data.stock+')">Ajustar stock</button>'
+        +'<button class="btn btn-primary btn-sm" data-act="sm-ajustar" data-id="'+id+'" data-nombre="'+escHtml(name||'')+'" data-stock="'+data.stock+'">Ajustar stock</button>'
         +'</div>'
         +whBlock
         +'<div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Tipo</th><th style="text-align:right">Cant.</th><th>Motivo</th><th>Origen</th><th style="text-align:right">Saldo</th><th></th></tr></thead><tbody>'
@@ -194,5 +194,27 @@ export function stockModalScript(sym, warehouses = []) {
       } catch(e){ toast(e.message||'Error revirtiendo','err'); }
     };
   })();
-  `;
+  
+      // ── 4 SEP 2026 (csp-erp-migrar-handlers) — ENGANCHE DE LAS DOS VENTANAS DE STOCK ──────────
+      // El kardex y sus botones se pintan DESPUES de pedir los movimientos: delegacion. Lo fijo de
+      // la ventana de ajuste ya esta en el HTML: oyente directo. Los ids vuelven a numero.
+      if (!window.__stockModalDeleg) {
+        window.__stockModalDeleg = true;
+        var _sm = function(sel, ev, fn){ var e = document.querySelector(sel); if (e) e.addEventListener(ev, fn); };
+        _sm('#stockAdjWh', 'change', function(){ stockAdjWhChange(); });
+        _sm('#stockAdjMode', 'change', function(){ stockAdjLabel(); });
+        document.addEventListener('click', function(e){
+          var t = e.target.closest('[data-act^="sm-"]'); if (!t) return;
+          var a = t.getAttribute('data-act');
+          if (a === 'sm-cerrar-ajuste') closeModal('stockAdjModal');
+          else if (a === 'sm-cerrar-kardex') closeModal('stockKardexModal');
+          else if (a === 'sm-guardar') guardarAjuste();
+          else if (a === 'sm-revertir') revertirMov(Number(t.getAttribute('data-id')));
+          else if (a === 'sm-enviar') enviarListado('kardex', t.getAttribute('data-qs'));
+          else if (a === 'sm-ajustar') openAjustar(Number(t.getAttribute('data-id')),
+                                                   t.getAttribute('data-nombre'),
+                                                   Number(t.getAttribute('data-stock')));
+        });
+      }
+`;
 }

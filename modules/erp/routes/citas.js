@@ -1736,12 +1736,12 @@ function vistaServicios(c, db) {
   const editable = can(c, 'citas.edit');
   const aj = ajustesCitas(db);
   const content = `
-    <div class="ph"><h2>Cuánto dura cada servicio</h2><div style="display:flex;gap:.5rem"><a class="btn btn-secondary" href="/admin/settings#cfg-agenda">← Configuración</a>${editable ? '<button class="btn btn-primary" onclick="openNuevoServicio()">Nuevo servicio</button>' : ''}</div></div>
+    <div class="ph"><h2>Cuánto dura cada servicio</h2><div style="display:flex;gap:.5rem"><a class="btn btn-secondary" href="/admin/settings#cfg-agenda">← Configuración</a>${editable ? '<button class="btn btn-primary" data-act="ns-abrir">Nuevo servicio</button>' : ''}</div></div>
     <div class="alert" style="margin-bottom:1rem">Son los productos de tipo <strong>servicio</strong> de tu catálogo. Aquí defines lo que la cita necesita: el <strong>tiempo contigo</strong>, el <strong>tiempo de espera</strong> (los minutos en que el ${escHtml(aj.cliente_sing.toLowerCase())} espera y tú quedas libre, como el tinte) y el <strong>margen después</strong>. <strong>El precio y el IVA siguen viniendo del catálogo.</strong> Un servicio no se puede pedir hasta que tenga tiempo (pulsa «Configurar»). ¿No está en el catálogo? Créalo aquí con «Nuevo servicio». <strong>«Se pide por Internet»</strong> es otra cosa: es lo que ven tus ${escHtml(aj.cliente_plural.toLowerCase())} en tu <a href="/admin/citas/publica">página de reservas</a>, y viene <strong>apagado</strong> hasta que tú lo enciendas servicio a servicio.</div>
     <div class="card"><div class="table-wrap"><table><thead><tr><th>Servicio</th><th>Se pide cita</th><th>Se pide por Internet</th><th>Tiempo contigo</th><th>Tiempo de espera</th><th>Margen</th><th></th></tr></thead><tbody id="svcBody"><tr><td colspan="7">Cargando…</td></tr></tbody></table></div></div>
     ${modalServicio(aj.puesto_sing)}
     ${modalNuevoServicio(oficioDe(db)?.id === 'salud')}
-    <script>window.CITAS_EDIT=${editable ? 'true' : 'false'};${jsVoz(aj)}${JS_SERVICIOS}</script>`;
+    <script nonce="${c.get('cspNonce')}">window.CITAS_EDIT=${editable ? 'true' : 'false'};${jsVoz(aj)}${JS_SERVICIOS}</script>`;
   return adminLayout('Cuánto dura cada servicio', content, 'citas-servicios', c.get('session')?.csrfToken || '', c);
 }
 
@@ -2158,7 +2158,7 @@ const modalAvisos = () => `
 
 const campoEspera = (pref) => `
   <div class="form-group">
-    <a href="#" id="${pref}EsperaAdd" onclick="esperaShow('${pref}');return false" style="font-size:.85rem;color:var(--accent);font-weight:600">＋ Añadir tiempo de espera (el tinte)</a>
+    <a href="#" id="${pref}EsperaAdd" data-act="espera-add" data-pref="${pref}" style="font-size:.85rem;color:var(--accent);font-weight:600">＋ Añadir tiempo de espera (el tinte)</a>
     <div id="${pref}EsperaWrap" style="display:none">
       <label class="form-label">Tiempo de espera (min)</label>
       <input class="form-control" type="number" min="0" id="${pref}Espera" value="0">
@@ -2168,7 +2168,7 @@ const campoEspera = (pref) => `
 
 const modalServicio = (puestoSing = 'Puesto') => `
   <div class="modal-overlay" id="mSvc"><div class="modal" style="max-width:560px">
-    <div class="modal-head"><h3 id="mSvcTitle">Servicio</h3><button class="modal-close" onclick="closeModal('mSvc')">✕</button></div>
+    <div class="modal-head"><h3 id="mSvcTitle">Servicio</h3><button class="modal-close" data-act="svc-cerrar">✕</button></div>
     <div class="modal-body">
       <input type="hidden" id="svcId">
       <div class="form-group"><label><input type="checkbox" id="svcReservable" checked> Se puede pedir cita para este servicio</label></div>
@@ -2189,18 +2189,18 @@ const modalServicio = (puestoSing = 'Puesto') => `
         <div id="svcAltaWrap" style="display:none;margin-top:.6rem;gap:.4rem;flex-wrap:wrap;align-items:flex-end">
           <div style="flex:1;min-width:150px"><label class="form-label" style="font-size:.72rem">Nombre</label><input class="form-control" id="svcAltaNombre" placeholder="${escHtml(puestoSing)} 1"></div>
           <div><label class="form-label" style="font-size:.72rem">Tipo</label><select class="form-control" id="svcAltaTipo"><option value="silla">Silla</option><option value="cabina">Cabina</option><option value="sala">Sala</option><option value="box">Box</option><option value="equipo">Equipo</option><option value="otro">Otro</option></select></div>
-          <button type="button" class="btn btn-secondary btn-sm" id="svcAltaOk" onclick="svcAltaPuesto()">Dar de alta</button>
+          <button type="button" class="btn btn-secondary btn-sm" id="svcAltaOk">Dar de alta</button>
         </div>
-        <button type="button" class="btn btn-secondary btn-sm" id="svcAltaBtn" style="margin-top:.5rem" onclick="svcAltaAbrir()">＋ Dar de alta ${escHtml(puestoSing.toLowerCase())}</button>
+        <button type="button" class="btn btn-secondary btn-sm" id="svcAltaBtn" style="margin-top:.5rem">＋ Dar de alta ${escHtml(puestoSing.toLowerCase())}</button>
         <div id="svcAltaAviso" style="display:none;margin-top:.5rem;font-size:.75rem;color:var(--muted)"></div>
       </div>
     </div>
-    <div class="modal-foot"><button class="btn btn-secondary" onclick="closeModal('mSvc')">Cancelar</button><button class="btn btn-primary" onclick="svcGuardar()">Guardar</button></div>
+    <div class="modal-foot"><button class="btn btn-secondary" data-act="svc-cerrar">Cancelar</button><button class="btn btn-primary" data-act="svc-guardar">Guardar</button></div>
   </div></div>`;
 
 const modalNuevoServicio = (esSalud = false) => `
   <div class="modal-overlay" id="mNuevoSvc"><div class="modal" style="max-width:560px">
-    <div class="modal-head"><h3>Nuevo servicio</h3><button class="modal-close" onclick="closeModal('mNuevoSvc')">✕</button></div>
+    <div class="modal-head"><h3>Nuevo servicio</h3><button class="modal-close" data-act="ns-cerrar">✕</button></div>
     <div class="modal-body">
       <div class="alert" style="font-size:.8rem">Se crea como producto de tu catálogo (tipo servicio). El precio y el IVA que pongas aquí son los del catálogo — luego puedes editarlos en Productos.</div>
       <div class="form-group"><label class="form-label">Nombre *</label><input class="form-control" id="nsNombre" placeholder="Corte de pelo, Manicura…"></div>
@@ -2214,7 +2214,7 @@ const modalNuevoServicio = (esSalud = false) => `
       </div>
       ${campoEspera('ns')}
     </div>
-    <div class="modal-foot"><button class="btn btn-secondary" onclick="closeModal('mNuevoSvc')">Cancelar</button><button class="btn btn-primary" onclick="svcCrear()">Crear servicio</button></div>
+    <div class="modal-foot"><button class="btn btn-secondary" data-act="ns-cerrar">Cancelar</button><button class="btn btn-primary" data-act="ns-crear">Crear servicio</button></div>
   </div></div>`;
 
 const modalRecurso = (puestoSing = 'Puesto') => `
@@ -3497,9 +3497,9 @@ function render(){
   b.innerHTML=LIST.map(function(s){
     var contigo = s.muerto_dur_min ? s.muerto_ini_min : s.duracion_min;
     var pub = window.CITAS_EDIT
-      ? '<label style="font-size:.85rem;display:inline-flex;gap:.35rem;align-items:center"><input type="checkbox" '+(s.publico?'checked':'')+' onchange="svcPublico('+s.id+',this)"> '+(s.publico?'Sí':'No')+'</label>'
+      ? '<label style="font-size:.85rem;display:inline-flex;gap:.35rem;align-items:center"><input type="checkbox" '+(s.publico?'checked':'')+' data-act="svc-publico" data-id="'+s.id+'"> '+(s.publico?'Sí':'No')+'</label>'
       : (s.publico?'Sí':'No');
-    return '<tr><td>'+esc(s.name)+'</td><td>'+(s.reservable?'Sí':(s.configurado?'No':'—'))+'</td><td>'+pub+'</td><td>'+(s.duracion_min!=null?(contigo+' min'):'<span style="color:var(--muted)">sin configurar</span>')+'</td><td>'+(s.muerto_dur_min?(s.muerto_dur_min+' min libre'):'—')+'</td><td>'+(s.margen_min||0)+' min</td><td>'+(window.CITAS_EDIT?'<button class="btn btn-secondary btn-sm" onclick="edit('+s.id+')">Configurar</button>':'')+'</td></tr>';
+    return '<tr><td>'+esc(s.name)+'</td><td>'+(s.reservable?'Sí':(s.configurado?'No':'—'))+'</td><td>'+pub+'</td><td>'+(s.duracion_min!=null?(contigo+' min'):'<span style="color:var(--muted)">sin configurar</span>')+'</td><td>'+(s.muerto_dur_min?(s.muerto_dur_min+' min libre'):'—')+'</td><td>'+(s.margen_min||0)+' min</td><td>'+(window.CITAS_EDIT?'<button class="btn btn-secondary btn-sm" data-act="svc-edit" data-id="'+s.id+'">Configurar</button>':'')+'</td></tr>';
   }).join('');
 }
 function edit(id){
@@ -3565,6 +3565,35 @@ async function svcGuardar(){
     provider_ids:[...document.querySelectorAll('.svcprov:checked')].map(x=>parseInt(x.value)), resource_ids:[...document.querySelectorAll('.svcres:checked')].map(x=>parseInt(x.value)) };
   try{ await api('PUT','/api/erp/citas/servicios/'+id,body); closeModal('mSvc'); toast('Guardado'); cargar(); }catch(e){ toast(e.message,'err'); }
 }
+// ── 4 SEP 2026 (csp-erp-migrar-handlers) — ENGANCHE ─────────────────────────────────────────
+// Los modales y el boton de la cabecera estan en el HTML desde el principio: oyente directo. Las
+// FILAS de servicios las pinta render() despues de pedir la lista, asi que van por delegacion.
+// Y ojo con edit(id): compara con ===, de modo que el id del atributo, que es texto, vuelve a
+// numero. Sin eso el boton Configurar abriria el modal en blanco.
+document.addEventListener('DOMContentLoaded', function(){
+  var d = function(sel, ev, fn){ var e = document.querySelector(sel); if (e) e.addEventListener(ev, fn); };
+  d('[data-act="ns-abrir"]',   'click', function(){ openNuevoServicio(); });
+  d('[data-act="svc-guardar"]','click', function(){ svcGuardar(); });
+  d('[data-act="ns-crear"]',   'click', function(){ svcCrear(); });
+  d('#svcAltaOk',              'click', function(){ svcAltaPuesto(); });
+  d('#svcAltaBtn',             'click', function(){ svcAltaAbrir(); });
+  document.querySelectorAll('[data-act="svc-cerrar"]').forEach(function(b){
+    b.addEventListener('click', function(){ closeModal('mSvc'); });
+  });
+  document.querySelectorAll('[data-act="ns-cerrar"]').forEach(function(b){
+    b.addEventListener('click', function(){ closeModal('mNuevoSvc'); });
+  });
+  document.addEventListener('click', function(e){
+    var a = e.target.closest('[data-act="espera-add"]');
+    if (a) { e.preventDefault(); esperaShow(a.getAttribute('data-pref')); return; }
+    var b = e.target.closest('[data-act="svc-edit"]');
+    if (b) edit(Number(b.getAttribute('data-id')));
+  });
+  document.addEventListener('change', function(e){
+    var cb = e.target.closest('[data-act="svc-publico"]');
+    if (cb) svcPublico(Number(cb.getAttribute('data-id')), cb);
+  });
+});
 function openNuevoServicio(){
   document.getElementById('nsNombre').value=''; document.getElementById('nsPrecio').value='0'; document.getElementById('nsIva').value='general';
   document.getElementById('nsContigo').value='30'; document.getElementById('nsMargen').value='0'; esperaReset('ns',0);
