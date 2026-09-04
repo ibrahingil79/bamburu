@@ -1,0 +1,153 @@
+═══════════════════════════════════════════════════════════════════════════════════════════════
+  ROTAR LA CLAVE DE ANTHROPIC  —  instrucciones para Ibrahin
+  Preparado el 4 sep 2026. El terreno está listo; los pasos que tocan la clave los das TÚ.
+═══════════════════════════════════════════════════════════════════════════════════════════════
+
+LA REGLA, LA MISMA QUE CON LA LLAVE DE LAS COPIAS
+─────────────────────────────────────────────────
+Claude Code NO genera, NO ve, NO escribe y NO pega ninguna clave. Su salida acaba en un chat, y eso
+es justo lo que una rotación viene a resolver. Lo que hay aquí abajo lo ejecutas TÚ, en TU terminal.
+
+Y una advertencia que ya costó cara el 11 de julio de 2026, para que no se repita:
+NUNCA pongas la clave como ARGUMENTO de un comando bajo `sudo`. `sudo` registra la línea de
+comandos ENTERA en /var/log/auth.log y en el journal — y el journal es PERSISTENTE y no se puede
+limpiar de forma selectiva. Aquel día la clave acabó en claro en 29 líneas del registro del sistema
+por un simple `sudo grep`. Por eso el Paso 1 te la pide por teclado, sin enseñarla y sin que pase
+por la línea de comandos ni por el historial.
+
+
+DÓNDE VIVE HOY, COMPROBADO (no supuesto)
+─────────────────────────────────────────
+  · Fichero:   /etc/bamburu.env        (permisos 0600, dueño ubuntu — NO hace falta sudo para editarlo)
+  · Variable:  ANTHROPIC_API_KEY       (UNA sola línea la define, en UN solo fichero)
+  · /etc/orquestador.env NO la tiene. No hay ninguna otra copia en ningún otro sitio del servidor.
+
+QUÉ HAY QUE REINICIAR, Y POR QUÉ SOLO ESO
+──────────────────────────────────────────
+  · SÍ hay que reiniciar:  bamburu.service
+    Es el ÚNICO proceso de larga vida. systemd le inyecta el fichero al arrancar (`EnvironmentFile`),
+    y `core/llm.js` prefiere la variable de entorno sobre el fichero — así que el proceso vivo se
+    queda con el valor VIEJO en memoria hasta que se reinicia. Sin reinicio, la clave nueva no entra.
+
+  · NO hace falta tocar los demás (bamburu-avisos, bamburu-propuestas, los dos de copias, el
+    heartbeat, caducar-reservas, recordatorios-cita y suscripcion-cobros): son de un solo disparo,
+    los lanza un temporizador, y cada vez que arrancan leen el fichero otra vez. Cogen el valor
+    nuevo solos, sin que hagas nada.
+
+
+═══════════════════════════════════════════════════════════════════════════════════════════════
+  PASO 1 — SUSTITUIR LA CLAVE.  Pega este bloque ENTERO de una vez y pulsa Enter.
+═══════════════════════════════════════════════════════════════════════════════════════════════
+
+EL HUECO DONDE VA TU CLAVE es el que te pide por teclado: cuando salga
+«Pega aquí la clave NUEVA», la pegas y pulsas Enter. No se verá mientras la pegas — es a propósito.
+No hay ningún hueco que rellenar dentro del texto del comando, y eso también es a propósito: así la
+clave no queda en el historial de tu terminal ni en la lista de procesos.
+
+Si algo no cuadra, el programa se para y NO toca el fichero. Te lo dirá con esas palabras.
+
+- - - - - - - - - - - - - - - - - - - - - COPIA DESDE AQUÍ - - - - - - - - - - - - - - - - - - - -
+read -rsp 'Pega aquí la clave NUEVA de Anthropic y pulsa Enter (no se verá): ' NUEVA_CLAVE && echo && \
+NUEVA_CLAVE="$NUEVA_CLAVE" python3 - <<'FIN'
+import os, re
+RUTA = '/etc/bamburu.env'
+nueva = os.environ.get('NUEVA_CLAVE', '').strip()
+if not nueva:
+    raise SystemExit('✗ No has pegado nada. El fichero NO se ha tocado.')
+if any(c.isspace() for c in nueva):
+    raise SystemExit('✗ Lo pegado lleva espacios o saltos dentro. El fichero NO se ha tocado.')
+texto = open(RUTA, encoding='utf-8').read()
+nuevo, n = re.subn(r'(?m)^ANTHROPIC_API_KEY=.*$', lambda m: 'ANTHROPIC_API_KEY=' + nueva, texto)
+if n != 1:
+    raise SystemExit('✗ Esperaba UNA línea ANTHROPIC_API_KEY= y he encontrado %d. El fichero NO se ha tocado.' % n)
+if len(nuevo.splitlines()) != len(texto.splitlines()):
+    raise SystemExit('✗ El resultado no tiene las mismas líneas que el original. El fichero NO se ha tocado.')
+with open(RUTA, 'w', encoding='utf-8') as f:
+    f.write(nuevo)
+print('✓ Sustituida la línea de la clave en ' + RUTA + '.')
+print('  Mismo fichero de siempre: no se ha creado uno nuevo, así que dueño y permisos siguen igual.')
+FIN
+- - - - - - - - - - - - - - - - - - - - - HASTA AQUÍ - - - - - - - - - - - - - - - - - - - - - - -
+
+(Detalle de por qué se escribe SOBRE el mismo fichero y no con `sed -i`: `sed -i` no edita, crea un
+fichero nuevo y lo renombra encima — y para eso hace falta permiso de escritura sobre /etc, que el
+usuario `ubuntu` no tiene. Fallaría. Además cambiaría el inode.)
+
+
+═══════════════════════════════════════════════════════════════════════════════════════════════
+  PASO 2 — QUE EL SERVIDOR LA COJA.  Pega esta línea.
+═══════════════════════════════════════════════════════════════════════════════════════════════
+
+unset NUEVA_CLAVE; sudo systemctl restart bamburu
+
+(El `unset` borra la clave de la memoria de tu terminal. El `sudo` de aquí es seguro: la clave no
+va en la línea de comandos, solo el nombre del servicio.)
+
+
+═══════════════════════════════════════════════════════════════════════════════════════════════
+  PASO 3 — COMPROBAR QUE FUNCIONA DE VERDAD.  Pega esta línea.
+═══════════════════════════════════════════════════════════════════════════════════════════════
+
+node /home/ubuntu/bamburu/scripts/comprobar-clave-anthropic.mjs
+
+Hace una llamada REAL al proveedor, la más pequeña posible. No imprime la clave, ni un trozo, ni su
+longitud, ni nada sacado de ella. Solo puede decir tres cosas:
+
+  ✅ LA CLAVE RESPONDE            → hecho. Puedes seguir al Paso 4.
+  ❌ LA CLAVE NO RESPONDE         → algo va mal con la clave (te dice qué: rechazada, cortada…).
+                                     NO revoques la vieja todavía. Repite el Paso 1.
+  ⚠️  NO SE HA PODIDO COMPROBAR   → no es un aprobado NI un suspenso: no se ha podido probar
+                                     (sin red, el proveedor caído, o el tope de gasto del mes
+                                     cortando antes de llamar). Vuelve a intentarlo.
+
+Probado hoy en verde (clave actual: responde) y en rojo (clave inventada: «RECHAZADA, HTTP 401»).
+
+
+═══════════════════════════════════════════════════════════════════════════════════════════════
+  PASO 4 — Y SOLO ENTONCES, REVOCAR LA VIEJA
+═══════════════════════════════════════════════════════════════════════════════════════════════
+
+Eso se hace en la consola de Anthropic, y lo haces TÚ. Claude Code no ha revocado ni desactivado
+nada — la clave vieja sigue viva a propósito, para que tengas marcha atrás si el Paso 3 sale mal.
+
+SI ALGO SALE MAL Y QUIERES VOLVER ATRÁS: no se ha guardado ninguna copia en claro del fichero, a
+propósito (una copia de /etc/bamburu.env es una copia de TODAS tus llaves: Stripe, Resend, Notion,
+Telegram y la IA). El camino de vuelta es la copia de seguridad cifrada de esta noche, que incluye
+`entorno-<fecha>.tar.gz` con ese fichero dentro. Está documentado en docs/copias/volver-del-todo.md.
+
+
+═══════════════════════════════════════════════════════════════════════════════════════════════
+  LO QUE SE MIRÓ ANTES DE ESCRIBIR ESTO — y un hallazgo que tienes que ver
+═══════════════════════════════════════════════════════════════════════════════════════════════
+
+Se buscó cualquier copia en claro de la clave ACTUAL. Para no volver a filtrarla al buscarla, la
+comparación se hizo por huella y sin sudo. Resultado:
+
+  · Árbol del repositorio ................... limpio
+  · Historia entera de git .................. limpio (hay 2 commits que contienen el texto
+                                              «sk-ant-», pero es una NARRACIÓN dentro de
+                                              session.json sobre la auditoría de julio, no una clave)
+  · Historial de la terminal ................ limpio
+  · /var/log/auth.log y syslog .............. limpio
+  · Registro del sistema (journal) .......... 29 líneas del 11-jul-2026 con UNA clave en claro,
+                                              del incidente del `sudo grep` ya documentado.
+                                              COMPROBADO: NO es la clave de ahora. Es la ANTERIOR,
+                                              que ya se rotó aquel día. El journal es persistente y
+                                              no se puede limpiar selectivamente; queda como está.
+
+  ⚠️ HALLAZGO, FUERA DEL REPOSITORIO Y SIN TOCAR:
+     /home/ubuntu/loadtest/arranca.sh  (línea 20)  tiene una clave de Anthropic ESCRITA EN CLARO,
+     y el fichero tiene permisos -rwxrwxr-x, o sea legible por cualquier usuario de la máquina.
+     COMPROBADO: tampoco es la clave de ahora — es la vieja de julio, ya rotada, así que no da
+     acceso a nada. Pero es un fichero con pinta de clave dentro, a la vista. No se ha tocado
+     porque está fuera del proyecto y esta tarea no pedía tocarlo. Decides tú qué hacer con él.
+
+  (Nota aparte: /home/ubuntu/.claude/.credentials.json también contiene cadenas «sk-ant-», pero son
+   las credenciales del propio Claude Code, no las de Bamburu, y está en 0600.)
+
+  Y UNA COSA MÁS, YA RESUELTA: al mirar qué procesos tienen la clave en memoria apareció un Bamburu
+  DE MÁS, huérfano — el que levantó la prueba de restauración de esta mañana, que se quedó vivo 50
+  minutos escuchando en 127.0.0.1:37999, con datos restaurados en /tmp y la clave vieja en memoria.
+  No era el del servicio. Se cerró y se borraron sus ficheros de /tmp. Importa para una rotación:
+  un proceso olvidado sigue funcionando con la clave vieja y te haría creer que todo va bien.
+  Ahora el único proceso con la clave en memoria es bamburu.service, que es como debe ser.
