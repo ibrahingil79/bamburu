@@ -6082,6 +6082,12 @@ El pilar queda completo: multi-almacén + stock mínimo/punto de pedido + trazab
 - **D6 · [a verificar] XSS en páginas públicas de la tienda** (HTML guardado por admin sin escapar). La tienda está apagada de forma reversible (D1); revisar antes de reabrir en Capa 2. *(El bug de fuga de stock de `cancel_order` ya quedó resuelto al archivar `sales_orders`, D4.)*
 
 ### Deuda técnica
+- ⚠️ **`gdrive_gili` está DESAUTORIZADO desde la rotación del token del 3 sep 2026.** `rclone lsd
+  gdrive_gili:` responde `401 Invalid Credentials` / `invalid_grant`. Consecuencias: **la copia
+  secundaria no puede subir** y la prueba de restauración completa solo se puede correr contra la
+  cuenta principal. Se arregla reautorizando esa cuenta (`rclone config reconnect gdrive_gili:`),
+  y **lo tiene que hacer Ibrahin**, porque abre un navegador para dar el consentimiento de Google.
+  Apuntado el 4 sep 2026 al empezar AUD-020; **no bloquea** esa ficha, que se cerró con la principal.
 - ~~⚠️ **Los avisos de Bamburu siguen importando la tubería de Telegram de la fábrica (3 sep 2026).**
   `core/telegram-servidor.js` ya tiene **sus propias credenciales** (`BAMBURU_TELEGRAM_*` en
   `/etc/bamburu.env`) y **su propia configuración**, pero la función que hace el POST —`enviar`—
@@ -10248,20 +10254,63 @@ Hoy los datos son de prueba y no expone nada real. **Con un cliente dentro, expo
 > 📖 `docs/copias/volver-del-todo.md` (el procedimiento) · `docs/copias/cifrado-y-vuelta-diagnostico.md`.
 
 
-## TAREA — La prueba de restauración no levanta el sistema, solo abre las bases
+## ✅ TAREA — La prueba de restauración no levanta el sistema, solo abre las bases
 
 - **id:** restauracion-prueba-el-sistema-entero
-- **estado:** pendiente
+- **estado:** ✅ HECHA — 4 sep 2026 · commit `PENDIENTE-HASH`
 - **origen:** Auditoría de Codex, 25 ago 2026 · AUD-020 — a medias el 2 sep
 
 La prueba de hoy es **mejor de lo que Codex vio**: descarga la copia, la compara byte a byte y comprueba que las bases abren. Lo que sigue sin probarse es **levantar el sistema completo** desde cero: el entorno, los certificados y el servicio arrancando.
 
 **Criterios de aceptación**
 
-- [ ] Existe una prueba que **levanta Bamburu entero** partiendo solo de una copia, en una máquina limpia.
-- [ ] La prueba dice **cuánto tarda** la recuperación completa, medido, no estimado.
-- [ ] Si falta cualquier pieza para levantarlo, la prueba **falla en rojo** y dice cuál.
-- [ ] La prueba se puede repetir sin tocar producción.
+- [x] Existe una prueba que **levanta Bamburu entero** partiendo solo de una copia, en una máquina limpia. → `scripts/restauracion-sistema-completo.mjs`; contra la copia REAL: **13 negocios restaurados y `/admin/login` en HTTP 200**
+- [x] La prueba dice **cuánto tarda** la recuperación completa, medido, no estimado. → **82,6 s**, de principio a fin
+- [x] Si falta cualquier pieza para levantarlo, la prueba **falla en rojo** y dice cuál. → cinco rojos provocados, cada uno nombrando la pieza
+- [x] La prueba se puede repetir sin tocar producción. → árbol aislado, puerto pedido al sistema y raíz de datos propia
+
+> ### 🚀 QUÉ SE HIZO — y la distancia que mide
+>
+> **Lo que faltaba no era comprobar ficheros, era levantar el negocio.** La copia diaria ya bajaba
+> cada artefacto y lo comparaba byte a byte; `ensayo-restauracion-cifrada.sh` ya demostraba que la
+> llave custodiada, ella sola, descifra el archivo. **Ninguna levantaba el sistema** — y esa
+> distancia se vio en directo el 3 sep: con los datos restaurados pero sin `/etc/bamburu.env`,
+> **Bamburu no arrancó**. Tener los datos no es tener el negocio.
+>
+> **1 · La prueba hace el camino entero:** saca de la copia cifrada el artefacto **más reciente de
+> cada tipo** (la fecha más alta, no «el primero que salga»: dentro de la retención conviven
+> varios días), comprueba cada base con `integrity_check` **y que no esté vacía** —una base recién
+> creada también responde `ok`—, monta un árbol aislado, **arranca el `index.js` real contra él**,
+> y espera a que conteste `/admin/login` **de un negocio de verdad de la copia**.
+>
+> **2 · Contra la copia REAL, hoy: 82,6 segundos.** 13 negocios restaurados y abiertos, entorno
+> restaurado, pantalla de entrada en **HTTP 200**. Ese es el número que contesta a «¿cuánto tardo
+> en volver?» — medido, no estimado.
+>
+> **3 · El aislamiento exigió dos líneas de `index.js`**, y no había otra: el puerto estaba clavado
+> en 3000 (un segundo arranque moría con `EADDRINUSE`) y la raíz de datos salía de
+> `import.meta.url` — la **única** línea del arranque que no es relativa al directorio de trabajo—,
+> así que cada ensayo repasaba los permisos de la `data/` de **producción**. Ahora `PORT` y
+> `BAMBURU_DATA_ROOT`; **sin ninguna de las dos definidas, producción se comporta exactamente igual
+> que antes**, y ninguna está en `bamburu.service`.
+>
+> **4 · `gate-restauracion-completa`, 21 ✓** (`infra` + RAPIDO, 5,4 s). Monta una copia de mentira
+> **cifrada** en local y corre **el mismo guion**, incluidos **cinco rojos provocados**: sin
+> entorno, sin `control.db`, sin negocios, con una base corrupta y con la copia vacía. Cada uno
+> tiene que **nombrar la pieza que falta**, no solo fallar.
+>
+> **5 · Y el gate se cazó un fallo mío en la primera pasada:** la siembra hacía `rmSync` sobre una
+> ruta **remota** de rclone, que no borra nada — así que los artefactos de la siembra anterior
+> seguían puestos y los casos «sin entorno» y «sin control.db» **pasaban en verde con la pieza
+> todavía ahí**. Corregido purgando el destino. Esa es la razón de probar en rojo.
+>
+> **📝 Lo que NO cubre, dicho:** no corre sola cada noche (contra la copia real se lanza a mano,
+> ~83 s y 16 descargas; programarla es tarea aparte y no se hizo sin pedirlo) · sigue haciendo
+> falta `ensayo-restauracion-cifrada.sh` para el escenario «este servidor no existe» · y
+> **`gdrive_gili` sigue desautorizado** desde la rotación del 3 sep, así que la prueba se corrió
+> contra la cuenta principal.
+>
+> 📖 `docs/copias/cifrado-y-vuelta-diagnostico.md` §17-22.
 
 ## TAREA — El enlace del portal lleva la llave en la dirección
 

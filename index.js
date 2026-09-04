@@ -1628,14 +1628,28 @@ app.notFound((c) => {
 // nacen del umask de quien haga el `cp`. Una copia es tan tuya como el original.
 // Es idempotente y no dice nada cuando no hay nada que arreglar.
 {
-  const tocados = restringirArbol(join(APP_DIR_RAIZ, 'data'));
+  // ⚙️ 4 SEP 2026 (AUD-020) — LA RAÍZ DE DATOS SE PUEDE APUNTAR A OTRO SITIO, y hace falta.
+  // Esta línea es la ÚNICA de todo el arranque que sale de `import.meta.url` en vez de
+  // `process.cwd()`: resuelve siempre al directorio REAL de este fichero. Todo lo demás —las
+  // bases (`core/control-db.js`), los módulos (`core/loader.js`), el estado de avisos— es
+  // relativo al directorio de trabajo, así que un arranque desde otro sitio ya queda aislado
+  // solo. Esta no: sin esto, cada ensayo de restauración repasaría los permisos de la carpeta
+  // `data/` de PRODUCCIÓN (inocuo, porque es idempotente y solo aprieta lo que está flojo, pero
+  // real). Sin la variable puesta se comporta exactamente igual que siempre.
+  const raizDatos = process.env.BAMBURU_DATA_ROOT || APP_DIR_RAIZ;
+  const tocados = restringirArbol(join(raizDatos, 'data'));
   if (tocados) console.log('🔒 Permisos cerrados en ' + tocados + ' fichero(s) de datos');
 }
 
-const servidor = serve({ fetch: app.fetch, port: 3000, hostname: '127.0.0.1' }, (info) => {
+// ⚙️ 4 SEP 2026 (AUD-020) — EL PUERTO, POR ENTORNO. Estaba clavado a 3000, y con el servicio real
+// escuchando ahí un segundo arranque moría con EADDRINUSE: no había forma de levantar una copia
+// restaurada en la misma máquina sin parar producción. Sin `PORT` puesto sigue siendo 3000, byte
+// por byte lo de siempre. `hostname` no se toca: sigue atado a 127.0.0.1, no sale de la máquina.
+const PUERTO = Number(process.env.PORT) || 3000;
+const servidor = serve({ fetch: app.fetch, port: PUERTO, hostname: '127.0.0.1' }, (info) => {
   console.log('🚀 Bamburu listo en http://localhost:' + info.port);
-  console.log('👉 Admin:   http://localhost:3000/admin');
-  console.log('👉 Tienda:  http://localhost:3000/store');
+  console.log('👉 Admin:   http://localhost:' + info.port + '/admin');
+  console.log('👉 Tienda:  http://localhost:' + info.port + '/store');
 });
 
 // ── EL 502 QUE NO ERA DE NADIE (23 ago 2026) ────────────────────────────────────────────────────

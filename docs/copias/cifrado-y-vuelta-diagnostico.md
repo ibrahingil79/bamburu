@@ -219,3 +219,85 @@ noche —cifrada con la llave nueva, la que Ibrahin acaba de guardar en su gesto
 **A partir de ahora, la única copia que cuenta es la de esta noche y las que vengan detrás.** La
 de esta mañana no se borra (borrar de Drive no estaba en el encargo, y tocar Drive no era parte de
 esta tarea) pero es papel mojado: nadie tiene la llave para abrirla, y así se queda.
+
+---
+
+# 🚀 LEVANTAR EL SISTEMA ENTERO DESDE UNA COPIA (AUD-020, 4 sep 2026)
+
+## 17. Lo que faltaba, y por qué era otra cosa
+
+La copia diaria ya bajaba cada artefacto, lo comparaba **byte a byte** y comprobaba que abría. Y
+`ensayo-restauracion-cifrada.sh` ya demostraba que **la llave custodiada por Ibrahin, ella sola**,
+descifra el archivo. **Ninguna de las dos levantaba el sistema.** Y esa distancia no es teórica: el
+3 de septiembre, con los datos restaurados pero sin `/etc/bamburu.env`, **Bamburu no arrancó**.
+Tener los datos no es tener el negocio.
+
+## 18. La prueba: `scripts/restauracion-sistema-completo.mjs`
+
+Hace el camino entero, y el primer fallo para el reloj:
+
+1. Del destino cifrado saca el artefacto **más reciente de cada tipo** (la fecha más alta, no «el
+   primero que aparezca»: dentro de la retención conviven varios días y mezclarlos sería restaurar
+   cualquier cosa).
+2. Comprueba cada pieza: `integrity_check` de cada base **y que no esté vacía** —una base recién
+   creada también responde `ok`— y `tar -tzf` de cada paquete.
+3. Monta un árbol **aislado** y arranca el `index.js` **real** contra él.
+4. Espera a que conteste `/admin/login` **de un negocio de verdad de la copia**, con plazo.
+5. Dice **cuánto ha tardado**, de principio a fin.
+6. Apaga y borra lo suyo, pase lo que pase.
+
+**El código no viaja en la copia, y no debe:** vive en GitHub. Se enlaza el del repo.
+
+## 19. Resultado contra la copia REAL
+
+```
+origen ............. gdrive_cif:daily (copia del 2026-09-04)
+negocios ........... 13 restaurados y abiertos
+entorno ............ bamburu.env + 0 certificado(s)
+pantalla probada ... /admin/login de «desarrollo-bamburu» → HTTP 200
+TIEMPO TOTAL ....... 82,6 s  (medido, de principio a fin)
+```
+
+**82,6 segundos** desde «no tengo nada» hasta «Bamburu sirviendo una pantalla real». Medido, no
+estimado. Es el número que contesta a «¿cuánto tardo en volver?».
+
+## 20. Aislamiento: dos líneas de `index.js` que hacían falta
+
+El arranque tenía el puerto **clavado en 3000** y la raíz de datos derivada de `import.meta.url`
+—la única línea de todo el arranque que no sale de `process.cwd()`—. Sin tocar eso, un ensayo en
+esta misma máquina o **chocaba con producción en el puerto**, o **repasaba los permisos de la
+carpeta `data/` de producción** (inocuo, porque es idempotente, pero real). Ahora:
+
+- `PORT` — sin la variable, 3000 de siempre.
+- `BAMBURU_DATA_ROOT` — sin la variable, el árbol del propio repo, como siempre.
+
+**Producción no cambia en nada:** ninguna de las dos variables se define en `bamburu.service`.
+
+## 21. `gate-restauracion-completa` — 21 ✓, y los rojos son lo importante
+
+En el barrido (`infra` + RAPIDO, **5,4 s**). Monta una copia de mentira **cifrada** en una carpeta
+local y corre **el mismo guion, sin una línea distinta**. Que funcione el día que se prueba es
+media respuesta; la otra media es **que sepa fallar y decir qué falta**:
+
+| Se le quita a la copia | Lo que la prueba responde |
+|---|---|
+| El entorno | «el entorno … sin él el ERP no carga y Bamburu no arranca» |
+| `control.db` | «sin él no se sabe qué negocios existen ni dónde viven» |
+| Todos los negocios | «no hay ni una base de negocio en la copia» |
+| Un negocio corrupto | «ninguna base de negocio se pudo restaurar» |
+| La copia entera (vacía) | «la copia está vacía» |
+
+**Y el gate se cazó un fallo mío en su primera pasada:** la siembra hacía `rmSync` sobre una ruta
+**remota** de rclone («zzcif:daily»), que no borra nada, así que los artefactos de la siembra
+anterior seguían puestos y los casos «sin entorno» y «sin control.db» **pasaban en verde con la
+pieza todavía ahí**. Se purga el destino de verdad. Esa es exactamente la razón de probar en rojo.
+
+## 22. Lo que esta prueba NO cubre, dicho aquí
+
+- **No corre sola cada noche.** Es repetible y está en el barrido con una copia de mentira, pero
+  contra la copia REAL se lanza a mano (~83 s y 16 descargas). Programarla es tarea aparte y no
+  se ha hecho sin pedirlo.
+- **Sigue haciendo falta la llave** para el escenario «este servidor no existe»: eso lo cubre
+  `ensayo-restauracion-cifrada.sh`, que es la otra mitad y se ejecuta a mano con la llave.
+- **`gdrive_gili` está desautorizado** desde la rotación del token del 3 sep: la prueba se corrió
+  contra la cuenta principal. La secundaria no se puede probar hasta reconectarla.

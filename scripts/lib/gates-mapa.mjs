@@ -86,6 +86,10 @@ export const RAPIDO = new Map([
   // tubería de Telegram se mudó a core/ el 3 sep 2026 y esto es lo que impide que un import nuevo
   // la vuelva a atar a orchestrator/.
   ['censo-avisos-sin-fabrica', 'Bamburu: ¿sigue sin importar nada de orchestrator/? (remate del bot, 3 sep 2026)'],
+  // Y que una copia sirva para LEVANTAR el negocio, no solo para abrir ficheros. Monta una copia
+  // de mentira cifrada en local y corre contra ella EL MISMO guion que la de verdad, incluidos
+  // los rojos: sin entorno, sin control.db, sin negocios, con una base rota, y vacía. 5,4 s.
+  ['gate-restauracion-completa', '¿la copia levanta el sistema entero, y sabe decir qué falta? (AUD-020)'],
   // Que no falte ninguna sección ni ninguna puerta.
   ['verify-menu-completo',   'una sección sin enlace es una función que nadie encuentra'],
   // Que la cadena de VERI*FACTU esté entera. Va aquí y no en el completo por su propio motivo: exige
@@ -325,7 +329,7 @@ export const GRUPOS = {
   // 25 ago 2026 · Las dos del correo. `verify-correo-freno` prueba que el freno para de verdad al
   // llegar al tope; `verify-comprobaciones-sin-correo-real` vigila la norma del dueño: ninguna
   // comprobación vuelve a escribir a una bandeja real. Ver docs/censo-correos.md.
-  infra: ['gate-arranque-modulos', 'gate-copias-cifradas', 'censo-bot-de-bamburu', 'censo-avisos-sin-fabrica', 'verify-correo-freno', 'verify-comprobaciones-sin-correo-real', 'verify-disco-perfiles', 'test-c6-secretos', 'gate-conciliacion-deshacer', 'verify-superadmin-escrituras', 'verify-tenant-lookup-readonly', 'verify-wal-acotado', 'verify-safe-error',
+  infra: ['gate-arranque-modulos', 'gate-copias-cifradas', 'gate-restauracion-completa', 'censo-bot-de-bamburu', 'censo-avisos-sin-fabrica', 'verify-correo-freno', 'verify-comprobaciones-sin-correo-real', 'verify-disco-perfiles', 'test-c6-secretos', 'gate-conciliacion-deshacer', 'verify-superadmin-escrituras', 'verify-tenant-lookup-readonly', 'verify-wal-acotado', 'verify-safe-error',
           'verify-xss-escape', 'gate-xss-escape', 'gate-csp-estricta',
           // PUNTO 2 (24 ago 2026) — dar de baja a alguien del equipo: borrar si no dejó rastro,
           // archivar si lo dejó, y decirlo ANTES de pulsar. Antes daba un 500 seco.
