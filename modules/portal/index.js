@@ -1,11 +1,20 @@
 // ── PORTAL DE CLIENTE · Bloque C — rutas PÚBLICAS (sin /admin, sin auth de panel) ──
-// Acceso por enlace mágico /portal/<token>. Solo lectura para el cliente: ver/descargar sus facturas
-// y el estado de pago. Un token inválido/caducado/ajeno no expone nada. Aditivo.
+// Solo lectura para el cliente: ver/descargar sus facturas y el estado de pago. Un acceso
+// inválido/caducado/ajeno no expone nada. Aditivo.
+//
+// ⚙️ AUD-009 (4 sep 2026) — LA LLAVE YA NO VIAJA EN LA DIRECCIÓN. El enlace del correo sigue
+// teniendo la misma forma (`/portal/<token>`) y se abre igual de fácil, pero al pulsarlo **se
+// canjea una sola vez** por una sesión en cookie y se redirige a `/portal`, sin llave a la vista.
+// Desde ahí, todas las páginas del portal se sostienen en la cookie:
+//   · la barra de direcciones no lleva llave, así que el `referer` tampoco la filtra;
+//   · el enlace del correo queda gastado — una copia del historial del navegador o del registro de
+//     un intermediario llega tarde y no abre nada;
+//   · la sesión caduca CUANDO CADUCABA EL ENLACE, no más tarde.
 import { escHtml } from '../../core/escape.js';
 import { renderPdfFromHtml } from '../../core/pdf.js';
 import { printableShell, ROOT_TOKENS } from '../erp/layout.js';
 import { buildInvoicePaper } from '../erp/routes/invoices.js';
-import { validateToken, clientInvoices, transferData, invoiceBelongsToClient,
+import { canjearToken, crearSesion, validarSesion, clientInvoices, transferData, invoiceBelongsToClient,
          analiticaCliente, mensajesDe, escribirMensaje, marcarVisto } from './portal.js';
 import { fechaEs, fechaHoraEs } from '../erp/voz.js';   // la fecha, en cristiano (24/08/2026 14:30)
 import { fmtEur } from '../erp/margen.js';   // el dinero, como en España: 6.023,00 €
@@ -38,7 +47,9 @@ function shell(title, body) {
 }
 
 const denied = () => shell('Enlace no válido', `<div class="card"><h1>Enlace no válido o caducado</h1>
-  <p class="sub">Este enlace ya no funciona. Pide a tu proveedor uno nuevo.</p></div>`);
+  <p class="sub">Este enlace ya no funciona: los enlaces del portal se abren <b>una sola vez</b> y
+  caducan. Si necesitas volver a entrar, pide a tu proveedor que te mande uno nuevo — es un clic
+  para él.</p></div>`);
 
 // El dinero, como en el resto del producto: `6.023,00 €` — miles con punto, decimales con coma, y
 // el símbolo DETRÁS y separado. NO nace aquí un formateador: se usa el único que hay
@@ -51,18 +62,42 @@ const dinero = (n, sym) => escHtml(fmtEur(Number(n || 0), sym || '€'));
 export function register(app, db) {
   console.log('🔗 Cargando módulo Portal de cliente...');
 
+  // ── LA PUERTA: se entra por el enlace del correo, y solo se cruza UNA vez ────────────────────
+  // Aquí no se pinta nada. Se canjea el enlace por una sesión, se deja la llave en una cookie
+  // `HttpOnly` (ningún JavaScript la lee) limitada a `/portal`, y se manda al cliente a una
+  // dirección SIN llave. El 302 es lo que saca el token de la barra de direcciones — y con él,
+  // del `referer` de cualquier enlace que el cliente pulse después.
   app.get('/portal/:token', (c) => {
-    const v = validateToken(db, c.req.param('token'));
+    const v = canjearToken(db, c.req.param('token'));
+    if (!v) return c.html(denied(), 403);
+    const sesion = crearSesion(db, v.client_id, v.expires_at);
+    const maxAge = Math.max(60, v.expires_at - Math.floor(Date.now() / 1000));
+    return new Response(null, {
+      status: 302,
+      headers: {
+        location: '/portal',
+        'set-cookie': `psesion=${sesion}; Path=/portal; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAge}`,
+      },
+    });
+  });
+
+  /** La llave, desde la cookie. Es la única forma de identificarse dentro del portal. */
+  const deLaCookie = (c) => {
+    const m = /(?:^|;\s*)psesion=([A-Za-z0-9_-]+)/.exec(c.req.header('cookie') || '');
+    return m ? validarSesion(db, m[1]) : null;
+  };
+
+  app.get('/portal', (c) => {
+    const v = deLaCookie(c);
     if (!v) return c.html(denied(), 403);
     const client = db.prepare('SELECT name FROM clients WHERE id=?').get(v.client_id) || {};
     const { rows, totalPendiente } = clientInvoices(db, v.client_id);
     const t = transferData(db);
-    const token = c.req.param('token');
     const filas = rows.map(r => `<tr>
       <td>${escHtml(r.invoice_number)}</td><td>${fechaEs(r.issue_date)}</td>
       <td class="r">${dinero(r.total, r.currency_symbol)}</td>
       <td>${r.pagada ? '<span class="pill pagada">Pagada</span>' : `<span class="pill pend">Pendiente${r.pendiente < r.total ? ' · ' + dinero(r.pendiente, r.currency_symbol) : ''}</span>`}</td>
-      <td class="r"><a class="btn" href="/portal/${escHtml(token)}/factura/${r.id}/pdf">PDF</a></td></tr>`).join('')
+      <td class="r"><a class="btn" href="/portal/factura/${r.id}/pdf">PDF</a></td></tr>`).join('')
       || '<tr><td colspan="5" style="text-align:center;color:var(--text3);padding:2rem">No tienes facturas pendientes. Estás al día.</td></tr>';
     const pago = t.iban ? `<div class="card"><h3 style="margin:.2rem 0">¿Cómo pagar?</h3>
       <p class="sub">Haz una transferencia a esta cuenta indicando el nº de factura en el concepto. El estado se actualizará cuando tu proveedor concilie el pago.</p>
@@ -111,37 +146,44 @@ export function register(app, db) {
         <span class="q">${m.autor === 'cliente' ? 'Tú' : escHtml(t.company_name)} · ${escHtml(fechaHoraEs(m.created_at))}</span>
         ${escHtml(m.texto)}</div>`).join('')
         : '<p class="sub">Todavía no habéis hablado por aquí.</p>'}
-      <form method="post" action="/portal/${escHtml(token)}/mensaje" style="margin-top:.6rem">
+      <form method="post" action="/portal/mensaje" style="margin-top:.6rem">
         <textarea name="texto" rows="3" maxlength="2000" placeholder="Escribe tu mensaje…" required></textarea>
         <div style="margin-top:.4rem"><button class="btn" type="submit">Enviar</button></div>
       </form></div>`;
+
+    // AUD-009 · «La llave caduca, y se dice cuándo». El correo ya lo dice al mandar el enlace;
+    // aquí se repite con la FECHA concreta, que es lo que el cliente puede mirar mientras usa el
+    // portal. Sale de la sesión, así que es la caducidad de verdad, no una promesa del correo.
+    const caduca = `<p class="sub" style="margin-top:1.2rem">Este acceso caduca el
+      <b>${escHtml(fechaEs(new Date(v.expires_at * 1000).toISOString().slice(0, 10)))}</b>.
+      Después tendrás que pedirle a ${escHtml(t.company_name)} un enlace nuevo.</p>`;
 
     const body = `<h1>Tus facturas</h1><div class="sub">${escHtml(t.company_name)} · ${escHtml(client.name || '')}${totalPendiente > 0 ? ` · Pendiente total: ${dinero(totalPendiente, rows[0]?.currency_symbol)}` : ' · Todo al día'}</div>
       <div class="card"><table><thead><tr><th>Factura</th><th>Fecha</th><th class="r">Total</th><th>Estado</th><th></th></tr></thead><tbody>${filas}</tbody></table></div>
       ${pago}
       ${analitica}
-      ${chat}`;
+      ${chat}
+      ${caduca}`;
     return c.html(shell('Tus facturas', body));
   });
 
   // FICHA G2 — el cliente escribe. Va por formulario normal (el portal no lleva JavaScript y no se
-  // le va a meter uno solo para esto): se guarda y se vuelve a su página con el aviso. El token ES
-  // la llave, igual que en el resto del portal; sin él no se llega aquí.
-  app.post('/portal/:token/mensaje', async (c) => {
-    const token = c.req.param('token');
-    const v = validateToken(db, token);
+  // le va a meter uno solo para esto): se guarda y se vuelve a su página con el aviso. Desde
+  // AUD-009 la llave es la COOKIE, no la dirección: la vuelta es a `/portal`, sin nada que filtrar.
+  app.post('/portal/mensaje', async (c) => {
+    const v = deLaCookie(c);
     if (!v) return c.html(denied(), 403);
     try {
       const form = await c.req.parseBody();
       escribirMensaje(db, v.client_id, 'cliente', form.texto);
-      return c.redirect('/portal/' + token + '?enviado=1#hablar');
+      return c.redirect('/portal?enviado=1#hablar');
     } catch (e) {
-      return c.redirect('/portal/' + token + '?err=' + encodeURIComponent(e.message || 'No se pudo enviar'));
+      return c.redirect('/portal?err=' + encodeURIComponent(e.message || 'No se pudo enviar'));
     }
   });
 
-  app.get('/portal/:token/factura/:id/pdf', async (c) => {
-    const v = validateToken(db, c.req.param('token'));
+  app.get('/portal/factura/:id/pdf', async (c) => {
+    const v = deLaCookie(c);
     if (!v) return c.html(denied(), 403);
     const invId = Number(c.req.param('id'));
     if (!invoiceBelongsToClient(db, invId, v.client_id)) return c.html(shell('Factura no encontrada', `<div class="card"><h1>No encontramos esta factura</h1>
@@ -156,5 +198,5 @@ export function register(app, db) {
   <p class="sub">Vuelve a intentarlo en un momento.</p></div>`), 500); }
   });
 
-  console.log('✅ Portal: portal de cliente en /portal/<token>');
+  console.log('✅ Portal: portal de cliente en /portal (se entra con el enlace de un solo uso)');
 }

@@ -90,6 +90,9 @@ export const RAPIDO = new Map([
   // de mentira cifrada en local y corre contra ella EL MISMO guion que la de verdad, incluidos
   // los rojos: sin entorno, sin control.db, sin negocios, con una base rota, y vacía. 5,4 s.
   ['gate-restauracion-completa', '¿la copia levanta el sistema entero, y sabe decir qué falta? (AUD-020)'],
+  // Y que la llave del portal no vuelva a la dirección. Estático de red, <1 s: monta las rutas
+  // reales sobre una base de usar y tirar y las conduce por HTTP con el cliente de pruebas de Hono.
+  ['gate-portal-sin-llave-en-url', 'el portal: ¿sigue la llave fuera de la dirección y el enlace de un solo uso? (AUD-009)'],
   // Que no falte ninguna sección ni ninguna puerta.
   ['verify-menu-completo',   'una sección sin enlace es una función que nadie encuentra'],
   // Que la cadena de VERI*FACTU esté entera. Va aquí y no en el completo por su propio motivo: exige
@@ -329,7 +332,7 @@ export const GRUPOS = {
   // 25 ago 2026 · Las dos del correo. `verify-correo-freno` prueba que el freno para de verdad al
   // llegar al tope; `verify-comprobaciones-sin-correo-real` vigila la norma del dueño: ninguna
   // comprobación vuelve a escribir a una bandeja real. Ver docs/censo-correos.md.
-  infra: ['gate-arranque-modulos', 'gate-copias-cifradas', 'gate-restauracion-completa', 'censo-bot-de-bamburu', 'censo-avisos-sin-fabrica', 'verify-correo-freno', 'verify-comprobaciones-sin-correo-real', 'verify-disco-perfiles', 'test-c6-secretos', 'gate-conciliacion-deshacer', 'verify-superadmin-escrituras', 'verify-tenant-lookup-readonly', 'verify-wal-acotado', 'verify-safe-error',
+  infra: ['gate-arranque-modulos', 'gate-copias-cifradas', 'gate-restauracion-completa', 'gate-portal-sin-llave-en-url', 'censo-bot-de-bamburu', 'censo-avisos-sin-fabrica', 'verify-correo-freno', 'verify-comprobaciones-sin-correo-real', 'verify-disco-perfiles', 'test-c6-secretos', 'gate-conciliacion-deshacer', 'verify-superadmin-escrituras', 'verify-tenant-lookup-readonly', 'verify-wal-acotado', 'verify-safe-error',
           'verify-xss-escape', 'gate-xss-escape', 'gate-csp-estricta',
           // PUNTO 2 (24 ago 2026) — dar de baja a alguien del equipo: borrar si no dejó rastro,
           // archivar si lo dejó, y decirlo ANTES de pulsar. Antes daba un 500 seco.

@@ -1625,6 +1625,23 @@ export function runMigrations(db) {
   );
   CREATE INDEX IF NOT EXISTS idx_portal_tokens_token ON portal_tokens(token);`);
 
+  // AUD-009 (4 sep 2026) — LA LLAVE SALE DE LA DIRECCIÓN. El enlace del correo pasa a ser de UN
+  // SOLO CANJE (`used_at`) y lo que sostiene la visita es una sesión en cookie, no la URL. Así la
+  // llave deja de quedarse en el historial, en el `referer` y en los registros de intermediarios:
+  // una copia de cualquiera de esos sitios llega con el enlace YA canjeado y no abre nada.
+  addCol(db, 'portal_tokens', 'used_at', 'INTEGER');
+  db.exec(`CREATE TABLE IF NOT EXISTS portal_sesiones (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    client_id INTEGER NOT NULL,
+    token TEXT NOT NULL UNIQUE,
+    expires_at INTEGER NOT NULL,
+    revoked INTEGER NOT NULL DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    last_used_at DATETIME,
+    FOREIGN KEY (client_id) REFERENCES clients(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_portal_sesiones_token ON portal_sesiones(token);`);
+
   // ── CONCILIACIÓN BANCARIA · Pieza 1 — extracto Norma 43 + cruce de ingresos (aditiva) ──
   // bank_movements: un movimiento del extracto bancario (Cuaderno 43). El `balance` (saldo corriente)
   // NO viene por movimiento en el reg. 22: se CALCULA acumulando desde el saldo inicial (reg. 11), y

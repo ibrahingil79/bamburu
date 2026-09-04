@@ -32,18 +32,73 @@ export function createToken(db, clientId, ttlDays = 14, nowSec = Math.floor(Date
   return token;
 }
 
-// Valida un token: devuelve { client_id } si vigente (no caducado, no revocado), o null. No filtra
-// nada del sistema: un token inválido/ajeno/caducado simplemente no resuelve.
+// Valida un token: devuelve { client_id, expires_at } si vigente (no caducado, no revocado, NO
+// CANJEADO), o null. No filtra nada del sistema: un token inválido/ajeno/caducado simplemente no
+// resuelve.
 export function validateToken(db, token, nowSec = Math.floor(Date.now() / 1000)) {
   if (!token) return null;
   const row = db.prepare('SELECT * FROM portal_tokens WHERE token=?').get(token);
   if (!row || row.revoked || row.expires_at < nowSec) return null;
+  if (row.used_at) return null;   // AUD-009: un enlace ya canjeado no vuelve a abrir nada
   try { db.prepare('UPDATE portal_tokens SET last_used_at=CURRENT_TIMESTAMP WHERE id=?').run(row.id); } catch { /* no crítico */ }
-  return { client_id: row.client_id };
+  return { client_id: row.client_id, expires_at: row.expires_at };
 }
 
+// ════════════════════════════════════════════════════════════════════════════════════════════════
+// AUD-009 — LA LLAVE DEJA DE VIAJAR EN LA DIRECCIÓN (4 sep 2026)
+// ════════════════════════════════════════════════════════════════════════════════════════════════
+// EL PROBLEMA, tal y como lo describió la auditoría: el portal se abría con `/portal/<token>`, así
+// que la llave quedaba en el historial del navegador, en los registros de cualquier intermediario
+// que viera la URL, y en la cabecera `referer` en cuanto el cliente pinchara un enlace desde ahí.
+// Y como el token servía 14 días enteros, cualquiera de esas copias abría el portal.
+//
+// EL ARREGLO, sin complicarle la vida a nadie: **el enlace del correo no cambia de forma**. Lo que
+// cambia es lo que pasa al abrirlo — se CANJEA una sola vez por una sesión en cookie y se redirige
+// a `/portal`, una dirección limpia y sin llave. A partir de ahí:
+//   · la barra de direcciones no lleva llave → el `referer` tampoco;
+//   · el enlace del correo YA NO SIRVE (queda marcado como canjeado): una copia del historial o de
+//     un registro de intermediario no abre nada;
+//   · la sesión hereda la CADUCIDAD del enlace, así que el acceso muere cuando el correo dijo que
+//     moriría — ni un día más por haber entrado tarde.
+//
+// La cookie es `HttpOnly` (ningún JavaScript la lee) y va limitada a `Path=/portal`: no se manda
+// nunca a `/admin`, a diferencia de la del panel.
+const SESION_BYTES = 32;
+
+/** Canjea el enlace por una sesión. Devuelve { client_id, expires_at } o null. UN SOLO USO. */
+export function canjearToken(db, token, nowSec = Math.floor(Date.now() / 1000)) {
+  const v = validateToken(db, token, nowSec);
+  if (!v) return null;
+  // Se marca canjeado en la MISMA sentencia que comprueba que seguía sin canjear: si dos clics
+  // llegan a la vez, uno gana y el otro se queda sin nada. Sin esto, dos pestañas abiertas a la
+  // par crearían dos sesiones del mismo enlace de «un solo uso».
+  const r = db.prepare('UPDATE portal_tokens SET used_at=? WHERE token=? AND used_at IS NULL AND revoked=0').run(nowSec, token);
+  if (r.changes !== 1) return null;
+  return v;
+}
+
+/** Crea la sesión de portal. Caduca CUANDO CADUCABA EL ENLACE, no más tarde. */
+export function crearSesion(db, clientId, expiresAt) {
+  const token = randomBytes(SESION_BYTES).toString('base64url');
+  db.prepare('INSERT INTO portal_sesiones (client_id, token, expires_at) VALUES (?,?,?)').run(clientId, token, expiresAt);
+  return token;
+}
+
+/** Valida la cookie de sesión. Devuelve { client_id, expires_at } o null. */
+export function validarSesion(db, token, nowSec = Math.floor(Date.now() / 1000)) {
+  if (!token) return null;
+  let row;
+  try { row = db.prepare('SELECT * FROM portal_sesiones WHERE token=?').get(token); } catch { return null; }
+  if (!row || row.revoked || row.expires_at < nowSec) return null;
+  try { db.prepare('UPDATE portal_sesiones SET last_used_at=CURRENT_TIMESTAMP WHERE id=?').run(row.id); } catch { /* no crítico */ }
+  return { client_id: row.client_id, expires_at: row.expires_at };
+}
+
+// Revocar corta las DOS puertas: el enlace del correo y la sesión que ya se hubiera canjeado. Antes
+// solo cerraba la primera; desde AUD-009 dejar viva la sesión sería revocar a medias.
 export function revokeTokensDeCliente(db, clientId) {
   db.prepare('UPDATE portal_tokens SET revoked=1 WHERE client_id=? AND revoked=0').run(clientId);
+  try { db.prepare('UPDATE portal_sesiones SET revoked=1 WHERE client_id=? AND revoked=0').run(clientId); } catch { /* tabla nueva: puede no existir en una BD sin migrar */ }
 }
 
 // ════════════════════════════════════════════════════════════════════════════════════════════════

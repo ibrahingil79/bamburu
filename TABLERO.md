@@ -10312,20 +10312,62 @@ La prueba de hoy es **mejor de lo que Codex vio**: descarga la copia, la compara
 >
 > 📖 `docs/copias/cifrado-y-vuelta-diagnostico.md` §17-22.
 
-## TAREA — El enlace del portal lleva la llave en la dirección
+## ✅ TAREA — El enlace del portal lleva la llave en la dirección
 
 - **id:** portal-token-fuera-de-la-url
-- **estado:** pendiente
+- **estado:** ✅ HECHA — 4 sep 2026 · commit `PENDIENTE-HASH`
 - **origen:** Auditoría de Codex, 25 ago 2026 · AUD-009 — comprobado vivo el 2 sep
 
 El portal del cliente se abre con `/portal/:token`: la llave va **en la dirección**, así que queda en el historial del navegador, en los registros de cualquier intermediario y en el «referer» si el cliente pincha un enlace desde ahí. Comprobado el 2 sep.
 
 **Criterios de aceptación**
 
-- [ ] La llave del portal **deja de viajar en la dirección** visible.
-- [ ] El enlace que se le manda al cliente **sigue siendo de un solo uso y sencillo de abrir**: no se le complica la vida.
-- [ ] La llave **caduca**, y se dice cuándo.
-- [ ] Un enlace viejo copiado de un historial **ya no abre nada**.
+- [x] La llave del portal **deja de viajar en la dirección** visible. → el enlace responde **302 a `/portal`** y la llave se va en una cookie `HttpOnly`
+- [x] El enlace que se le manda al cliente **sigue siendo de un solo uso y sencillo de abrir**. → **el correo no cambia de forma**; un clic entra, y solo uno
+- [x] La llave **caduca**, y se dice cuándo. → la sesión hereda la caducidad del enlace y la página lo escribe: «Este acceso caduca el **18/09/2026**»
+- [x] Un enlace viejo copiado de un historial **ya no abre nada**. → segundo uso del mismo enlace: **HTTP 403**, comprobado en el servidor real
+
+> ### 🔑 QUÉ SE HIZO — sin cambiar el correo que recibe el cliente
+>
+> **El problema, tal y como lo describió la auditoría:** el portal se abría con `/portal/<token>`,
+> así que la llave quedaba **en el historial del navegador**, en los **registros de cualquier
+> intermediario** que viera la URL, y en la cabecera **`referer`** en cuanto el cliente pinchara un
+> enlace desde ahí. Y como el token servía **14 días enteros**, cualquiera de esas copias abría el
+> portal entero — sus facturas, sus importes, su conversación con el negocio.
+>
+> **1 · El enlace del correo NO cambia de forma.** Sigue siendo `/portal/<token>` y se abre con un
+> clic. Lo que cambia es qué pasa al abrirlo: **se canjea UNA sola vez** por una sesión en cookie y
+> se **redirige a `/portal`**, una dirección sin llave. Ese 302 es lo que saca el token de la barra
+> de direcciones — y con él, del `referer` de cualquier enlace que el cliente pulse después.
+>
+> **2 · La cookie es `HttpOnly`** (ningún JavaScript la lee), `Secure`, `SameSite=Lax` y va limitada
+> a **`Path=/portal`**: a diferencia de la del panel, no se manda nunca a `/admin`.
+>
+> **3 · Un solo uso de verdad, y con carrera resuelta.** El canje se marca en la **misma sentencia**
+> que comprueba que seguía sin canjear (`UPDATE … WHERE used_at IS NULL`), así que dos pestañas
+> abiertas a la vez no crean dos sesiones del enlace «de un solo uso».
+>
+> **4 · La caducidad se hereda, no se estira.** La sesión muere **cuando moría el enlace**: entrar
+> el último día no regala catorce más. Y la página lo dice con **fecha concreta**, no con «en 14
+> días».
+>
+> **5 · Revocar cierra las DOS puertas.** Antes solo existía una; dejar viva la sesión de alguien a
+> quien acabas de revocar el acceso sería revocar de mentira.
+>
+> **6 · Comprobado en el servidor real**, no solo en pruebas: primer clic → **302** con su cookie;
+> dirección limpia con la cookie → **200** y **cero llaves en el HTML**; segundo uso del mismo
+> enlace → **403**; sin cookie → **403**.
+>
+> **`gate-portal-sin-llave-en-url`: 29 ✓** (`infra` + RAPIDO, 4 s). Monta las rutas **reales** sobre
+> una base de usar y tirar y las conduce por HTTP. **Probado en rojo cinco veces**: devolviendo la
+> llave a la dirección, quitando el uso único, quitando `HttpOnly`, estirando la sesión más allá del
+> enlace, y dejando la sesión viva tras revocar.
+>
+> **📝 Un rojo que se quedó verde y por qué importa:** al probar en rojo el «uso único» quitando la
+> comprobación de `validateToken`, el gate **siguió en verde** — porque quien impone el uso único de
+> verdad es el `UPDATE` atómico, no esa comprobación. Se repitió la reversión sobre el mecanismo
+> real y entonces sí cayó, en cuatro sitios. Una reversión que no pone rojo no prueba nada: hay que
+> tocar la pieza que sostiene la propiedad, no la que la acompaña.
 
 ## TAREA — Los ficheros que sube la gente se validan por lo que dicen ser
 
