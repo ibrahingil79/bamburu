@@ -13432,7 +13432,7 @@ Y su propia limpieza no lo recogió: `cleanup(slug)` empieza con `if (!slug) ret
 ## TAREA — Migrar el ERP para quitarle el `unsafe-inline`
 
 - **id:** csp-erp-migrar-handlers
-- **estado:** pendiente · **EN CURSO — 1ª sesión hecha el 4 sep 2026 (commit `e99cb93`)**
+- **estado:** pendiente · **EN CURSO — 1ª sesión hecha el 4 sep 2026 (commit `fca9551`)**
 - **origen:** Desgajada de `csp-unsafe-inline` el 4 sep 2026, al medir el tamaño real. Es la pieza que el código llama **C4b-4**.
 
 **Medido el 4 sep 2026, no estimado:** `modules/erp` tiene **546 handlers de atributo** y **88
