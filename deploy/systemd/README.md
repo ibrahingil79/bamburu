@@ -278,7 +278,7 @@ de la crisis: nada se asume, todo se verifica y se notifica).
 - Graba marca de último éxito (`~/.local/state/bamburu-backup/last-success`).
 
 Un **heartbeat** independiente (`bamburu-backup-heartbeat`) revisa esa marca y avisa por
-email si no hay copia con éxito en +48h (capta "el backup falló siempre" y "el timer ni disparó").
+avisa por **Telegram y email** si una copia lleva **+26 h** sin éxito (capta "el backup falló siempre" y "el timer ni disparó"). ⚙️ 4 sep 2026: eran 48 h y solo email — con copias DIARIAS, 48 h dejaba pasar dos noches, y el email no se mira a tiempo.
 
 ## Piezas
 
@@ -577,7 +577,7 @@ externo. El dead-man's-switch se queda en la principal; la secundaria la vigila 
 
 `bamburu-backup-heartbeat` mira **cada copia por separado**:
 
-- **una caída (+48 h)** → email de AVISO: sigue habiendo respaldo, pero se perdió la redundancia.
+- **una caída (+26 h)** → AVISO por Telegram y email: sigue habiendo respaldo, pero se perdió la redundancia.
 - **las dos** → email CRÍTICO: ahora mismo no hay respaldo.
 
 Vigilar solo «que fallen las dos» reintroduciría el fallo silencioso que costó el cambio desde

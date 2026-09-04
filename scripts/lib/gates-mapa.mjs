@@ -98,6 +98,10 @@ export const RAPIDO = new Map([
   // base. ~2 s. Los dos agujeros que cierra eran reales: en la prueba en rojo, un ejecutable
   // disfrazado de PNG entró con HTTP 200 y /etc/bamburu.env se sirvió entero.
   ['gate-adjuntos-por-contenido', 'adjuntos: ¿el contenido manda sobre lo declarado, y la ruta no se sale? (AUD-011/012)'],
+  // Y que un fallo de las copias AVISE. Ejecuta el vigilante de verdad con el estado desviado y el
+  // aviso en seco (no manda nada). Lleva su propia prueba en rojo dentro: con el umbral viejo de
+  // 48 h, dos noches sin copia seguían dando «OK» — que es literalmente lo que pasó el 4 sep.
+  ['gate-aviso-copias', '¿avisa por Telegram si una copia falla o lleva más de un día sin correr? (4 sep 2026)'],
   // Que no falte ninguna sección ni ninguna puerta.
   ['verify-menu-completo',   'una sección sin enlace es una función que nadie encuentra'],
   // Que la cadena de VERI*FACTU esté entera. Va aquí y no en el completo por su propio motivo: exige
@@ -341,7 +345,7 @@ export const GRUPOS = {
   // 25 ago 2026 · Las dos del correo. `verify-correo-freno` prueba que el freno para de verdad al
   // llegar al tope; `verify-comprobaciones-sin-correo-real` vigila la norma del dueño: ninguna
   // comprobación vuelve a escribir a una bandeja real. Ver docs/censo-correos.md.
-  infra: ['gate-arranque-modulos', 'gate-copias-cifradas', 'gate-restauracion-completa', 'gate-portal-sin-llave-en-url', 'gate-adjuntos-por-contenido', 'censo-bot-de-bamburu', 'censo-avisos-sin-fabrica', 'verify-correo-freno', 'verify-comprobaciones-sin-correo-real', 'verify-disco-perfiles', 'test-c6-secretos', 'gate-conciliacion-deshacer', 'verify-superadmin-escrituras', 'verify-tenant-lookup-readonly', 'verify-wal-acotado', 'verify-safe-error',
+  infra: ['gate-arranque-modulos', 'gate-copias-cifradas', 'gate-restauracion-completa', 'gate-portal-sin-llave-en-url', 'gate-adjuntos-por-contenido', 'gate-aviso-copias', 'censo-bot-de-bamburu', 'censo-avisos-sin-fabrica', 'verify-correo-freno', 'verify-comprobaciones-sin-correo-real', 'verify-disco-perfiles', 'test-c6-secretos', 'gate-conciliacion-deshacer', 'verify-superadmin-escrituras', 'verify-tenant-lookup-readonly', 'verify-wal-acotado', 'verify-safe-error',
           'verify-xss-escape', 'gate-xss-escape', 'gate-csp-estricta',
           // PUNTO 2 (24 ago 2026) — dar de baja a alguien del equipo: borrar si no dejó rastro,
           // archivar si lo dejó, y decirlo ANTES de pulsar. Antes daba un 500 seco.
@@ -698,6 +702,10 @@ export const AFECTA = [
   // EL RUNNER Y ESTE MISMO FICHERO DECIDEN QUÉ SE CUBRE: si cambian, el modo corto no puede fiarse de
   // su propia selección. Corre todo. Pasa poco y cuando pasa es justo cuando más falta hace.
   { re: /^scripts\/(run-gates\.mjs|lib\/gates-mapa\.mjs)$/, grupos: null },
+  // 4 sep 2026 — los guiones de copia y su vigilante despiertan a `infra`, que es donde vive
+  // `gate-aviso-copias`. Sin esta regla casaría la genérica de `scripts/` (grupos: []) y tocar el
+  // vigilante no habría corrido nada: el gate existiría y no se ejecutaría nunca.
+  { re: /^scripts\/bamburu-backup(-heartbeat|-secondary)?\.sh$|^scripts\/avisar-telegram\.mjs$/, grupos: ['infra'] },
   { re: /^scripts\//, grupos: [] },                                              // los gates cambiados se añaden aparte
   { re: /^(modules\/erp\/models\.js|modules\/erp\/schemas\.js|index\.js)$/, grupos: null },   // el tronco: todo
   { re: /^core\//, grupos: null },                                               // auth, CSRF, escapes, cabeceras: todo

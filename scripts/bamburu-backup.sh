@@ -142,10 +142,20 @@ hc_ping(){  # $1 = "" éxito | "/fail" fallo | "/start" inicio
 #
 # El texto va por STDIN, nunca por argumentos: lo que va en la linea de comandos se ve en `ps`.
 # Y nunca aborta: `|| true`. Quien avisa de una averia no puede convertirse en la averia.
-avisar_telegram(){  # $1 = texto
-  local salida
+#
+# ⚙️ 4 SEP 2026 — FRENO ANTI-REPETICION. La clave lleva el LABEL de la copia, asi que un fallo de
+# la principal y uno de la secundaria son avisos distintos y suenan los dos. Seis horas: con el
+# timer diario no silencia nada (el de mañana sale igual), pero si alguien relanza la copia a mano
+# diez veces seguidas para arreglarla, recibe UN mensaje y no diez. En seco (`AVISO_TELEGRAM_SECO=1`)
+# imprime lo que mandaria sin mandarlo, para poder probar esto sin escribirle a nadie.
+avisar_telegram(){  # $1 = clave del freno · $2 = texto
+  local clave="$1" texto="$2" salida
+  if [ "${AVISO_TELEGRAM_SECO:-0}" = "1" ]; then
+    log "telegram (EN SECO, no se manda) clave=$clave"
+    return 0
+  fi
   if [ ! -r "$TELEGRAM_CLI" ]; then log "WARN: no encuentro $TELEGRAM_CLI, no se avisa por Telegram"; return 0; fi
-  salida="$(printf '%s' "$1" | "$NODE" "$TELEGRAM_CLI" copias 2>&1 || true)"
+  salida="$(printf '%s' "$texto" | "$NODE" "$TELEGRAM_CLI" copias --clave "$clave" --ventana-min 360 2>&1 || true)"
   log "telegram: $salida"
 }
 
@@ -161,7 +171,7 @@ Destino: $REMOTE — $MODO
 $LOGBUF"
   # El aviso al movil va DESPUES del correo y ANTES del ping: si el proceso muriera aqui, el
   # dead-man's-switch de healthchecks salta igual por no recibir el ping de exito.
-  avisar_telegram "🛑 <b>La copia [$LABEL] ha FALLADO</b>
+  avisar_telegram "copia-fallo-$LABEL" "🛑 <b>La copia [$LABEL] ha FALLADO</b>
 Fecha: $DATE · $HOST
 Destino: $REMOTE — $MODO
 Falló en: <code>$(printf '%s' "$msg" | tr '<>&' '   ' | cut -c1-300)</code>

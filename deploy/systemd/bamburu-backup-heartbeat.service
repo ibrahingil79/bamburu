@@ -1,5 +1,5 @@
 [Unit]
-Description=Bamburu — heartbeat: avisa si no hay backup con éxito en +48h
+Description=Bamburu — heartbeat: avisa (Telegram + email) si una copia lleva +26h sin éxito
 After=network-online.target
 Wants=network-online.target
 

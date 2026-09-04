@@ -14,13 +14,35 @@
 # "corrio y fallo siempre" como "el timer ni disparo".
 # (El caso "servidor muerto del todo" no lo cubre nada local: para eso esta el
 #  ping a healthchecks.io que hace la copia principal.)
+#
+# ⚙️ 4 SEP 2026 — DOS CAMBIOS, Y LOS DOS SALEN DE UNA AVERIA REAL DE ESTE MISMO DIA.
+# La copia secundaria fallo a las 03:35 (credencial de Drive caducada). El aviso de
+# "corrio y fallo" SI salio por Telegram desde bamburu-backup.sh, correctamente. Pero a
+# las 09:04 este vigilante dijo "OK: 2/2 copias al dia" con la secundaria rota. No mintio:
+# cumplia su propia regla. La regla era el problema, por dos motivos:
+#
+#   1. EL UMBRAL ERA DE 48 HORAS. Las copias son DIARIAS, asi que 48h deja pasar DOS
+#      noches enteras sin copia antes de abrir la boca. Se baja a 26h para las copias:
+#      una noche fallada se ve a la mañana siguiente. El manifiesto del historico se queda
+#      en 48h porque responde a otra pregunta y no tiene cadencia diaria.
+#   2. AVISABA SOLO POR CORREO. El correo esta bien pero no se mira a tiempo, y si Resend
+#      lo tira, `send_email` lo deja en un WARN del log y devuelve 0 — un aviso que muere
+#      en un registro que no lee nadie. Ahora avisa TAMBIEN por Telegram, con la misma
+#      tuberia comun de core/ que usan el arranque y las copias. El correo no se quita:
+#      lleva el detalle largo, y dos canales fallan a la vez menos que uno.
+#
+# Se puede probar sin tocar nada de produccion: BAMBURU_BACKUP_STATE_DIR apunta el estado
+# a otra carpeta, y AVISO_TELEGRAM_SECO=1 imprime lo que mandaria sin mandarlo.
 set -uo pipefail
 
-STATE_DIR="$HOME/.local/state/bamburu-backup"
+# El estado se puede desviar para PROBAR esto de verdad sin tocar el de produccion. Sin la
+# variable, exactamente el mismo sitio de siempre.
+STATE_DIR="${BAMBURU_BACKUP_STATE_DIR:-$HOME/.local/state/bamburu-backup}"
 MAILTO="ibrahingil@gmail.com"
 MAILFROM="Bamburu <noreply@bamburu.com>"
 NODE="/usr/bin/node"
-MAX_AGE=$((48*3600))
+MAX_AGE=$((48*3600))          # historico/manifiesto: otra pregunta, otra cadencia
+MAX_AGE_COPIA=$((26*3600))    # copias: son DIARIAS, asi que una noche fallada ya es noticia
 UNIT_SECUNDARIA="/etc/systemd/system/bamburu-backup-secondary.timer"
 APP_DIR="/home/ubuntu/bamburu"
 MANIFHELPER="$APP_DIR/scripts/lib/manifiesto-copias.mjs"
@@ -35,6 +57,24 @@ send_email(){
     --data "$payload" >/dev/null 2>&1
 }
 
+# --- Aviso al movil, por la tuberia comun de core/ (no hay un segundo lector de credenciales) ---
+# Nunca aborta: quien avisa de una averia no puede convertirse en la averia. El texto va por
+# STDIN, nunca por argumentos, que es la costumbre de esta casa desde la rotacion de julio.
+# El freno evita cien mensajes iguales si alguien lanza esto en bucle; con el timer diario,
+# 12h significa "uno al dia mientras dure", que es justo lo que se quiere.
+TELEGRAM_CLI="${TELEGRAM_CLI:-$APP_DIR/scripts/avisar-telegram.mjs}"
+avisar_telegram(){  # $1 = clave del freno · $2 = texto
+  local clave="$1" texto="$2" salida
+  if [ "${AVISO_TELEGRAM_SECO:-0}" = "1" ]; then
+    echo "[heartbeat] telegram (EN SECO, no se manda) clave=$clave"
+    printf '%s\n' "$texto" | sed 's/^/[heartbeat]   /'
+    return 0
+  fi
+  if [ ! -r "$TELEGRAM_CLI" ]; then echo "[heartbeat] WARN: no encuentro $TELEGRAM_CLI"; return 0; fi
+  salida="$(printf '%s' "$texto" | "$NODE" "$TELEGRAM_CLI" copias --clave "$clave" --ventana-min 720 2>&1 || true)"
+  echo "[heartbeat] telegram: $salida"
+}
+
 # Que copias se ESPERAN. La secundaria solo cuenta si su timer esta instalado:
 # antes de terminar S6 no existe, y avisar por ella seria una falsa alarma diaria.
 NOMBRES=("principal"); MARCAS=("$STATE_DIR/last-success")
@@ -43,7 +83,7 @@ if [ -f "$UNIT_SECUNDARIA" ]; then
 fi
 
 now="$(date +%s)"
-caidas=0; total=${#NOMBRES[@]}; DETALLE=""
+caidas=0; total=${#NOMBRES[@]}; DETALLE=""; CAIDAS_NOMBRES=""
 
 for i in "${!NOMBRES[@]}"; do
   nombre="${NOMBRES[$i]}"; marca="${MARCAS[$i]}"
@@ -52,8 +92,8 @@ for i in "${!NOMBRES[@]}"; do
   age=$(( now - last ))
   if [ "$last" -eq 0 ]; then
     DETALLE+="  · $nombre: NUNCA se ha registrado una copia con exito"$'\n'; caidas=$((caidas+1))
-  elif [ "$age" -gt "$MAX_AGE" ]; then
-    DETALLE+="  · $nombre: ultima copia con exito $(date -d "@$last") (hace ~$(( age/3600 ))h) -- CAIDA"$'\n'; caidas=$((caidas+1))
+  elif [ "$age" -gt "$MAX_AGE_COPIA" ]; then
+    DETALLE+="  · $nombre: ultima copia con exito $(date -d "@$last") (hace ~$(( age/3600 ))h) -- CAIDA"$'\n'; caidas=$((caidas+1)); CAIDAS_NOMBRES+="$nombre "
   else
     DETALLE+="  · $nombre: OK, hace ~$(( age/3600 ))h"$'\n'
   fi
@@ -69,20 +109,31 @@ if [ "$caidas" -eq 0 ]; then
   printf '%s' "$DETALLE"
 elif [ "$caidas" -ge "$total" ]; then
   if [ "$total" -eq 1 ]; then echo "[heartbeat] CRITICO: la unica copia esta caida"; else echo "[heartbeat] CRITICO: las $total copias estan caidas"; fi
-  send_email "🚨 CRITICO Bamburu: SIN NINGUNA copia con exito en +48h" \
+  send_email "🚨 CRITICO Bamburu: SIN NINGUNA copia con exito en +$((MAX_AGE_COPIA/3600))h" \
 "$( [ "$total" -eq 1 ] && echo "La copia" || echo "NINGUNA de las $total copias" ) sin exito reciente. Ahora mismo no hay respaldo.
 
 $DETALLE
 $REVISAR"
+  avisar_telegram "copias-todas-caidas" "🚨 <b>NO HAY NINGUNA COPIA RECIENTE</b>
+$( [ "$total" -eq 1 ] && echo "La copia" || echo "Las $total copias" ) llevan mas de $((MAX_AGE_COPIA/3600))h sin terminar bien.
+<b>Ahora mismo no hay respaldo de Bamburu.</b>
+
+<code>$(printf '%s' "$DETALLE" | tr '<>&' '   ')</code>" 
 else
   echo "[heartbeat] AVISO: $caidas de $total copias caidas"
   send_email "⚠️ Bamburu: te has quedado con $((total-caidas)) de $total copias" \
-"Una copia lleva mas de 48h sin exito. La otra sigue funcionando, asi que hay
+"Una copia lleva mas de $((MAX_AGE_COPIA/3600))h sin exito. La otra sigue funcionando, asi que hay
 respaldo, pero has perdido la redundancia y conviene arreglarlo antes de que
 la que queda tambien falle.
 
 $DETALLE
 $REVISAR"
+  # La clave lleva el nombre de la copia caida: si mañana cae la OTRA, es un aviso distinto
+  # y tiene que sonar, no quedarse frenado por el de hoy.
+  avisar_telegram "copia-parada-$(printf '%s' "$CAIDAS_NOMBRES" | tr -d ' ')" "⚠️ <b>Una copia lleva mas de $((MAX_AGE_COPIA/3600))h sin terminar bien</b>
+Te quedan $((total-caidas)) de $total. Hay respaldo, pero ya no hay red de seguridad.
+
+<code>$(printf '%s' "$DETALLE" | tr '<>&' '   ')</code>" 
 fi
 
 # --- Manifiesto de huellas del histórico (manifiesto-huellas-backups) -------
@@ -138,6 +189,10 @@ Revisa en el servidor:
   cat ~/.local/state/bamburu-backup/manifiesto.estado.json
   cat ~/.local/state/bamburu-backup/manifiesto-secondary.estado.json
   journalctl -u bamburu-backup.service -n 80"
+  avisar_telegram "manifiesto-historico" "⚠️ <b>El historico de copias tiene algo que revisar</b>
+No es la copia de hoy: es que el HISTORICO pueda estar tocado, o que haya dejado de vigilarse.
+
+<code>$(printf '%s' "$MANIF_DETALLE" | tr '<>&' '   ')</code>" 
 else
   echo "[heartbeat] MANIFIESTO: histórico vigilado, sin alarmas, en ${#NOMBRES[@]} copia(s)"
 fi
