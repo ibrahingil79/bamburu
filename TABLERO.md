@@ -6082,6 +6082,14 @@ El pilar queda completo: multi-almacén + stock mínimo/punto de pedido + trazab
 - **D6 · [a verificar] XSS en páginas públicas de la tienda** (HTML guardado por admin sin escapar). La tienda está apagada de forma reversible (D1); revisar antes de reabrir en Capa 2. *(El bug de fuga de stock de `cancel_order` ya quedó resuelto al archivar `sales_orders`, D4.)*
 
 ### Deuda técnica
+- ⚠️ **Hay DOS frenos de avisos repetidos donde debería haber uno (4 sep 2026).** El nuevo,
+  `core/freno-avisos.js`, es genérico y lo usa `scripts/avisar-telegram.mjs` (copias). El viejo vive
+  **dentro** de `core/aviso-arranque.js`, con su ventana de 10 min y su propio fichero
+  (`data/estado-arranque.json`). Hacen lo mismo y la lógica es la misma. **No se unificó porque
+  tocaba el arranque, que no era lo que pedía la tarea de las copias** — y el arranque tiene su
+  propio gate. Unificarlo es pequeño y correcto: mover el freno de `aviso-arranque.js` a
+  `freno-avisos.js` parametrizando fichero y ventana, y correr `gate-arranque-modulos` para
+  comprobarlo. **Necesita ficha propia.**
 - ⚠️ **`gate-documentos` está en ROJO, y no de ahora: 24 ✓ · 11 ✗ (4 sep 2026).** Encontrado al
   verificar el logo tras AUD-011/012. **No es de ese cambio**: se corrió también contra el código
   anterior (`git stash`, servidor reiniciado) y da **exactamente los mismos 24 ✓ · 11 ✗**. La avería
@@ -10439,6 +10447,43 @@ Dos cosas de la misma familia. La primera: el tipo de un fichero subido se decid
 > tipo pintable, así que la regla no las toca — pero sí se saneó su extensión, que en `migracion`
 > salía del **nombre que escribe el cliente**: bastaba llamar al fichero `datos.php` para dejar un
 > `.php` en la carpeta de adjuntos.
+
+## ✅ TAREA — Que un fallo de las copias AVISE (cabo suelto del 4 sep 2026)
+
+- **id:** aviso-fallo-de-copias
+- **estado:** ✅ HECHA — 4 sep 2026 · commit `ae0369c`
+- **origen:** Cabo suelto salido al rotar la clave de Anthropic (Ibrahin, 4 sep 2026)
+
+**Qué pasó, medido y no supuesto.** El 4 de septiembre a las 03:35 la copia secundaria falló por una credencial de Drive caducada. **El aviso de «corrió y falló» SÍ salió por Telegram** — está en el journal: `telegram: aviso enviado por Telegram`, 03:35:01 — y también por correo. Lo que no funcionó fue lo otro: a las **09:04 el vigilante dijo «OK: 2/2 copias al dia»** con la secundaria rota. Y no mintió: cumplía su propia regla. **La regla era el problema.**
+
+- [x] Si una copia **falla al ejecutarse**, llega aviso por Telegram con el prefijo `BAMBURU —`.
+  → Ya existía y funcionaba. Se le añade el freno anti-repetición, que es lo único que le faltaba.
+- [x] Si una copia **no se ejecuta durante más de un día**, llega aviso por Telegram.
+  → El vigilante avisaba **solo por correo** y **a las 48 h**. Con copias diarias, 48 h deja pasar **dos noches enteras**. Ahora avisa por Telegram *y* correo, y a las **26 h**.
+- [x] Freno anti-repetición, como el del arranque.
+  → `core/freno-avisos.js`, en su propio sitio y no duplicado en dos guiones. La clave lleva **el nombre de la copia**: si mañana cae la otra, es un aviso distinto y suena.
+- [x] **Probado provocando los dos fallos en el servidor y viendo llegar los dos avisos.**
+  → tipo (a): destino inexistente → `telegram: aviso enviado`. tipo (b): estado desviado con la secundaria a 30 h → aviso real al móvil; repetido, el freno lo calla.
+
+> ### 🔔 QUÉ SE HIZO
+>
+> **La lección, y es la de siempre en este proyecto: el vigilante estaba en verde y la avería era
+> real.** No había un fallo de código — había un **umbral pensado para otra cadencia**. 48 horas es
+> razonable si algo pasa cada dos días; sobre una copia **diaria** significa «te aviso cuando lleves
+> dos noches sin respaldo». Y el único canal era el correo, que en este mismo repo ya falló antes
+> (el caso de helados-ibrahin: ocho días sin enviar y el producto lo daba por hecho).
+>
+> **El gate lleva su prueba en rojo dentro**, que es lo que impide que esto se desande: con el umbral
+> viejo de 48 h, dos noches sin copia **siguen dando «OK»**. Si alguien devuelve ese número, salta.
+>
+> **Y dos comprobaciones que NO deben avisar**, tan importantes como las que sí: las dos copias al
+> día, y una copia a 20 h. **Una falsa alarma diaria enseña a ignorar los avisos**, y entonces el
+> canal deja de servir el día que hace falta.
+>
+> **Sobre el aviso de «corrió y falló»: no estaba roto.** El encargo daba por hecho que la copia
+> llevaba fallando desde el 3 y que nadie se enteró. Lo medido dice otra cosa: la secundaria
+> **funcionó tres veces el 3 de septiembre** (03:36, 12:40 y 19:38) y **falló una sola vez**, la
+> madrugada del 4, después de que la rotación del token dejara la cuenta sin autorizar. Y avisó.
 
 ## TAREA — La CSP todavía permite `unsafe-inline`
 
