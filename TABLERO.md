@@ -13432,7 +13432,7 @@ Y su propia limpieza no lo recogió: `cleanup(slug)` empieza con `if (!slug) ret
 ## TAREA — Migrar el ERP para quitarle el `unsafe-inline`
 
 - **id:** csp-erp-migrar-handlers
-- **estado:** pendiente · **EN CURSO — 1ª sesión hecha el 4 sep 2026 (commit `fca9551`)**
+- **estado:** pendiente · **EN CURSO — 2 sesiones: 4 sep (`fca9551`) y 5 sep (`5fb4a67`)**
 - **origen:** Desgajada de `csp-unsafe-inline` el 4 sep 2026, al medir el tamaño real. Es la pieza que el código llama **C4b-4**.
 
 **Medido el 4 sep 2026, no estimado:** `modules/erp` tiene **546 handlers de atributo** y **88
@@ -13514,3 +13514,51 @@ Después, por orden de menos a más carga propia:
 
 **`LEGADO` sigue en pie** y seguirá hasta que no quede ninguna pantalla fuera: cada una sale de ella
 individualmente, con su regla exacta.
+
+---
+
+### 📋 2ª SESIÓN — 5 sep 2026 · EL WIDGET DE DISA, Y 222 PANTALLAS ENDURECIDAS
+
+**La palanca que anunciaba el relevo, ejecutada.** `modules/disa/widget.js` tenía **7 handlers y 1
+bloque**, y salía en 233 pantallas. Migrado **una sola vez** —oyentes directos, porque todos sus
+controles tienen `id` y su HTML ya existe cuando su bloque corre— y su bloque con `nonce`.
+
+| | handlers | bloques sin nonce | pantallas limpias |
+|---|---|---|---|
+| tras la 1ª sesión | 3.196 | 502 | 1 |
+| **tras la 2ª** | **662** | **140** | **222** |
+
+**222 pantallas endurecidas**, con **reglas ancladas** (`^…$`), nunca prefijos: 212 comparten FORMA
+(`/^\/admin\/portal\/mensajes\/\d+$/`, donde el `\d+$` es justo lo que impide que alcance nada
+más) y 10 son rutas fijas. **Comprobado por su parte peligrosa:** `/admin/quotes` (la lista) entra;
+`/admin/quotes/9` (la ficha, que aún tiene handlers) **NO** — el ancla `$` lo impide.
+
+**Report-Only antes de bloquear:** las 11 pantallas de la muestra, cargadas en navegador real con la
+política estricta en modo aviso. **Cero violaciones** en todas.
+
+**Probado PULSANDO el widget en una pantalla endurecida:** abrir DISA, escribirle, pulsar Enviar
+—con la conversación **interceptada**, para que el botón se pruebe sin llamar al modelo ni gastar
+cuota— ver entrar la respuesta, y cerrar con el aspa. `gate-csp-estricta` pasa de 44 a **54**.
+
+**Rojo provocado, sobre el elemento EXACTO que el gate pulsa** (la lección del día anterior): se le
+devolvió el handler de atributo al botón de Enviar y se le quitó su oyente → **5 fallos**.
+
+### ▶️ QUÉ QUEDA — 141 pantallas, y el relevo servido
+
+**Un hallazgo del censo que cambia la forma del trabajo que queda:** cada una de las 141 tiene
+**exactamente 1 bloque en línea, y es SUYO, no compartido**. Ya no hay más piezas comunes que
+migrar: **a partir de aquí es pantalla a pantalla de verdad**.
+
+**Las 12 más baratas — solo les falta el `nonce` de su bloque, CERO handlers:**
+`/admin/analytics` · `/admin/crm/tareas` · `/admin/descuentos` · `/admin/fichaje` ·
+`/admin/migracion` · `/admin/migracion/importar` · `/admin/purchases/<id>` ·
+`/admin/settings/avisos` · `/admin/supplier-returns/<id>` · `/admin/suscripcion` · `/admin/vigia`.
+*(Sus vistas cuelgan de varios ficheros vía `routes/index.js`; localizarlas es el primer paso.)*
+
+Después: **33 pantallas con 1 handler** (fichas de pedido y albarán, `/admin/conciliacion`,
+`/admin/citas/ajustes`) · **49 con 2** · y luego, de menos a más:
+`/admin/settings/plantillas` (10) · `/admin/citas/servicios` (11) · `/admin/mostrador` (12) ·
+`/admin/avisos` (13) · `/admin/crm` (19) · `/admin/crm/cola` (20) · `/admin/citas` (35) ·
+`/admin/proyectos` (43) · `/admin/products` (76) · `/admin/clients` (85).
+
+**`LEGADO` sigue en pie**, y seguirá mientras quede una fuera.

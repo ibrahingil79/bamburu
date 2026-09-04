@@ -1,4 +1,4 @@
-export function getDisaWidget() {
+export function getDisaWidget(nonce = '') {
   return `
 <style>
 #disaFab{position:fixed;bottom:24px;right:24px;width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent-d));color:var(--bg2);border:none;cursor:grab;z-index:99999;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:500;box-shadow:0 4px 24px rgba(58,65,80,0.45);font-family:inherit;touch-action:none}
@@ -35,28 +35,28 @@ export function getDisaWidget() {
     <div class="dp-head" id="disaDragHandle">
       <div class="dp-avatar">D</div>
       <div><div class="dp-name">DISA</div><div class="dp-status"><span class="dp-dot"></span>Asistente IA</div></div>
-      <button class="dp-close" onclick="dpNewThread()" onmousedown="event.stopPropagation()" title="Nueva conversación" style="margin-left:auto">
+      <button class="dp-close" id="dpNewBtn" title="Nueva conversación" style="margin-left:auto">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
       </button>
-      <button class="dp-close" onclick="disaClose()" style="margin-left:0">✕</button>
+      <button class="dp-close" id="dpCloseBtn" style="margin-left:0">✕</button>
     </div>
     <div id="dpMsgs">
       <div style="text-align:center;padding:40px 16px;color:var(--text3);font-size:12px">Hola, soy DISA. ¿En qué te ayudo?</div>
     </div>
     <div id="disaInputWrap">
-      <button id="dpAttachBtn" onclick="document.getElementById('dpFile').click()" title="Adjuntar factura (foto o PDF)">
+      <button id="dpAttachBtn" title="Adjuntar factura (foto o PDF)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
       </button>
-      <input id="dpFile" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" capture="environment" style="display:none" onchange="dpAttach()"/>
-      <input id="dpInput" placeholder="Pregunta a DISA..." onkeydown="if(event.key==='Enter'){event.preventDefault();dpSend()}"/>
-      <button id="dpSendBtn" onclick="dpSend()">
+      <input id="dpFile" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" capture="environment" style="display:none"/>
+      <input id="dpInput" placeholder="Pregunta a DISA..."/>
+      <button id="dpSendBtn">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="13" height="13"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
       </button>
     </div>
   </div>
 </div>
 
-<script>
+<script nonce="${nonce}">
 (function(){
   var csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')||'';
   window.disaWidgetThreadId = null;
@@ -231,6 +231,27 @@ export function getDisaWidget() {
     msgs.appendChild(row);
     msgs.scrollTop=msgs.scrollHeight;
   }
+
+  // ── 5 SEP 2026 (csp-erp-migrar-handlers) — LOS CONTROLES SE ENGANCHAN AQUI ────────────────────
+  // Antes cada uno llevaba su codigo escrito en el propio atributo. Eran SIETE, y este widget sale
+  // en 233 pantallas del panel: son los ultimos que quedaban en casi todas. Un nonce cubre este
+  // bloque pero NO cubre los handlers de atributo, asi que con la cabecera estricta se habrian
+  // quedado MUDOS sin avisar: el chat abriria y no escribiria, y la pagina no daria ningun error.
+  //
+  // Van directos y no por delegacion porque todos tienen id y el HTML de arriba ya existe cuando
+  // esto corre. El de "conversacion nueva" necesita ademas frenar el mousedown: sin eso, pulsarlo
+  // arrastraria la ventana, que es para lo que estaba ese segundo handler.
+  //
+  // Sin acentos graves en este comentario: vive dentro de una plantilla de texto y uno solo la
+  // cerraria en seco. Va escrito en CLAUDE.md y este mes ha mordido tres veces.
+  var _eng = function(id, ev, fn){ var el=document.getElementById(id); if(el) el.addEventListener(ev, fn); };
+  _eng('dpNewBtn','click',function(){ window.dpNewThread&&window.dpNewThread(); });
+  _eng('dpNewBtn','mousedown',function(e){ e.stopPropagation(); });
+  _eng('dpCloseBtn','click',function(){ window.disaClose&&window.disaClose(); });
+  _eng('dpAttachBtn','click',function(){ var f=document.getElementById('dpFile'); if(f) f.click(); });
+  _eng('dpFile','change',function(){ window.dpAttach&&window.dpAttach(); });
+  _eng('dpSendBtn','click',function(){ window.dpSend&&window.dpSend(); });
+  _eng('dpInput','keydown',function(e){ if(e.key==='Enter'){ e.preventDefault(); window.dpSend&&window.dpSend(); } });
 })();
 </script>`;
 }

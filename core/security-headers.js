@@ -41,6 +41,22 @@ const SUPERFICIES_ESTRICTAS = [
   // avisar. Es literalmente lo que esta ficha existe para impedir. Cada pantalla entra aquí sola,
   // y solo cuando su censo da CERO handlers y CERO bloques sin nonce.
   /^\/admin$/,
+  // ⚙️ 5 SEP 2026 — 222 PANTALLAS DEL PANEL, tras migrar el widget de DISA (sus 7 handlers y su
+  // bloque salían en 233 de ellas). Cada regla va ANCLADA con ^…$ y NUNCA como prefijo: con `$`,
+  // `/^\/admin\/quotes$/` cubre la lista y **no** toca `/admin/quotes/9`, que aún tiene handlers
+  // propios. Un prefijo se los habría llevado por delante y sus botones se quedarían mudos.
+  // Las 212 de mensajes del portal comparten FORMA, no prefijo: el `\d+$` del final es lo que
+  // impide que esta regla alcance nada más.
+  /^\/admin\/portal\/mensajes\/\d+$/,
+  /^\/admin\/albaranes$/,
+  /^\/admin\/pedidos$/,
+  /^\/admin\/portal$/,
+  /^\/admin\/purchase-orders$/,
+  /^\/admin\/quotes$/,
+  /^\/admin\/rentabilidad$/,
+  /^\/admin\/stock-transfers$/,
+  /^\/admin\/supplier-returns$/,
+  /^\/admin\/verifactu\/envios$/,
 ];
 
 export function securityHeaders() {

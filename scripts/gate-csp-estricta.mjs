@@ -249,7 +249,67 @@ try {
      sueltos8 ? 'quedan ' + sueltos8 : '0');
   ok((await violaciones(p8)).length === 0, 'y tras pulsar, sigue sin violaciones');
 
+  // ── 9 · LAS 222 PANTALLAS DEL PANEL Y EL WIDGET DE DISA, PULSADO ──
+  console.log('\n[9] El panel: 222 pantallas endurecidas, y el widget de DISA responde al pulsarlo');
+  const p9 = await nuevaPagina();
+  await p9.setCookie({ name: 'asess', value: erpTok, domain: 'desarrollo-bamburu.localhost', path: '/' });
+  // La conversación con DISA se INTERCEPTA: pulsar el botón tiene que soltar la petición, que es lo
+  // que prueba que el control está vivo. Llamar al modelo de verdad costaría dinero y dependería de
+  // la cuota del mes — y lo que se mide aquí es el botón, no el modelo.
+  let pidioDisa = false;
+  await p9.setRequestInterception(true);
+  p9.on('request', (req) => {
+    if (req.url().includes('/api/disa/message')) {
+      pidioDisa = true;
+      return req.respond({ status: 200, contentType: 'application/json',
+        body: JSON.stringify({ reply: 'ZZ respuesta de comprobacion', thread_id: null }) });
+    }
+    req.continue();
+  });
+
+  const r9 = await p9.goto(ERP_BASE + '/admin/albaranes', { waitUntil: 'networkidle0' });
+  ok(/script-src[^;]*'nonce-/.test(cabecera(r9)) && !/script-src[^;]*'unsafe-inline'/.test(cabecera(r9)),
+     '/admin/albaranes — endurecida: nonce sí, unsafe-inline no');
+  // LA REGLA ANCLADA, comprobada por su parte peligrosa: la ficha de un presupuesto NO entra.
+  const r9b = await p9.goto(ERP_BASE + '/admin/quotes', { waitUntil: 'networkidle0' });
+  ok(/script-src[^;]*'nonce-/.test(cabecera(r9b)), '/admin/quotes (la lista) — endurecida');
+  const r9c = await p9.goto(ERP_BASE + '/admin/quotes/9', { waitUntil: 'networkidle0' });
+  ok(/script-src[^;]*'unsafe-inline'/.test(cabecera(r9c)),
+     '  y /admin/quotes/9 (la ficha) NO: el ancla $ impide que la regla la arrastre');
+
+  await p9.goto(ERP_BASE + '/admin/albaranes', { waitUntil: 'networkidle0' });
+  ok((await violaciones(p9)).length === 0, 'ninguna violación de CSP al cargar');
+  ok(await p9.evaluate(() => !/\son[a-z]+\s*=\s*["']/i.test(
+       document.documentElement.outerHTML.replace(/<script[\s\S]*?<\/script>/gi, ''))),
+     'y no queda NI UN handler de atributo en la pantalla endurecida');
+
+  // SE PULSA EL WIDGET: abrir, escribir, enviar y cerrar. Eran siete handlers de atributo.
+  const abrioDisa = await p9.evaluate(async () => {
+    const f = document.getElementById('disaFab'); if (!f) return 'sin botón de DISA';
+    f.click(); await new Promise(r => setTimeout(r, 400));
+    return document.getElementById('disaModal')?.classList.contains('open') ? 'ok' : 'no abrió';
+  });
+  ok(abrioDisa === 'ok', 'pulsar el botón de DISA ABRE la ventana', abrioDisa);
+  const escribio = await p9.evaluate(async () => {
+    const i = document.getElementById('dpInput'), b = document.getElementById('dpSendBtn');
+    if (!i || !b) return 'faltan controles';
+    i.value = 'ZZ pregunta de comprobacion CSP';
+    b.click(); await new Promise(r => setTimeout(r, 900));
+    return document.getElementById('dpMsgs')?.textContent.includes('ZZ respuesta de comprobacion')
+      ? 'ok' : 'no apareció la respuesta';
+  });
+  ok(escribio === 'ok', 'escribirle y pulsar Enviar: sale la pregunta y entra la respuesta', escribio);
+  ok(pidioDisa, '  y la petición SALIÓ de verdad (el botón no está muerto)');
+  const cerroDisa = await p9.evaluate(async () => {
+    document.getElementById('dpCloseBtn').click(); await new Promise(r => setTimeout(r, 300));
+    return !document.getElementById('disaModal').classList.contains('open');
+  });
+  ok(cerroDisa, 'y el aspa CIERRA la ventana');
+  ok((await violaciones(p9)).length === 0, 'todo el recorrido, sin una sola violación de CSP');
+  await p9.setRequestInterception(false);
+
   const todas = [...(await violaciones(p3)), ...(await violaciones(p4)),
+                 ...(await violaciones(p9)),
                  ...(await violaciones(p8)),
                  ...(await violaciones(p5)), ...(await violaciones(p6)), ...(await violaciones(p7))];
   ok(todas.length === 0, 'CERO violaciones de CSP en toda la pasada' + (todas.length ? ': ' + todas[0] : ''));
