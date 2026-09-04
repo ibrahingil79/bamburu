@@ -12,11 +12,29 @@ import { randomBytes } from 'crypto';
 // PIEZA 6 (28 jul 2026) — /reservar entra aquí desde el primer día. Es el mismo perfil que /registro:
 // superficie PÚBLICA y ANÓNIMA, escrita entera de cero, con UN solo <script> con nonce y CERO
 // handlers de atributo. Endurecerla ahora es gratis; hacerlo después de que crezca, no.
+// ⚙️ 4 SEP 2026 (csp-unsafe-inline) — TRES SUPERFICIES MÁS, UNA A UNA Y MIGRADAS ANTES.
+//   · /portal   — el portal del cliente. NO hizo falta migrar nada: se midió sobre el HTML SERVIDO
+//                 y tenía CERO handlers de atributo y CERO bloques de código en línea. Endurecerla
+//                 fue gratis, y es la superficie por la que entran personas de fuera.
+//   · /acceso   — tenía 2 handlers de atributo y 1 bloque en línea. Se migraron los dos botones a
+//                 addEventListener y el bloque lleva nonce. `/acceso/entrar` no tiene código en
+//                 línea (comprobado sirviéndolo), así que entra con la misma regla.
+//   · /         — la landing. 1 handler (el botón del menú) y 2 bloques en línea. Migrados igual.
+//                 La regla es EXACTA (^/$): '/' es prefijo de todo, y un `startsWith` habría
+//                 endurecido el ERP entero de golpe — que es justo lo que esta ficha prohíbe.
+//
+// ANTES DE ENDURECER, LAS TRES PASARON POR EL MODO AVISO (CSP_PROBE=1, abajo): se cargaron en un
+// navegador de verdad con la política estricta en Report-Only y se contaron las violaciones que
+// registraría. CERO en las tres. El censo se hizo mirando el HTML servido, no el código, y aun así
+// se comprobó: en esta ficha el grep ya ha mentido dos veces.
 const SUPERFICIES_ESTRICTAS = [
   /^\/superadmin(\/|$)/,
   /^\/registro(\/|$)/,
   /^\/api\/registro(\/|$)/,
   /^\/reservar(\/|$)/,
+  /^\/portal(\/|$)/,
+  /^\/acceso(\/|$)/,
+  /^\/$/,
 ];
 
 export function securityHeaders() {

@@ -384,7 +384,7 @@ footer a:hover{text-decoration:underline}
     <a href="/acceso">Acceso</a>
     <a href="/registro" class="nav-btn">Probar gratis</a>
   </div>
-  <button class="burger" onclick="window.location.href='/registro'" aria-label="Ir a registro">
+  <button class="burger" id="btnBurger" aria-label="Ir a registro">
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
   </button>
 </nav>
@@ -978,8 +978,14 @@ footer a:hover{text-decoration:underline}
 
 <div class="toast" id="toast"></div>
 
-<script>
+<script nonce="${c.get('cspNonce')}">
 (function(){
+  // 4 SEP 2026 (csp-unsafe-inline) — el boton del menu se engancha AQUI. Antes llevaba el salto
+  // escrito en el propio atributo del boton, y eso el nonce no lo cubre: con la cabecera estricta
+  // el boton se habria quedado mudo sin avisar. No falla al cargar, falla al pulsar.
+  const burger=document.getElementById('btnBurger');
+  if(burger) burger.addEventListener('click',()=>{window.location.href='/registro'});
+
   const c=document.getElementById('heroCanvas');
   const ctx=c.getContext('2d');
   let w,h,particles=[];
@@ -1076,7 +1082,7 @@ function showToast(msg,type='info'){
 }
 
 </script>
-<script>
+<script nonce="${c.get('cspNonce')}">
 gsap.registerPlugin(ScrollTrigger);
 
 // Hero mockup — parallax pronunciado
@@ -1393,7 +1399,7 @@ input[readonly]{color:rgba(255,255,255,0.5);cursor:default}
       <label for="emailIn">Email</label>
       <input id="emailIn" type="email" placeholder="tu@email.com" autocomplete="email" autofocus>
     </div>
-    <button class="btn" id="btnContinue" onclick="findTenant()">Continuar</button>
+    <button class="btn" id="btnContinue">Continuar</button>
     <p class="err" id="err1"></p>
   </div>
 
@@ -1405,10 +1411,10 @@ input[readonly]{color:rgba(255,255,255,0.5);cursor:default}
   <div id="step2" style="display:none">
     <h1>Mira tu correo</h1>
     <p class="sub">Si ese email tiene un negocio en Bamburu, te hemos enviado un enlace para entrar. Caduca en 30 minutos.</p>
-    <button class="btn" onclick="goBack()" style="background:rgba(255,255,255,0.06)">Usar otro email</button>
+    <button class="btn" id="btnBack" style="background:rgba(255,255,255,0.06)">Usar otro email</button>
   </div>
 </div>
-<script>
+<script nonce="${c.get('cspNonce')}">
 (function(){
   const step1=document.getElementById('step1');
   const step2=document.getElementById('step2');
@@ -1446,6 +1452,17 @@ input[readonly]{color:rgba(255,255,255,0.5);cursor:default}
   };
 
   function showErr(el,msg){el.textContent=msg;el.style.display='block'}
+
+  // 4 SEP 2026 (csp-unsafe-inline) — LOS BOTONES SE ENGANCHAN AQUI, NO EN EL HTML.
+  // Antes iban con un handler de atributo en el propio boton. El nonce cubre el bloque de codigo,
+  // pero NO cubre los handlers de atributo: con la cabecera estricta puesta, esos dos botones
+  // habrian dejado de funcionar SIN DECIR NADA. No fallan al cargar: fallan al pulsar. Por eso
+  // esta pantalla se migra ANTES de endurecerla, y su comprobacion la prueba PULSANDO.
+  //
+  // Y este comentario va sin acentos graves a proposito: vive DENTRO de una plantilla de texto,
+  // y un acento grave la cierra en seco. Esta escrito en CLAUDE.md y hoy ha vuelto a morder.
+  document.getElementById('btnContinue').addEventListener('click', () => findTenant());
+  document.getElementById('btnBack').addEventListener('click', () => goBack());
 })();
 </script>
 </body>

@@ -7,12 +7,18 @@
 // real de C4b, no el número de líneas. Por eso aquí no basta con mirar la cabecera: se PULSAN los
 // botones y se escucha al navegador (`securitypolicyviolation`), que es el único que dice la verdad.
 //
-// Las superficies endurecidas son las dos donde un XSS duele más y el coste era mínimo:
+// Las superficies endurecidas, y por qué cada una:
 //   · /registro   — pública y ANÓNIMA (2 handlers).
 //   · /superadmin — la cuenta que ve TODOS los negocios (11 handlers). C4a encontró aquí el peor
 //                   agujero del proyecto: un nombre de negocio malicioso ejecutándose en esta sesión.
-// El ERP (470 handlers) se queda con 'unsafe-inline' a propósito hasta que se decida C4b-4: meterlo
-// aquí sin migrar sería exactamente el fallo que este gate existe para impedir.
+//   · /reservar   — pública y anónima, endurecida desde el primer día (PIEZA 6).
+//   ⚙️ 4 SEP 2026 (csp-unsafe-inline), tres más, cada una migrada ANTES de endurecerla:
+//   · /portal     — por donde entran los CLIENTES del negocio. No hizo falta migrar nada: cero
+//                   handlers y cero código en línea, medido sobre el HTML servido.
+//   · /acceso     — 2 handlers y 1 bloque en línea, migrados a addEventListener + nonce.
+//   · /           — la landing. 1 handler y 2 bloques en línea, migrados igual.
+// El ERP (546 handlers hoy, medidos) se queda con 'unsafe-inline' a propósito: meterlo aquí sin
+// migrar sería exactamente el fallo que este gate existe para impedir.
 //
 //   node scripts/gate-csp-estricta.mjs
 import puppeteer from 'puppeteer';
@@ -30,6 +36,19 @@ const saToken = randomBytes(32).toString('base64url');
 const now = Math.floor(Date.now() / 1000);
 cdb.prepare('INSERT INTO superadmin_sessions (token,superadmin_id,created_at,expires_at,csrf_token) VALUES (?,?,?,?,?)')
   .run(saToken, 1, now, now + 900, randomBytes(32).toString('base64url'));
+
+// ── El portal necesita un cliente y un enlace de verdad ──────────────────────────────────────────
+// Se siembra en el negocio de desarrollo, con MARCA reconocible, y se borra en el `finally` POR LA
+// MARCA y no por los ids de esta pasada: si el gate muere a mitad, lo suyo se va igual.
+const PORTAL_BASE = 'http://desarrollo-bamburu.localhost:3000';
+const RID = randomBytes(3).toString('hex');
+const MARCA = 'ZZ CSP ' + RID;
+const MARCA_MSG = 'ZZ mensaje de comprobacion CSP ' + RID;
+const pdb = new Database(join(APP_DIR, 'data', 'tenants', 'desarrollo-bamburu.db'));
+const { createToken } = await import('../modules/portal/portal.js');
+const portalClienteId = pdb.prepare(
+  'INSERT INTO clients (name,email,active) VALUES (?,?,1)').run(MARCA, 'delivered@resend.dev').lastInsertRowid;
+const portalToken = createToken(pdb, portalClienteId, 1);
 
 const browser = await puppeteer.launch({ ...launchOpts() });
 
@@ -69,7 +88,7 @@ try {
   ok(nonceCab !== nonce2, 'el nonce CAMBIA en cada petición (no es fijo)');
 
   // ── 2 · El ERP sigue con la política de siempre: no se ha endurecido de rebote ──
-  console.log('\n[2] El ERP NO se ha endurecido (sus 470 handlers siguen vivos, a propósito)');
+  console.log('\n[2] El ERP NO se ha endurecido (sus 546 handlers siguen vivos, a propósito)');
   const r2 = await p1.goto('http://desarrollo-bamburu.localhost:3000/admin/login', { waitUntil: 'networkidle0' });
   ok(/script-src[^;]*'unsafe-inline'/.test(cabecera(r2)), "/admin — conserva 'unsafe-inline' (C4b-4 sin decidir)");
   ok(!/script-src[^;]*'nonce-/.test(cabecera(r2)), '/admin — sin nonce: no se ha endurecido a medias');
@@ -113,12 +132,80 @@ try {
   ok(await p4.evaluate(() => { const b = document.getElementById('capCancel'); if (!b) return false; b.click(); return document.getElementById('modalBg').style.display === 'none'; }),
      'el "Cancelar" del modal cierra → los botones del innerHTML también están enganchados');
 
-  const todas = [...(await violaciones(p3)), ...(await violaciones(p4))];
+  // ── 5 · La LANDING: el botón del menú responde con la CSP estricta ──
+  console.log('\n[5] / (landing) — carga limpia y el botón del menú lleva a donde debe');
+  const p5 = await nuevaPagina();
+  const r5 = await p5.goto(BASE + '/', { waitUntil: 'networkidle0' });
+  ok(/script-src[^;]*'nonce-/.test(cabecera(r5)) && !/script-src[^;]*'unsafe-inline'/.test(cabecera(r5)),
+     '/ — nonce sí, unsafe-inline no');
+  ok((await violaciones(p5)).length === 0, 'ninguna violación de CSP al cargar la landing');
+  ok(await p5.evaluate(() => !!document.getElementById('btnBurger')),
+     'el botón del menú existe y ya NO lleva el salto en un atributo');
+  // SE PULSA DE VERDAD. Antes esto era un handler de atributo: con la cabecera estricta habría
+  // quedado mudo sin decir nada, y una comprobación que solo cargue la página lo daría por bueno.
+  const fueARegistro = await p5.evaluate(() => document.getElementById('btnBurger').click())
+    .then(() => p5.waitForFunction(() => location.pathname === '/registro', { timeout: 8000 }))
+    .then(() => true).catch(() => false);
+  ok(fueARegistro, 'pulsar el botón del menú NAVEGA a /registro (el enganche por JS funciona)');
+
+  // ── 6 · /acceso: los dos botones migrados responden ──
+  console.log('\n[6] /acceso — los dos botones migrados responden al clic');
+  const p6 = await nuevaPagina();
+  const r6 = await p6.goto(BASE + '/acceso', { waitUntil: 'networkidle0' });
+  ok(/script-src[^;]*'nonce-/.test(cabecera(r6)) && !/script-src[^;]*'unsafe-inline'/.test(cabecera(r6)),
+     '/acceso — nonce sí, unsafe-inline no');
+  ok((await violaciones(p6)).length === 0, 'ninguna violación de CSP al cargar');
+  ok(await p6.evaluate(() => typeof window.findTenant === 'function' && typeof window.goBack === 'function'),
+     'el bloque con nonce se ejecutó (findTenant y goBack existen)');
+  // El email es de un dominio que NO PUEDE recibir correo (.invalid) y que no existe como negocio:
+  // la norma de esta casa es que ninguna comprobación escriba a una bandeja de verdad.
+  await p6.evaluate(() => { document.getElementById('emailIn').value = 'zz-csp-' + Date.now() + '@example.invalid'; });
+  const pasoAPaso2 = await p6.evaluate(() => document.getElementById('btnContinue').click())
+    .then(() => p6.waitForFunction(() => document.getElementById('step2').style.display === 'block', { timeout: 8000 }))
+    .then(() => true).catch(() => false);
+  ok(pasoAPaso2, 'pulsar "Continuar" avanza al paso 2 (el botón NO está muerto)');
+  const volvio = await p6.evaluate(() => document.getElementById('btnBack').click())
+    .then(() => p6.waitForFunction(() => document.getElementById('step1').style.display !== 'none', { timeout: 8000 }))
+    .then(() => true).catch(() => false);
+  ok(volvio, 'pulsar "Usar otro email" vuelve al paso 1');
+  ok((await violaciones(p6)).length === 0, 'y tras pulsar los dos, sigue sin violaciones');
+
+  // ── 7 · /portal: el formulario del cliente se envía de verdad ──
+  console.log('\n[7] /portal — el cliente entra y su formulario ENVÍA');
+  const p7 = await nuevaPagina();
+  const r7 = await p7.goto(PORTAL_BASE + '/portal/' + portalToken, { waitUntil: 'networkidle0' });
+  ok(/script-src[^;]*'nonce-/.test(cabecera(r7)) && !/script-src[^;]*'unsafe-inline'/.test(cabecera(r7)),
+     '/portal — nonce sí, unsafe-inline no');
+  ok(p7.url().endsWith('/portal'), 'el enlace de un solo uso deja al cliente en /portal');
+  ok((await violaciones(p7)).length === 0, 'ninguna violación de CSP al cargar el portal');
+  const hayForm = await p7.evaluate(() => !!document.querySelector('form[action="/portal/mensaje"] textarea'));
+  ok(hayForm, 'el formulario de mensaje está en la página');
+  // SE ENVÍA DE VERDAD: un formulario que no llega es lo mismo que un botón muerto.
+  const envio = hayForm && await p7.evaluate((t) => {
+    document.querySelector('form[action="/portal/mensaje"] textarea').value = t;
+    document.querySelector('form[action="/portal/mensaje"] button[type="submit"]').click();
+    return true;
+  }, MARCA_MSG).then(() => p7.waitForNavigation({ timeout: 10000 })).then(() => true).catch(() => false);
+  ok(envio, 'pulsar "Enviar" manda el formulario y el servidor contesta');
+  const llego = pdb.prepare('SELECT COUNT(*) c FROM portal_mensajes WHERE texto=?').get(MARCA_MSG)?.c > 0;
+  ok(llego, 'y el mensaje LLEGÓ a la base: no se perdió por el camino');
+  ok((await violaciones(p7)).length === 0, 'y el envío no genera violaciones');
+
+  const todas = [...(await violaciones(p3)), ...(await violaciones(p4)),
+                 ...(await violaciones(p5)), ...(await violaciones(p6)), ...(await violaciones(p7))];
   ok(todas.length === 0, 'CERO violaciones de CSP en toda la pasada' + (todas.length ? ': ' + todas[0] : ''));
 } finally {
   await browser.close();
   cdb.prepare('DELETE FROM superadmin_sessions WHERE token=?').run(saToken);
   cdb.close();
+  // Lo que la prueba crea, la prueba lo borra — y por la MARCA, no por los ids de esta pasada.
+  try {
+    pdb.prepare('DELETE FROM portal_mensajes WHERE texto LIKE ?').run('ZZ mensaje de comprobacion CSP %');
+    pdb.prepare('DELETE FROM portal_sesiones WHERE client_id IN (SELECT id FROM clients WHERE name LIKE ?)').run('ZZ CSP %');
+    pdb.prepare('DELETE FROM portal_tokens   WHERE client_id IN (SELECT id FROM clients WHERE name LIKE ?)').run('ZZ CSP %');
+    pdb.prepare('DELETE FROM clients WHERE name LIKE ?').run('ZZ CSP %');
+  } catch (e) { console.error('  ⚠️  limpieza incompleta: ' + (e?.message || e)); }
+  pdb.close();
 }
 
 console.log('\n' + (fail === 0 ? '✅' : '❌') + ' CSP estricta (C4b-1): ' + pass + ' OK, ' + fail + ' fallos');

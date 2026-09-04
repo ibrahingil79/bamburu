@@ -10623,9 +10623,44 @@ dos cuentas de Drive. Al sacarlas de esa carpeta, las dos cosas se acaban solas.
 - **estado:** pendiente
 - **origen:** TABLERO.md §Backlog 31 ago 2026 · Seguridad y datos
 
-**8 usos** de `unsafe-inline` en `core/security-headers.js` — hallazgo **M8** de la auditoría de
-seguridad, **esfuerzo alto**. **Verificado el 1 sep 2026: son exactamente 8.** La cifra de la entrada
-es correcta, que en este volcado es la excepción y no la regla.
+~~**8 usos** de `unsafe-inline` en `core/security-headers.js` … **Verificado el 1 sep 2026: son
+exactamente 8.** La cifra de la entrada es correcta…~~
+**⚙️ CORREGIDO EL 4 SEP 2026, CONTANDO QUÉ ES CADA UNO: LA CIFRA ERA DE UN `grep`, NO DE LA POLÍTICA.**
+Son 8 apariciones del texto, sí — pero **seis son comentarios** que explican la decisión. **Usos
+reales en la política hay DOS**, y ninguno de los dos es «una pantalla pendiente»:
+· `style-src 'unsafe-inline'` — **se queda a propósito**, decidido en el plan de C4b: son **2.642**
+  atributos `style=` y el valor es muy inferior (inyección de estilo, no ejecución de código).
+· `script-src 'unsafe-inline'` — la constante `LEGADO`, que se aplica **solo a las superficies aún
+  no endurecidas**. Y esto no se quita borrando una línea: se vacía **superficie por superficie**.
+Es el mismo género de error que ya escarmentó a este tablero: *«un inventario con ~ y … no es una
+lista cerrada»*. Aquí el «8» contaba apariciones de una cadena, no permisos concedidos.
+
+**⚙️ AVANCE DEL 4 SEP 2026 — TRES SUPERFICIES MÁS, DE 4 A 7.** Cada una **migrada antes** de
+endurecerla y **probada pulsando**, no cargando:
+
+| superficie | lo que tenía | qué se hizo |
+|---|---|---|
+| `/portal` | **0 handlers · 0 bloques en línea** | endurecida **sin migrar nada** — es por donde entran los clientes del negocio |
+| `/acceso` | 2 handlers · 1 bloque | los dos botones a `addEventListener`, el bloque con `nonce` |
+| `/` (landing) | 1 handler · 2 bloques | igual; la regla es EXACTA (`^/$`), porque `/` es prefijo de todo |
+
+**El censo se hizo sobre el HTML SERVIDO, no sobre el código**, y aun así se pasó por el modo aviso
+(`CSP_PROBE=1`) **antes** de bloquear: las tres se cargaron en un navegador de verdad con la política
+estricta en Report-Only y registraron **cero violaciones**. El instrumento ya existía en el propio
+fichero, apagado; esta ficha lo ha usado por primera vez para lo que se construyó.
+
+**`gate-csp-estricta` pasa de 24 a 36 comprobaciones**, y las nuevas **PULSAN**: el botón del menú de
+la landing (navega a `/registro`), los dos botones de `/acceso` (avanzan y vuelven de paso) y el
+formulario del portal (se envía **y se comprueba que el mensaje llegó a la base**).
+**Probado en rojo:** se devolvió el handler de atributo a un botón de `/acceso` y el gate cayó con
+**3 fallos**, incluido `script-src-attr`. Es exactamente el fallo que esta ficha teme: el botón se
+queda mudo y la página carga perfecta.
+
+**LO QUE FALTA, Y POR QUÉ NO SE CIERRA HOY:** el ERP. **546 handlers de atributo y 88 bloques de
+código en línea**, medidos hoy. Eso no es «lo que queda de esta ficha»: es una pieza propia, la que
+el propio código llama **C4b-4** y dejó escrita como «hasta que se decida». Va como ficha aparte al
+final de la cola (`csp-erp-migrar-handlers`). **Esta ficha sigue PENDIENTE a propósito**: cerrarla
+con el ERP entero en `unsafe-inline` sería rebajar el criterio.
 
 **LA LECCIÓN DE C4b, QUE ESTÁ EN `CLAUDE.md` Y MANDA SOBRE EL PLANO:** la CSP es una cabecera **POR
 RESPUESTA**, así que **se endurece POR SUPERFICIE, no de golpe**. Y en cuanto una respuesta lleva
@@ -13392,3 +13427,29 @@ Y su propia limpieza no lo recogió: `cleanup(slug)` empieza con `if (!slug) ret
 - [ ] Ningún guion de `scripts/` puede **crear** una base de datos de negocio: abrir una que no existe falla, no la inventa.
 - [ ] Un gate cuyo montaje falle **se para y lo dice**, en vez de seguir con un `slug` nulo.
 - [ ] Hay un centinela que falla si aparece un `new Database` sobre `data/tenants/` sin `fileMustExist`, probado en rojo.
+
+
+## TAREA — Migrar el ERP para quitarle el `unsafe-inline`
+
+- **id:** csp-erp-migrar-handlers
+- **estado:** pendiente
+- **origen:** Desgajada de `csp-unsafe-inline` el 4 sep 2026, al medir el tamaño real. Es la pieza que el código llama **C4b-4**.
+
+**Medido el 4 sep 2026, no estimado:** `modules/erp` tiene **546 handlers de atributo** y **88
+bloques de código en línea sin nonce**. Es el 100% de lo que queda para poder quitar
+`script-src 'unsafe-inline'` del todo.
+
+**La trampa, escrita ya dos veces en este repositorio:** la CSP es **por respuesta**, y en cuanto una
+respuesta lleva nonce el navegador **ignora `unsafe-inline` en esa respuesta**. Endurecer una
+pantalla del ERP sin migrar antes sus botones **los deja muertos EN SILENCIO** — no fallan al
+cargar, fallan al pulsar. Con 546 handlers repartidos por decenas de pantallas, esto **no se hace de
+una vez**.
+
+**Criterios de aceptación**
+
+- [ ] Se migra **pantalla a pantalla**, y cada pantalla se endurece **solo después** de migrar su código incrustado.
+- [ ] Cada pantalla endurecida entra en `gate-csp-estricta` **pulsando** sus controles, no solo cargándola.
+- [ ] Al terminar, `script-src 'unsafe-inline'` **desaparece** de `core/security-headers.js`.
+- [ ] `style-src 'unsafe-inline'` **se queda**: es una decisión escrita, con 2.642 atributos `style=` detrás y un valor mucho menor. Quitarlo NO es parte de esto.
+
+**No se empieza sin encargo de Ibrahin:** es esfuerzo alto y toca todas las pantallas del panel.
