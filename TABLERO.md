@@ -6082,6 +6082,23 @@ El pilar queda completo: multi-almacén + stock mínimo/punto de pedido + trazab
 - **D6 · [a verificar] XSS en páginas públicas de la tienda** (HTML guardado por admin sin escapar). La tienda está apagada de forma reversible (D1); revisar antes de reabrir en Capa 2. *(El bug de fuga de stock de `cancel_order` ya quedó resuelto al archivar `sales_orders`, D4.)*
 
 ### Deuda técnica
+- ⚠️ **`gate-documentos` está en ROJO, y no de ahora: 24 ✓ · 11 ✗ (4 sep 2026).** Encontrado al
+  verificar el logo tras AUD-011/012. **No es de ese cambio**: se corrió también contra el código
+  anterior (`git stash`, servidor reiniciado) y da **exactamente los mismos 24 ✓ · 11 ✗**. La avería
+  está antes: **la creación de la factura del gate devuelve `undefined`**, y a partir de ahí caen en
+  cascada el ticket, el logo en pantalla, el PDF y el conteo de páginas, hasta una excepción
+  (`Cannot read properties of undefined (reading 'subtotal')`, línea 308). El logo en sí **está
+  sano** — comprobado a mano contra un negocio de verdad: `logoDataUri` devuelve su `data:image/png`
+  de 2,1 MB. Se declara el rojo con su motivo y **no se persigue**, como manda la norma de una sola
+  pasada. **Necesita ficha propia.**
+- ⚠️ **`GET /api/erp/purchases/capture/file/:id` sirve CUALQUIER adjunto, sin filtrar por `kind`
+  (4 sep 2026).** Sus dos hermanas —la foto de perfil y el logo— sí exigen su `kind` (`user_photo`,
+  `company_logo`) precisamente «para que no se pueda usar como puerta trasera a los adjuntos de
+  facturas de proveedor», y lo dicen en su propio comentario. Esta no. Con permiso de
+  `purchases.read` se puede pedir por id el **volcado de datos que subió el cliente en `migracion`**
+  o el **XML de Facturae** de cualquier factura. Es **control de acceso, no tipado**: queda fuera de
+  AUD-011/012 a propósito, que iba de qué es un fichero y de dónde vive, no de quién puede pedirlo.
+  Visto de paso al auditar las cinco puertas de subida. **Necesita ficha propia.**
 - ⚠️ **`gdrive_gili` está DESAUTORIZADO desde la rotación del token del 3 sep 2026.** `rclone lsd
   gdrive_gili:` responde `401 Invalid Credentials` / `invalid_grant`. Consecuencias: **la copia
   secundaria no puede subir** y la prueba de restauración completa solo se puede correr contra la
@@ -10369,20 +10386,59 @@ El portal del cliente se abre con `/portal/:token`: la llave va **en la direcci�
 > real y entonces sí cayó, en cuatro sitios. Una reversión que no pone rojo no prueba nada: hay que
 > tocar la pieza que sostiene la propiedad, no la que la acompaña.
 
-## TAREA — Los ficheros que sube la gente se validan por lo que dicen ser
+## ✅ TAREA — Los ficheros que sube la gente se validan por lo que dicen ser
 
 - **id:** adjuntos-validados-por-contenido
-- **estado:** pendiente
+- **estado:** ✅ HECHA — 4 sep 2026 · commit `b341845`
 - **origen:** Auditoría de Codex, 25 ago 2026 · AUD-011 y AUD-012 — comprobados vivos el 2 sep
 
 Dos cosas de la misma familia. La primera: el tipo de un fichero subido se decide por **el tipo que declara quien lo sube** (`ALLOWED_MIME[mime]`), sin mirar sus bytes. La segunda: la ruta que sirve un adjunto **acepta rutas absolutas** guardadas en la base (`isAbsolute(att.path) ? att.path : …`), así que un valor manipulado apunta fuera de la carpeta de adjuntos.
 
 **Criterios de aceptación**
 
-- [ ] El tipo de un fichero subido se decide **mirando su contenido**, no lo que declara quien lo sube.
-- [ ] Un fichero cuyo contenido no coincide con lo que dice ser **se rechaza**.
-- [ ] La ruta de un adjunto **nunca sale de la carpeta de adjuntos**, aunque en la base haya una ruta absoluta.
-- [ ] Hay una comprobación que intenta las dos cosas y demuestra que fallan.
+- [x] El tipo de un fichero subido se decide **mirando su contenido**, no lo que declara quien lo sube.
+  → `mimeReal()` se mudó de `documentos.js` a `modules/erp/attachments.js`, que es **la puerta por la que entran los cinco caminos de subida**, y creció de tres tipos a los cinco de `ALLOWED_MIME`. La extensión con la que se guarda el fichero y el `mime` que se anota en la base salen **de lo medido**, no de lo declarado — y ese `mime` es justo el que sale por `Content-Type` al servirlo.
+- [x] Un fichero cuyo contenido no coincide con lo que dice ser **se rechaza**.
+  → HTTP 400 con el motivo en cristiano. Probado con seis disfraces: ejecutable, script de shell, página con `<script>`, y el caso fino de un **PDF de verdad que dice ser PNG** (los dos tipos están permitidos: lo que se rechaza no es el tipo, es la mentira). Y no queda fila en la base: un rechazo que guarda el fichero igual no es un rechazo.
+- [x] La ruta de un adjunto **nunca sale de la carpeta de adjuntos**, aunque en la base haya una ruta absoluta.
+  → `rutaDeAdjunto()` resuelve la ruta entera y exige que cuelgue de `data/uploads/`. Es de **resultado, no de forma**: una ruta absoluta que apunta dentro vale, y una relativa con saltos que sale, no.
+- [x] Hay una comprobación que intenta las dos cosas y demuestra que fallan.
+  → `scripts/gate-adjuntos-por-contenido.mjs` — **43 ✓ · 0 ✗**, en `RAPIDO`, `documentos` e `infra`. Sube ficheros de verdad por las rutas de verdad con sesión real y siembra rutas tramposas en la base.
+
+> ### 🔒 QUÉ SE HIZO
+>
+> **Los dos agujeros eran reales, y la prueba en rojo lo enseñó sin discusión.** Quitando la
+> comprobación de contenido, **el ejecutable disfrazado de PNG entró con HTTP 200** y dejó seis
+> ficheros en la carpeta del negocio (12 aserciones en rojo). Quitando la frontera de la ruta,
+> **`/etc/bamburu.env` se sirvió entero por HTTP** a quien pidiera la foto de un perfil (16 en rojo).
+> No era teoría: era una petición y un fichero.
+>
+> **La parte que más enseña son los tres fallos DE LA PROPIA COMPROBACIÓN**, los tres cazados
+> mientras se probaba en rojo, y los tres del mismo género — una prueba que da verde sin medir:
+>
+> 1. **El gate imprimía un trozo del fichero que intentaba robar**, «para explicar qué buscaba». Uno
+>    de esos ficheros es `/etc/bamburu.env`: enseñó el principio de una clave de API en la salida de
+>    una prueba. Ahora se compara y se olvida; a la pantalla solo va **cuántos** bytes se buscaron.
+> 2. **Dos de los cinco ataques apuntaban a ficheros que no existen** — los saltos hacia arriba se
+>    contaron a ojo y se quedaban en `/home/etc/hostname`. Atacaban al vacío, **y el vacío siempre se
+>    defiende solo**. Ahora se exige que el objetivo exista antes de atacarlo.
+> 3. **La comparación normalizaba los espacios del patrón y no los de la respuesta**, así que buscaba
+>    algo que no podía aparecer nunca. En la prueba en rojo, con `package.json` y `control.db`
+>    servidos ENTEROS y con HTTP 200, **tres líneas siguieron en verde**. Se compara en crudo.
+>
+> **Y un fallo mío, del tipo que este proyecto más teme: silencioso.** Al mudar `mimeReal` escribí
+> `export { mimeReal } from './attachments.js'`, que es la forma natural — y que **reexporta sin
+> crear el enlace local**. `logoDataUri` la llama tres funciones más abajo: reventaba con un
+> `ReferenceError` **que su propio `catch` se tragaba**, así que **el logo habría desaparecido de
+> todas las facturas y de todos los PDF sin un solo error en el log**. No lo cazó ningún
+> razonamiento: lo cazó abrir el logo de un negocio de verdad y ver que salía `NULL`.
+>
+> **Lo que NO se tocó, y por qué.** Dos de las cinco puertas no pueden mirarse el contenido: el XML
+> de Facturae lo genera este mismo servidor, y el volcado de datos de `migracion` es **cualquier
+> formato por diseño** (el cliente sube el export de su sistema viejo). Ninguna de las dos declara un
+> tipo pintable, así que la regla no las toca — pero sí se saneó su extensión, que en `migracion`
+> salía del **nombre que escribe el cliente**: bastaba llamar al fichero `datos.php` para dejar un
+> `.php` en la carpeta de adjuntos.
 
 ## TAREA — La CSP todavía permite `unsafe-inline`
 
