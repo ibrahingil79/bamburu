@@ -6082,6 +6082,14 @@ El pilar queda completo: multi-almacén + stock mínimo/punto de pedido + trazab
 - **D6 · [a verificar] XSS en páginas públicas de la tienda** (HTML guardado por admin sin escapar). La tienda está apagada de forma reversible (D1); revisar antes de reabrir en Capa 2. *(El bug de fuga de stock de `cancel_order` ya quedó resuelto al archivar `sales_orders`, D4.)*
 
 ### Deuda técnica
+- ⚠️ **Restos de gates con carga XSS en los datos del negocio de desarrollo (5 sep 2026).**
+  **9 categorías y 6 productos** tienen en su NOMBRE un `<img src=x onerror=…>` que dejó un gate
+  viejo. **Comprobado que son inertes**: con la política permisiva puesta no ejecutan nada. Pero
+  aparecen en el DOM al pintarse las listas y **hacen que `/admin/descuentos` reporte 6 violaciones
+  de CSP**, lo que impide endurecer esa pantalla. Se limpian con
+  `scripts/limpiar-restos-de-gates.mjs` (simulacro por defecto) — **no se ha tocado**: es dato de un
+  negocio y la regla de esta casa es que eso lo decide Ibrahin. Es exactamente el caso que ya
+  escarmentó al proyecto: *«la basura que una prueba deja hoy puede volverse imborrable mañana»*.
 - ~~⚠️ **DOS ficheros de negocio HUÉRFANOS en `data/tenants/`, esperando decisión de Ibrahin (4 sep 2026).**~~
   **⚙️ CERRADO EL MISMO DÍA — RETIRADAS POR DECISIÓN DE IBRAHIN, 4 sep 2026.** Ver la ficha
   `bases-fantasma-retiradas`. **No se han borrado: se han apartado** a
@@ -13432,7 +13440,7 @@ Y su propia limpieza no lo recogió: `cleanup(slug)` empieza con `if (!slug) ret
 ## TAREA — Migrar el ERP para quitarle el `unsafe-inline`
 
 - **id:** csp-erp-migrar-handlers
-- **estado:** pendiente · **EN CURSO — 2 sesiones: 4 sep (`fca9551`) y 5 sep (`552bccc`)**
+- **estado:** pendiente · **EN CURSO — 3 sesiones: 4 sep (`fca9551`) y 5 sep (`552bccc`, `PENDIENTE`)**
 - **origen:** Desgajada de `csp-unsafe-inline` el 4 sep 2026, al medir el tamaño real. Es la pieza que el código llama **C4b-4**.
 
 **Medido el 4 sep 2026, no estimado:** `modules/erp` tiene **546 handlers de atributo** y **88
@@ -13562,3 +13570,50 @@ Después: **33 pantallas con 1 handler** (fichas de pedido y albarán, `/admin/c
 `/admin/proyectos` (43) · `/admin/products` (76) · `/admin/clients` (85).
 
 **`LEGADO` sigue en pie**, y seguirá mientras quede una fuera.
+
+---
+
+### 📋 3ª SESIÓN — 5 sep 2026 · EL LOTE DE LAS 12 BARATAS
+
+**11 de 12 cerradas y endurecidas.** Solo necesitaban el `nonce` de su bloque. Sus vistas estaban
+repartidas por siete ficheros de rutas y dos más (`importador.js`, `analytics.js`), localizadas vía
+`routes/index.js`.
+
+| | handlers | bloques sin nonce | limpias | endurecidas |
+|---|---|---|---|---|
+| tras la 2ª | 662 | 140 | 222 | 222 |
+| **tras la 3ª** | **662** | **122** | **234** | **233** |
+
+**Y la fase de Report-Only sirvió para lo que se puso: cazó lo que el censo no podía ver.**
+`/admin/descuentos` daba **6 violaciones** pese a tener el HTML servido limpio. La causa no es su
+código: son **nombres de categoría y de producto con `<img onerror=…>`** que dejó un gate viejo en
+los datos del negocio de desarrollo, y que solo aparecen en el DOM **después** de que el JavaScript
+pinte las listas. Un censo estático no puede verlos.
+
+**Se comprobó además que son inertes:** con la política permisiva puesta, `window.__xss` **no se
+activa** (las comillas del payload lo dejan en una cadena). No hay XSS vivo — hay basura de prueba.
+**Esa pantalla se queda FUERA de esta tanda**: un `[~]` frena el cierre, y no se endurece nada que
+todavía reporte violaciones. Entra en cuanto se limpien los restos (`scripts/limpiar-restos-de-gates.mjs`).
+
+**Un experimento que conviene tener escrito, porque despeja una duda que volverá:** con la cabecera
+estricta puesta, **`el.onclick = función` FUNCIONA y no viola nada**; lo que se bloquea es
+`setAttribute('onclick', 'código')` y los handlers escritos en el HTML. Medido en `/admin`, no
+supuesto. **Las asignaciones por propiedad no hay que migrarlas.**
+
+**Probado:** `gate-csp-estricta` pasa de 54 a **59**. Para pantallas sin botones, la prueba de que su
+bloque corrió es **la ausencia de violaciones** (uno sin `nonce` se bloquea y el navegador lo
+declara), más que trae su bloque marcado; y una interacción real en el importador.
+
+**⚠️ Y una afirmación del gate que prometía de más, corregida en el acto:** el rojo provocado
+—quitarle el `nonce` al bloque de `/admin/vigia`— **solo hizo caer 1 de las 2** comprobaciones que
+debían caer. La de «el bloque se ejecuta (el DOM cambia)» siguió verde, porque **los scripts del
+armazón también cambian el DOM** y tapaban la señal. Reescrita para decir lo que de verdad mide.
+
+### ▶️ QUÉ QUEDA — 129 pantallas
+
+**34 con 1 handler** · **49 con 2** · 10 con 3 · 4 con 4 · 4 con 5 · 5 con 6 · 7 con 8 · 6 con 9 ·
+y la cola: plantillas (10), servicios de agenda (11), mostrador (12), avisos (13), CRM (19 y 20),
+citas (35), proyectos (43), productos (76), clientes (85).
+**Más `/admin/descuentos`**, limpia de código y bloqueada por los restos de gate en sus datos.
+
+**`LEGADO` sigue en pie.**

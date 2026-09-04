@@ -155,7 +155,7 @@ export function createFichajeRoutes(db) {
         </div>
         <div id="qSalida" style="color:var(--text3);font-size:.85rem">Elige una persona y un periodo.</div>
       </div>` : ''}
-      <script>
+      <script nonce="${c.get('cspNonce')}">
       const CSRF=${JSON.stringify(csrf)}, YO=${JSON.stringify(yo)}, HOY=${JSON.stringify(hoy)};
       const DIAS=${JSON.stringify(DIAS)};
       // EL RELOJ ES EL DEL NEGOCIO, NO EL DEL ORDENADOR. Se arranca con el minuto que dice el

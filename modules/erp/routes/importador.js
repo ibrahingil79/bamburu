@@ -246,7 +246,7 @@ export function createImportadorRoutes(db) {
       </div>
     </div>
 
-    <script>
+    <script nonce="${c.get('cspNonce')}">
     (function(){
       var TIPOS  = ${jsonForScript(Object.keys(TIPOS).map(k => ({ key: k, label: TIPOS[k].label, puede: !!puede[k] })))};
       var MAXB   = ${MAX_BYTES};

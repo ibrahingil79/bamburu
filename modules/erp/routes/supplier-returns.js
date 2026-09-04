@@ -394,7 +394,7 @@ export function createSupplierReturnRoutes(db) {
         <a href="/admin/supplier-returns" class="btn btn-secondary">Cancelar</a>
         <button class="btn btn-primary" id="btn-confirm" onclick="confirmReturn()">Confirmar devolución</button>
       </div>
-      <script>
+      <script nonce="${c.get('cspNonce')}">
       const SYM = '${sym}';
       const ORIGINS = ${jsonForScript(origins)};
       let CURRENT = null;   // { supplier, origin, lines }
@@ -534,7 +534,7 @@ export function createSupplierReturnRoutes(db) {
           <a href="/admin/supplier-returns" class="btn btn-secondary">Volver</a>
         </div>
       </div></div>
-      <script>
+      <script nonce="${c.get('cspNonce')}">
       async function anularDevolucion(){
         const _v = await window.pedirDatos({titulo:'Anular la devolución ${esc(r.return_number || '')}',aceptar:'Anular',
       texto:'Se reintegrará al almacén el stock que salió con ella.',

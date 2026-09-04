@@ -153,7 +153,7 @@ export function createPurchaseRoutes(db, cfg = {}) {
           <tbody id="purchBody">${skeletonRows(7)}</tbody>
         </table></div>
       </div>
-      <script>
+      <script nonce="${c.get('cspNonce')}">
         ${JS_LISTADO_ENVIAR}
       var PURCHASES=[];
       var STATUS_MAP={pending:'Pendiente',received:'Recibida',cancelled:'Cancelada'};
@@ -246,7 +246,7 @@ export function createPurchaseRoutes(db, cfg = {}) {
         <a href="/admin/purchases" class="btn btn-secondary">Cancelar</a>
         <button class="btn btn-primary" onclick="submitPurchase()">Registrar compra</button>
       </div>
-      <script>
+      <script nonce="${c.get('cspNonce')}">
       var PRODUCTS=${productsJson};
       var lineCounter=0;
       // IDs de las líneas vivas (filas en el DOM), sin estado paralelo que se desincronice.
@@ -427,7 +427,7 @@ export function createPurchaseRoutes(db, cfg = {}) {
           <a href="/admin/purchases" class="btn btn-secondary">Volver</a>
         </div>
       </div></div>
-      <script>
+      <script nonce="${c.get('cspNonce')}">
       async function receivePurchase(){
         try{ await api('POST','/api/erp/purchases/${purchase.id}/receive',{}); toast('Compra recibida: stock actualizado'); location.reload(); }
         catch(e){ toast(e.message||'Error','err'); }

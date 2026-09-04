@@ -111,7 +111,7 @@ export function createVigiaRoutes(db) {
            + el endpoint /constructor/cruzar. No hay motor de dibujo nuevo. -->
       <script src="/public/vendor/chartjs/chart.umd.min.js"></script>
       <script src="/public/js/grafico-constructor.js"></script>
-      <script>
+      <script nonce="${c.get('cspNonce')}">
       const SYM = ${JSON.stringify(sym)};
       // EN ESPAÑOL (23 ago 2026, punto 8). Antes: €232.75 y fechas 2026-08-23. Es la misma
       // corrección que en voz.js, y va aquí porque esta pantalla NO usa la voz: pinta el hallazgo

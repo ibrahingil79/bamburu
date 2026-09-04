@@ -331,7 +331,7 @@ export function createSuscripcionRoutes(db) {
       </div></div>
     </div>
 
-    <script>
+    <script nonce="${c.get('cspNonce')}">
       // La descarga se PREPARA en segundo plano: el negocio más grande de este servidor tiene 939
       // facturas y cada PDF pasa por Chromium. Una petición que tarda minutos se corta por el camino
       // y deja al cliente con medio fichero, o con nada y sin saber por qué.

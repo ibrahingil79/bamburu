@@ -899,7 +899,7 @@ export function createCrmRoutes(db) {
           <td style="color:var(--text3)">${escHtml(String(x.hecha_at || '').slice(0, 10))}</td>
           <td>${escHtml(x.titulo)}</td><td>${escHtml(x.cliente || '')}</td>
           <td style="color:var(--text3)">${escHtml(x.resultado || '')}</td></tr>`).join('')}</tbody></table></div></div>` : ''}
-      <script>
+      <script nonce="${c.get('cspNonce')}">
       const CSRF=${JSON.stringify(csrf)};
       const EQUIPO=${JSON.stringify(equipo)}, HOY=${JSON.stringify(t)};
       async function api(m,u,b){ const r=await fetch(u,{method:m,headers:{'Content-Type':'application/json','x-csrf-token':CSRF},body:b?JSON.stringify(b):undefined});

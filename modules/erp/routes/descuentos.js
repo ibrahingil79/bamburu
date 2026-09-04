@@ -158,7 +158,7 @@ export function createDescuentosRoutes(db) {
           <tbody id="tBonos">${bonos.map(filaBono).join('') || '<tr><td colspan="5" style="color:var(--text3);padding:1.2rem;text-align:center">Ningún bono todavía.</td></tr>'}</tbody>
         </table></div>
       </div>
-      <script>
+      <script nonce="${c.get('cspNonce')}">
       const CSRF=${JSON.stringify(csrf)}, SYM=${JSON.stringify(s)};
       const CATS=${JSON.stringify(cats)}, PRODS=${JSON.stringify(prods.slice(0, 300))};
       async function api(m,u,b){ const r=await fetch(u,{method:m,headers:{'Content-Type':'application/json','x-csrf-token':CSRF},body:b?JSON.stringify(b):undefined});

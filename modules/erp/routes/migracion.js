@@ -283,7 +283,7 @@ export function createMigracionRoutes(db) {
       </div>
     </div>
 
-    <script>
+    <script nonce="${c.get('cspNonce')}">
     (function(){
       var ORIGENES = ${JSON.stringify(ORIGENES)}, COSAS = ${JSON.stringify(COSAS)};
       var origen = null, quiere = {};

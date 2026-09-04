@@ -57,6 +57,25 @@ const SUPERFICIES_ESTRICTAS = [
   /^\/admin\/stock-transfers$/,
   /^\/admin\/supplier-returns$/,
   /^\/admin\/verifactu\/envios$/,
+  // ⚙️ 5 SEP 2026 (2ª tanda) — ONCE pantallas más: las que solo necesitaban el `nonce` de su bloque
+  // y no tenían ni un handler. Todas ancladas, como el resto.
+  //
+  // ⚠️ FALTA `/admin/descuentos`, QUE ESTABA EN ESTE LOTE Y SE QUEDA FUERA A PROPÓSITO. Su código
+  // está limpio —sus botones usan `el.onclick = función`, que la CSP estricta SÍ permite— pero su
+  // pantalla reporta 6 violaciones que salen de los DATOS: nombres de categoría y de producto con
+  // `<img onerror=…>` que dejó un gate viejo en el negocio de desarrollo. Son inertes (comprobado:
+  // no se ejecutan ni con la política permisiva), pero un `[~]` frena el cierre, así que esa
+  // pantalla no entra hasta que se limpien esos restos. Anotado en TABLERO.
+  /^\/admin\/analytics$/,
+  /^\/admin\/crm\/tareas$/,
+  /^\/admin\/fichaje$/,
+  /^\/admin\/migracion$/,
+  /^\/admin\/migracion\/importar$/,
+  /^\/admin\/purchases\/\d+$/,
+  /^\/admin\/settings\/avisos$/,
+  /^\/admin\/supplier-returns\/\d+$/,
+  /^\/admin\/suscripcion$/,
+  /^\/admin\/vigia$/,
 ];
 
 export function securityHeaders() {

@@ -1073,7 +1073,7 @@ export function createSettingsRoutes(db, cfg = {}) {
         .av-boton{color:#1d4ed8;background:rgba(37,99,235,.12)}
         @media (max-width:620px){ .av-correo .top{flex-direction:column} }
       </style>
-      <script>
+      <script nonce="${c.get('cspNonce')}">
       (function(){
         const HORAS = Array.from({length:24},(_,h)=>h);
         let LINEAS = [], PREF = null;

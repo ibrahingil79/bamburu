@@ -308,6 +308,56 @@ try {
   ok((await violaciones(p9)).length === 0, 'todo el recorrido, sin una sola violación de CSP');
   await p9.setRequestInterception(false);
 
+  // ── 10 · LAS ONCE PANTALLAS DEL 2º LOTE: su bloque de arranque CORRE con el nonce ──
+  console.log('\n[10] Once pantallas más: el bloque con nonce se ejecuta de verdad');
+  // COMO SE PRUEBA QUE UN BLOQUE CORRIO CUANDO LA PANTALLA NO TIENE BOTONES.
+  // ⚠️ LA SEÑAL QUE MANDA ES LA DE VIOLACIONES, y conviene decir por qué. Un bloque sin nonce en una
+  // pantalla endurecida se BLOQUEA, y el navegador lo DECLARA: esa es la prueba, y es la que cazó el
+  // rojo provocado de esta tanda. La comparación del DOM con el HTML crudo se queda como señal
+  // secundaria, pero NO aísla el bloque de la pantalla: los del armazón corren igual y también
+  // cambian el DOM, así que por sí sola daría verde con el bloque de la pantalla bloqueado.
+  // Se comprueba además que la pantalla TRAE un bloque con nonce: sin eso, «cero violaciones» sería
+  // cierto y vacío.
+  const LOTE2 = ['/admin/analytics', '/admin/crm/tareas', '/admin/fichaje', '/admin/migracion',
+                 '/admin/migracion/importar', '/admin/purchases/8', '/admin/settings/avisos',
+                 '/admin/supplier-returns/1', '/admin/supplier-returns/2', '/admin/suscripcion',
+                 '/admin/vigia'];
+  const p10 = await nuevaPagina();
+  const erroresJs = [];
+  p10.on('pageerror', e => erroresJs.push(String(e.message).slice(0, 80)));
+  await p10.setCookie({ name: 'asess', value: erpTok, domain: 'desarrollo-bamburu.localhost', path: '/' });
+  let estrictas = 0, corrieron = 0, conViolaciones = [];
+  for (const ruta of LOTE2) {
+    const crudo = await (await fetch(ERP_BASE + ruta, { headers: { cookie: 'asess=' + erpTok } })).text();
+    const r = await p10.goto(ERP_BASE + ruta, { waitUntil: 'networkidle0' });
+    if (/script-src[^;]*'nonce-/.test(cabecera(r)) && !/script-src[^;]*'unsafe-inline'/.test(cabecera(r))) estrictas++;
+    await new Promise(x => setTimeout(x, 500));
+    const vivo = await p10.evaluate(() => document.body.innerHTML.length);
+    const crudoBody = (crudo.match(/<body[\s\S]*<\/body>/i) || [''])[0].length;
+    const traeNonce = /<script[^>]*\bnonce=/i.test(crudo);
+    if (vivo !== crudoBody && traeNonce) corrieron++;
+    const v = await p10.evaluate(() => { const x = window.__csp || []; window.__csp = []; return x; });
+    if (v.length) conViolaciones.push(ruta + ' (' + v[0] + ')');
+  }
+  ok(estrictas === LOTE2.length, 'las once sirven la política estricta', estrictas + '/' + LOTE2.length);
+  ok(corrieron === LOTE2.length, 'las once TRAEN su bloque con nonce y la pantalla se monta',
+     corrieron + '/' + LOTE2.length);
+  // ESTA es la que prueba que el bloque de cada pantalla corrió: si le faltara el nonce, la CSP lo
+  // bloquearía y el navegador lo declararía aquí. Es la que cae en el rojo provocado.
+  ok(conViolaciones.length === 0, 'y ninguna registra una violación: su bloque NO fue bloqueado',
+     conViolaciones[0] || '');
+  ok(erroresJs.length === 0, 'y ninguna suelta un error de JavaScript', erroresJs[0] || '');
+
+  // Y UNA INTERACCION DE VERDAD en la que tiene controles: el importador.
+  await p10.goto(ERP_BASE + '/admin/migracion/importar', { waitUntil: 'networkidle0' });
+  const pulsable = await p10.evaluate(async () => {
+    const b = document.querySelector('button, input[type=file], select'); if (!b) return 'sin controles';
+    const antes = document.body.innerHTML.length;
+    b.click(); await new Promise(r => setTimeout(r, 400));
+    return document.body.innerHTML.length !== antes || document.activeElement !== document.body ? 'ok' : 'no reacciona';
+  });
+  ok(pulsable === 'ok', 'y en el importador, pulsar su control hace algo', pulsable);
+
   const todas = [...(await violaciones(p3)), ...(await violaciones(p4)),
                  ...(await violaciones(p9)),
                  ...(await violaciones(p8)),

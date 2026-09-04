@@ -716,7 +716,7 @@ export function createAnalyticsRoutes(db, cfg = {}) {
       </div>
 
       <script src="/public/vendor/chartjs/chart.umd.min.js"></script>
-      <script>
+      <script nonce="${c.get('cspNonce')}">
       let salesChartInst=null,topChartInst=null;
       // FICHA D · PARTE 3 — el DUEÑO puede renombrar, compartir y borrar el informe de cualquiera.
       // A propósito el admin NO: ver las cifras de todos no es poder borrarle el trabajo a nadie.
