@@ -467,7 +467,7 @@ export function createSettingsRoutes(db, cfg = {}) {
   // desde el desplegable de Agenda. Un cambio de sitio no puede abrir ni cerrar una puerta.
   //
   // Entra quien tenga ALGO que ver aquí, y ve EXACTAMENTE eso. No se afloja ni un candado: el bloque
-  // de empresa —y su <script>, que llama a /api/erp/settings/company— solo se PINTA con `company.read`,
+  // de empresa —y su <script nonce="${c.get('cspNonce')}">, que llama a /api/erp/settings/company— solo se PINTA con `company.read`,
   // y la API sigue exigiéndolo por su cuenta. Quien entre sin ese permiso ve su sección y nada más.
   // Se resuelve UNA vez por petición y se guarda en el contexto: la guardia la necesita para decidir
   // si deja entrar, y la vista para pintar. Sin esto se recorría el menú entero dos veces por carga.
@@ -563,14 +563,14 @@ export function createSettingsRoutes(db, cfg = {}) {
             <div class="cfg-logo">
               <div class="cfg-logo-caja" id="cLogoCaja"></div>
               <div class="cfg-logo-acc">
-                <input type="file" id="cLogoFile" accept="image/png,image/jpeg,image/webp" style="display:none" onchange="subirLogo(this)">
-                <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('cLogoFile').click()">Subir logo</button>
-                <button type="button" class="btn btn-secondary btn-sm" id="cLogoQuitar" onclick="quitarLogo()" style="display:none">Quitar</button>
+                <input type="file" id="cLogoFile" accept="image/png,image/jpeg,image/webp" style="display:none" data-st="logo-file">
+                <button type="button" class="btn btn-secondary btn-sm" data-st="logo-subir">Subir logo</button>
+                <button type="button" class="btn btn-secondary btn-sm" id="cLogoQuitar" data-st="logo-quitar" style="display:none">Quitar</button>
                 <div class="cfg-logo-hint">PNG, JPG o WebP · hasta 2 MB. Sale en tus presupuestos, pedidos, albaranes, facturas y órdenes de compra.</div>
               </div>
             </div>
           </div>
-          <button class="btn btn-primary" onclick="saveCompany()">Guardar cambios</button>
+          <button class="btn btn-primary" data-st="guardar-empresa">Guardar cambios</button>
         </div>
       </div>
       <!-- G2 — El ajuste vive AQUÍ y no escondido en un informe: es una decisión del dueño sobre
@@ -624,7 +624,7 @@ export function createSettingsRoutes(db, cfg = {}) {
       </div>
 
 
-      <script>
+      <script nonce="${c.get('cspNonce')}">
       // G2 — dos botones grandes, no un desplegable escondido: es una decisión, no un ajuste fino.
       var MG_MODO = null;
       function mgPinta(){
@@ -745,12 +745,22 @@ export function createSettingsRoutes(db, cfg = {}) {
       async function saveCompany(){
         try{await api('PUT','/api/erp/settings/company',{company_name:document.getElementById('cName').value,fiscal_id:document.getElementById('cFiscal').value,country:document.getElementById('countryCode').value,currency:document.getElementById('currencyCode').value,currency_symbol:document.getElementById('currencySymbol').value,tax_name:document.getElementById('taxName').value,fiscal_id_label:document.getElementById('fiscalIdLabel').value,document_name:document.getElementById('documentName').value,tax_rate:document.getElementById('cTax').value,irpf_default:document.getElementById('cIrpfDefault').value,dias_recordatorio_impago:document.getElementById('cDiasImpago').value,dias_aviso_pago:document.getElementById('cDiasPago').value,email:document.getElementById('cEmail').value,phone:document.getElementById('cPhone').value,website:document.getElementById('cWeb').value,address:document.getElementById('cAddr').value,postal_code:document.getElementById('cPostal').value,city:document.getElementById('cCity').value,province:document.getElementById('cProvince').value});toast('Guardado ✓');}catch(e){toast(e.message,'err')}
       }
-      </script>`;
+      
+      // 5 SEP 2026 (csp-erp-migrar-handlers) — los cuatro controles de la ficha de empresa.
+      document.getElementById('cLogoFile')?.addEventListener('change', function(){ subirLogo(this); });
+      document.addEventListener('click', function(e){
+        var t = e.target.closest('[data-st]'); if (!t) return;
+        var a = t.getAttribute('data-st');
+        if (a === 'logo-subir') document.getElementById('cLogoFile').click();
+        else if (a === 'logo-quitar') quitarLogo();
+        else if (a === 'guardar-empresa') saveCompany();
+      });
+</script>`;
     // EL ORDEN DE LA PANTALLA: cabecera · lo del NEGOCIO · la sección mudada, AL FINAL.
     // Corrección de Ibrahin (18 ago 2026): los ajustes de la agenda no pueden ir por delante de los
     // del negocio. Esta pantalla es la configuración DEL NEGOCIO; lo de la agenda es una sección
     // suya, no su portada. Quien no tenga `company.read` recibe cabecera + su sección, y punto — ni
-    // el formulario de empresa, ni avisos, ni plantillas, ni situación fiscal, ni el <script> que
+    // el formulario de empresa, ni avisos, ni plantillas, ni situación fiscal, ni el <script nonce="${c.get('cspNonce')}"> que
     // los pide a la API.
     const content = `
       <style>
@@ -790,7 +800,7 @@ export function createSettingsRoutes(db, cfg = {}) {
 
       <div class="modal" id="tplModal"><div class="modal-content" style="max-width:860px">
         <div class="modal-head"><h3 id="tplTitulo">Plantilla</h3>
-          <button class="modal-x" onclick="closeModal('tplModal')">&times;</button></div>
+          <button class="modal-x" data-tp="cerrar">&times;</button></div>
         <div class="modal-body">
           <div id="tplCritico" class="alert alert-warn" style="display:none;margin-bottom:1rem"></div>
 
@@ -799,10 +809,10 @@ export function createSettingsRoutes(db, cfg = {}) {
 
           <label class="form-label">Mensaje</label>
           <div class="tpl-tools">
-            <button type="button" class="btn btn-secondary btn-sm" onmousedown="return fmt(event,'bold')"><b>B</b></button>
-            <button type="button" class="btn btn-secondary btn-sm" onmousedown="return fmt(event,'italic')"><i>I</i></button>
-            <button type="button" class="btn btn-secondary btn-sm" onmousedown="return fmt(event,'insertUnorderedList')">• Lista</button>
-            <button type="button" class="btn btn-secondary btn-sm" onmousedown="return ponerEnlace(event)">🔗 Enlace</button>
+            <button type="button" class="btn btn-secondary btn-sm" data-tp="fmt" data-cmd="bold"><b>B</b></button>
+            <button type="button" class="btn btn-secondary btn-sm" data-tp="fmt" data-cmd="italic"><i>I</i></button>
+            <button type="button" class="btn btn-secondary btn-sm" data-tp="fmt" data-cmd="insertUnorderedList">• Lista</button>
+            <button type="button" class="btn btn-secondary btn-sm" data-tp="enlace">🔗 Enlace</button>
           </div>
           <div id="tplEditor" class="tpl-editor" contenteditable="true"></div>
 
@@ -814,7 +824,7 @@ export function createSettingsRoutes(db, cfg = {}) {
           <details style="margin-top:1rem">
             <summary style="cursor:pointer;color:var(--muted);font-size:.85rem">Editar el HTML a mano (avanzado)</summary>
             <textarea id="tplHtml" class="form-control" style="min-height:160px;font-family:ui-monospace,monospace;font-size:.8rem;margin-top:.5rem"></textarea>
-            <button class="btn btn-secondary btn-sm" style="margin-top:.4rem" onclick="delHtmlAlEditor()">Aplicar al editor visual</button>
+            <button class="btn btn-secondary btn-sm" style="margin-top:.4rem" data-tp="del-html">Aplicar al editor visual</button>
           </details>
 
           <div id="tplAvisos" style="margin-top:1rem"></div>
@@ -827,10 +837,10 @@ export function createSettingsRoutes(db, cfg = {}) {
           </div>
         </div>
         <div class="modal-foot" style="display:flex;gap:.5rem;flex-wrap:wrap">
-          <button class="btn btn-secondary" onclick="previsualizar()">Vista previa</button>
-          ${puedeEditar ? '<button class="btn btn-primary" onclick="guardar()">Guardar</button>' : ''}
-          ${puedeEditar ? '<button class="btn btn-secondary" onclick="volverAlOriginal()">Volver al original</button>' : ''}
-          <button class="btn btn-secondary" onclick="closeModal('tplModal')">Cerrar</button>
+          <button class="btn btn-secondary" data-tp="previsualizar">Vista previa</button>
+          ${puedeEditar ? '<button class="btn btn-primary" data-tp="guardar">Guardar</button>' : ''}
+          ${puedeEditar ? '<button class="btn btn-secondary" data-tp="original">Volver al original</button>' : ''}
+          <button class="btn btn-secondary" data-tp="cerrar">Cerrar</button>
         </div>
       </div></div>
 
@@ -850,7 +860,7 @@ export function createSettingsRoutes(db, cfg = {}) {
         .tpl-hueco{cursor:pointer;font-size:.75rem;font-family:ui-monospace,monospace;border:1px dashed var(--border2);border-radius:6px;padding:.15rem .45rem;background:var(--bg)}
         .tpl-hueco.crit{border-color:#b45309;color:#b45309;border-style:solid}
       </style>
-      <script>
+      <script nonce="${c.get('cspNonce')}">
       const PUEDE_EDITAR = ${puedeEditar ? 'true' : 'false'};
       let TPL = null;   // { tipo, tono, familia, huecos, criticos, ... }
 
@@ -866,7 +876,7 @@ export function createSettingsRoutes(db, cfg = {}) {
             '<div class="tpl-card"><h4>'+escHtml(t.label)+'</h4><div class="desc">'+escHtml(t.descripcion)+'</div>'
             + '<div class="tpl-vars">'
             + t.variantes.map(v =>
-                '<button class="btn btn-secondary btn-sm" onclick="abrir(\\''+t.tipo+'\\',\\''+v.tono+'\\')">'
+                '<button class="btn btn-secondary btn-sm" data-tp="abrir" data-tipo="'+t.tipo+'" data-tono="'+v.tono+'">'
                 + escHtml(v.label || 'Editar')
                 + (v.editada ? ' <span class="tpl-editada">tuya</span>' : '') + '</button>').join('')
             + '</div></div>').join('')
@@ -888,7 +898,7 @@ export function createSettingsRoutes(db, cfg = {}) {
             + ' No podrás guardar si quitas ese elemento.';
         } else { crit.style.display = 'none'; }
         document.getElementById('tplHuecos').innerHTML = TPL.huecos.map(h =>
-          '<span class="tpl-hueco'+(TPL.criticos.includes(h.clave)?' crit':'')+'" onclick="insertar(\\'{{'+h.clave+'}}\\')" title="'+escHtml(h.label)+'">'
+          '<span class="tpl-hueco'+(TPL.criticos.includes(h.clave)?' crit':'')+'" data-tp="insertar" data-clave="'+h.clave+'" title="'+escHtml(h.label)+'">'
           + '{{'+h.clave+'}}</span>').join('');
         document.getElementById('tplEditor').contentEditable = PUEDE_EDITAR ? 'true' : 'false';
         openModal('tplModal');
@@ -972,7 +982,28 @@ export function createSettingsRoutes(db, cfg = {}) {
         } catch(e){ toast(e.message,'err'); }
       }
       cargar();
-      </script>`;
+      
+      // 5 SEP 2026 — las plantillas de correo. La rejilla de plantillas y la lista de huecos se
+      // pintan DESPUES, y los botones de formato usaban un mousedown con return false para no
+      // perder la seleccion del editor: con un oyente, eso es preventDefault().
+      document.addEventListener('mousedown', function(e){
+        var t = e.target.closest('[data-tp="fmt"], [data-tp="enlace"]'); if (!t) return;
+        e.preventDefault();
+        if (t.getAttribute('data-tp') === 'fmt') fmt(e, t.getAttribute('data-cmd'));
+        else ponerEnlace(e);
+      });
+      document.addEventListener('click', function(e){
+        var t = e.target.closest('[data-tp]'); if (!t) return;
+        var a = t.getAttribute('data-tp');
+        if (a === 'cerrar') closeModal('tplModal');
+        else if (a === 'del-html') delHtmlAlEditor();
+        else if (a === 'previsualizar') previsualizar();
+        else if (a === 'guardar') guardar();
+        else if (a === 'original') volverAlOriginal();
+        else if (a === 'abrir') abrir(t.getAttribute('data-tipo'), t.getAttribute('data-tono'));
+        else if (a === 'insertar') insertar('{{' + t.getAttribute('data-clave') + '}}');
+      });
+</script>`;
     return c.html(adminLayout('Plantillas de email', content, 'settings', csrf, c));
   });
 
@@ -1254,7 +1285,7 @@ export function createSettingsRoutes(db, cfg = {}) {
           <div class="fp-summary" id="fpResumen"></div>
 
           ${puedeEditar
-            ? `<button class="btn btn-primary" onclick="guardar()" style="margin-top:1rem">Guardar</button>`
+            ? `<button class="btn btn-primary" data-sf="guardar" style="margin-top:1rem">Guardar</button>`
             : `<p style="color:var(--text2);font-size:13px;margin-top:1rem">No tienes permiso para cambiar la situación fiscal (requiere «Configuración de empresa»). Puedes verla.</p>`}
         </div>
       </div>
@@ -1265,7 +1296,7 @@ export function createSettingsRoutes(db, cfg = {}) {
         .fp-check small{color:var(--text2);font-size:12px;line-height:1.35}
         .fp-summary{margin-top:1rem;padding:.7rem .9rem;border-radius:8px;background:var(--bg3);font-size:13px;color:var(--text2);line-height:1.4}
       </style>
-      <script>
+      <script nonce="${c.get('cspNonce')}">
       const $fp = id => document.getElementById(id);
       function pintarResumen(){
         const m = [];
@@ -1300,7 +1331,10 @@ export function createSettingsRoutes(db, cfg = {}) {
           toast('Guardado ✓'); $fp('fpWarn').innerHTML='';
         }catch(e){ toast(e.message||'Error','err'); }
       }
-      </script>`;
+      
+      // 5 SEP 2026 — el unico boton de la situacion fiscal, que es CONDICIONAL (solo con permiso).
+      document.querySelector('[data-sf="guardar"]')?.addEventListener('click', function(){ guardar(); });
+</script>`;
     return c.html(adminLayout('Situación fiscal', content, 'settings', csrf, c));
   });
 

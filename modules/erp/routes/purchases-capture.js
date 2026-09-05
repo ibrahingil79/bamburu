@@ -462,17 +462,17 @@ export function createPurchaseCaptureRoutes(db) {
     let preload = null;
     const attId = parseInt(c.req.query('attachment'));
     if (attId) preload = preparedCapture(db, attId);
-    return c.html(adminLayout('Capturar factura', capturePage({ sym, bands, today, preload }), 'purchases', csrf, c));
+    return c.html(adminLayout('Capturar factura', capturePage({ sym, bands, today, preload, nonce: c.get('cspNonce') }), 'purchases', csrf, c));
   });
 
   return { api, views };
 }
 
 // ── HTML + JS de la pantalla de revisión (paso 1 subir · paso 2 revisar) ─────
-function capturePage({ sym, bands, today, preload = null }) {
+function capturePage({ sym, bands, today, preload = null, nonce = '' }) {
   const bandsJson = JSON.stringify(bands);
   // Precarga (chat de DISA): se inyecta el blob ya extraído; escapamos `<` para no
-  // romper el <script> con el contenido del documento.
+  // romper el <script nonce="${nonce}"> con el contenido del documento.
   const preloadJson = preload ? JSON.stringify(preload).replace(/</g, '\\u003c') : 'null';
   return `
   <div class="ph">
@@ -490,9 +490,9 @@ function capturePage({ sym, bands, today, preload = null }) {
         <div id="fileLabel" style="color:var(--text2)">Pulsa para elegir archivo o hacer una foto</div>
         <div style="color:var(--text3);font-size:.78rem;margin-top:.3rem">JPG · PNG · WebP · PDF · máx. 12 MB</div>
       </label>
-      <input id="fileInput" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" capture="environment" style="display:none" onchange="onFilePick()">
+      <input id="fileInput" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" capture="environment" style="display:none" data-pc="file">
       <div style="display:flex;justify-content:flex-end;gap:.5rem;margin-top:1rem">
-        <button id="btnExtract" class="btn btn-primary" onclick="extract()" disabled>Extraer datos</button>
+        <button id="btnExtract" class="btn btn-primary" data-pc="extraer" disabled>Extraer datos</button>
       </div>
       <div id="extractMsg" style="margin-top:.75rem"></div>
     </div>
@@ -502,7 +502,7 @@ function capturePage({ sym, bands, today, preload = null }) {
   <div id="step2" style="display:none">
     <div class="grid" style="grid-template-columns:minmax(280px,420px) 1fr;gap:1rem;align-items:start">
       <div class="card" id="docCol" style="position:sticky;top:1rem">
-        <div class="card-head"><h3>Documento</h3><button class="btn btn-secondary btn-sm" onclick="resetCapture()">Subir otra</button></div>
+        <div class="card-head"><h3>Documento</h3><button class="btn btn-secondary btn-sm" data-pc="reset">Subir otra</button></div>
         <div class="card-body" id="docPreview" style="text-align:center"></div>
       </div>
       <div>
@@ -525,7 +525,7 @@ function capturePage({ sym, bands, today, preload = null }) {
           </div>
         </div>
         <div class="card" style="margin-bottom:1rem">
-          <div class="card-head"><h3>Líneas</h3><button class="btn btn-secondary btn-sm" id="btnAddLine" onclick="addBlankLine()">+ Añadir línea</button></div>
+          <div class="card-head"><h3>Líneas</h3><button class="btn btn-secondary btn-sm" id="btnAddLine" data-pc="add-linea">+ Añadir línea</button></div>
           <div class="table-wrap" style="overflow:visible"><table>
             <thead id="linesHead"></thead>
             <tbody id="linesBody"></tbody>
@@ -536,13 +536,13 @@ function capturePage({ sym, bands, today, preload = null }) {
         </div>
         <div style="display:flex;justify-content:flex-end;gap:.5rem">
           <a href="/admin/purchases" class="btn btn-secondary">Cancelar</a>
-          <button id="btnConfirm" class="btn btn-primary" onclick="confirmCapture()">Confirmar y registrar</button>
+          <button id="btnConfirm" class="btn btn-primary" data-pc="confirmar">Confirmar y registrar</button>
         </div>
       </div>
     </div>
   </div>
 
-  <script>
+  <script nonce="${nonce}">
   var SYM = ${JSON.stringify(sym)};
   var BANDS = ${bandsJson};
   var PRELOAD = ${preloadJson};   // blob precargado desde el chat de DISA (o null)
@@ -638,21 +638,21 @@ function capturePage({ sym, bands, today, preload = null }) {
         '<div style="display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap">'
         +'<div><span class="badge b-green">Cuadrado</span> <strong>'+escHtml(supplier.name)+'</strong>'
         +(DATA.match.supplier && DATA.match.supplier.matched_by==='nif'?' <span style="color:var(--text3);font-size:.78rem">(por NIF)</span>':' <span style="color:var(--text3);font-size:.78rem">(por nombre)</span>')+'</div>'
-        +'<button class="btn btn-secondary btn-sm" onclick="supplierChange()">Cambiar</button>'
+        +'<button class="btn btn-secondary btn-sm" data-pc="sup-cambiar">Cambiar</button>'
         +'</div>';
     } else if(supplier.mode==='new'){
       box.innerHTML =
         '<div class="alert alert-warn">Se creará un proveedor NUEVO al confirmar.</div>'
         +'<div class="form-row">'
-        +'<div class="form-group"><label class="form-label">Nombre *</label><input class="form-control" id="nsName" value="'+escHtml(supplier.name||ex.name||'')+'" oninput="supplier.name=this.value"></div>'
-        +'<div class="form-group"><label class="form-label">NIF/CIF</label><input class="form-control" id="nsNif" value="'+escHtml(supplier.fiscal_id||ex.fiscal_id||'')+'" oninput="supplier.fiscal_id=this.value"></div>'
+        +'<div class="form-group"><label class="form-label">Nombre *</label><input class="form-control" id="nsName" value="'+escHtml(supplier.name||ex.name||'')+'" data-pc="sup-nombre"></div>'
+        +'<div class="form-group"><label class="form-label">NIF/CIF</label><input class="form-control" id="nsNif" value="'+escHtml(supplier.fiscal_id||ex.fiscal_id||'')+'" data-pc="sup-nif"></div>'
         +'</div>'
-        +'<button class="btn btn-secondary btn-sm" onclick="supplierChange()">Elegir uno existente</button>';
+        +'<button class="btn btn-secondary btn-sm" data-pc="sup-cambiar">Elegir uno existente</button>';
     } else {
       box.innerHTML =
         '<div class="alert alert-warn">No se ha encontrado el proveedor "'+escHtml(ex.name||'')+'"'+(ex.fiscal_id?(' (NIF '+escHtml(ex.fiscal_id)+')'):'')+'. Elige uno o créalo.</div>'
         +supplierSearchHtml()
-        +'<button class="btn btn-secondary btn-sm" style="margin-top:.5rem" onclick="supplierNew()">+ Crear proveedor nuevo</button>';
+        +'<button class="btn btn-secondary btn-sm" style="margin-top:.5rem" data-pc="sup-nuevo">+ Crear proveedor nuevo</button>';
       bindSupplierSearch();
     }
   }
@@ -672,7 +672,7 @@ function capturePage({ sym, bands, today, preload = null }) {
         var res = await api('GET','/api/erp/suppliers/search?q='+encodeURIComponent(q));
         if(!res.length){ box.style.display='none'; box.innerHTML=''; return; }
         box.innerHTML = res.map(function(s){
-          return '<div style="padding:.5rem .7rem;cursor:pointer;border-bottom:1px solid var(--border)" onmousedown="event.preventDefault();pickSupplier('+s.id+',\\''+escJs(s.name)+'\\')"><strong>'+escHtml(s.name)+'</strong>'+(s.fiscal_id?' <span style="color:var(--text3);font-size:.8rem">'+escHtml(s.fiscal_id)+'</span>':'')+'</div>';
+          return '<div style="padding:.5rem .7rem;cursor:pointer;border-bottom:1px solid var(--border)" data-pc="sup-pick" data-id="'+s.id+'" data-nombre="'+escJs(s.name)+'"><strong>'+escHtml(s.name)+'</strong>'+(s.fiscal_id?' <span style="color:var(--text3);font-size:.8rem">'+escHtml(s.fiscal_id)+'</span>':'')+'</div>';
         }).join('');
         box.style.display='';
       } catch(e){ box.style.display='none'; }
@@ -699,9 +699,9 @@ function capturePage({ sym, bands, today, preload = null }) {
     card.style.display='';
     var box = document.getElementById('destinoBox');
     var html = '<p style="color:var(--text2);margin-bottom:.6rem">Este proveedor tiene órdenes enviadas con pendiente. Puedes cuadrar la factura contra una o registrarla como compra directa.</p>';
-    html += '<label style="display:block;margin-bottom:.4rem;cursor:pointer"><input type="radio" name="dest" value="direct" '+(target.mode==='direct'?'checked':'')+' onchange="pickDest(\\'direct\\',null)"> Compra directa</label>';
+    html += '<label style="display:block;margin-bottom:.4rem;cursor:pointer"><input type="radio" name="dest" value="direct" '+(target.mode==='direct'?'checked':'')+' data-pc="dest" data-tipo="direct"> Compra directa</label>';
     oo.forEach(function(o){
-      html += '<label style="display:block;margin-bottom:.4rem;cursor:pointer"><input type="radio" name="dest" value="'+o.id+'" '+(target.mode==='order'&&target.order_id===o.id?'checked':'')+' onchange="pickDest(\\'order\\','+o.id+')"> Cuadrar contra <strong>'+escHtml(o.order_number||('#'+o.id))+'</strong> <span style="color:var(--text3);font-size:.8rem">('+o.total_pendiente+' uds. pendientes)</span></label>';
+      html += '<label style="display:block;margin-bottom:.4rem;cursor:pointer"><input type="radio" name="dest" value="'+o.id+'" '+(target.mode==='order'&&target.order_id===o.id?'checked':'')+' data-pc="dest" data-tipo="order" data-id="'+o.id+'"> Cuadrar contra <strong>'+escHtml(o.order_number||('#'+o.id))+'</strong> <span style="color:var(--text3);font-size:.8rem">('+o.total_pendiente+' uds. pendientes)</span></label>';
     });
     box.innerHTML = html;
   }
@@ -742,32 +742,32 @@ function capturePage({ sym, bands, today, preload = null }) {
   function directRowHtml(l){
     var prodCell;
     if(l.product_mode==='existing'){
-      prodCell = '<div style="display:flex;align-items:center;gap:.4rem"><span class="badge b-green">✓</span> <span>'+escHtml(l.product_label)+'</span> <button class="btn btn-secondary btn-sm" onclick="lineChangeProduct('+l.uid+')">cambiar</button></div>';
+      prodCell = '<div style="display:flex;align-items:center;gap:.4rem"><span class="badge b-green">✓</span> <span>'+escHtml(l.product_label)+'</span> <button class="btn btn-secondary btn-sm" data-pc="lin-cambiar" data-uid="'+l.uid+'">cambiar</button></div>';
     } else if(l.product_mode==='new'){
       prodCell = newProductCell(l);
     } else {
       prodCell = '<div class="alert alert-warn" style="margin-bottom:.4rem;padding:.4rem .6rem">Sin cuadre: elige un producto o crea uno nuevo.</div>'
         +productSearchHtml(l.uid)
-        +'<button class="btn btn-secondary btn-sm" style="margin-top:.4rem" onclick="lineNewProduct('+l.uid+')">+ Crear producto nuevo</button>';
+        +'<button class="btn btn-secondary btn-sm" style="margin-top:.4rem" data-pc="lin-nuevo" data-uid="'+l.uid+'">+ Crear producto nuevo</button>';
     }
     var iva = l.vat_rate!=null ? (l.vat_rate+'%') : '<span style="color:var(--text3)">?</span>';
     var sub = (l.quantity*l.unit_cost)||0;
     return '<tr data-uid="'+l.uid+'">'
       +'<td style="position:relative;min-width:240px">'+prodCell+'</td>'
-      +'<td><input class="form-control" type="number" min="1" step="1" value="'+l.quantity+'" style="width:80px" oninput="lineSet('+l.uid+',\\'quantity\\',this.value)"></td>'
-      +'<td><input class="form-control" type="number" min="0" step="0.01" value="'+Number(l.unit_cost).toFixed(2)+'" style="width:110px" oninput="lineSet('+l.uid+',\\'unit_cost\\',this.value)"></td>'
+      +'<td><input class="form-control" type="number" min="1" step="1" value="'+l.quantity+'" style="width:80px" data-pc="lin-set" data-uid="'+l.uid+'" data-campo="quantity"></td>'
+      +'<td><input class="form-control" type="number" min="0" step="0.01" value="'+Number(l.unit_cost).toFixed(2)+'" style="width:110px" data-pc="lin-set" data-uid="'+l.uid+'" data-campo="unit_cost"></td>'
       +'<td>'+iva+'</td>'
       +'<td class="sub" style="font-weight:600">'+dineroEs(sub, SYM)+'</td>'
-      +'<td><button class="btn btn-danger btn-sm" onclick="lineRemove('+l.uid+')">×</button></td>'
+      +'<td><button class="btn btn-danger btn-sm" data-pc="lin-quitar" data-uid="'+l.uid+'">×</button></td>'
       +'</tr>';
   }
   function newProductCell(l){
     var opts = '<option value="">— IVA obligatorio —</option>'+BANDS.map(function(b){ return '<option value="'+b.code+'"'+(l.new_tax_band===b.code?' selected':'')+'>'+escHtml(b.label)+' ('+b.rate+'%)</option>'; }).join('');
     return '<div style="border:1px dashed var(--border2);border-radius:8px;padding:.5rem">'
-      +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.4rem"><span class="badge b-teal">Producto NUEVO</span><button class="btn btn-secondary btn-sm" onclick="lineChangeProduct('+l.uid+')">elegir existente</button></div>'
-      +'<input class="form-control" placeholder="Nombre *" value="'+escHtml(l.new_name||'')+'" oninput="lineSet('+l.uid+',\\'new_name\\',this.value)" style="margin-bottom:.35rem">'
-      +'<input class="form-control" placeholder="SKU (opcional)" value="'+escHtml(l.new_sku||'')+'" oninput="lineSet('+l.uid+',\\'new_sku\\',this.value)" style="margin-bottom:.35rem">'
-      +'<select class="form-control" onchange="lineSet('+l.uid+',\\'new_tax_band\\',this.value)">'+opts+'</select>'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.4rem"><span class="badge b-teal">Producto NUEVO</span><button class="btn btn-secondary btn-sm" data-pc="lin-cambiar" data-uid="'+l.uid+'">elegir existente</button></div>'
+      +'<input class="form-control" placeholder="Nombre *" value="'+escHtml(l.new_name||'')+'" data-pc="lin-set" data-uid="'+l.uid+'" data-campo="new_name" style="margin-bottom:.35rem">'
+      +'<input class="form-control" placeholder="SKU (opcional)" value="'+escHtml(l.new_sku||'')+'" data-pc="lin-set" data-uid="'+l.uid+'" data-campo="new_sku" style="margin-bottom:.35rem">'
+      +'<select class="form-control" data-pc="lin-set" data-uid="'+l.uid+'" data-campo="new_tax_band">'+opts+'</select>'
       +'</div>';
   }
   function productSearchHtml(uid){
@@ -785,7 +785,7 @@ function capturePage({ sym, bands, today, preload = null }) {
         if(!res.length){ box.style.display='none'; box.innerHTML=''; return; }
         box.innerHTML = res.map(function(p){
           var label = (p.sku?'['+p.sku+'] ':'')+p.name;
-          return '<div style="padding:.5rem .7rem;cursor:pointer;border-bottom:1px solid var(--border)" onmousedown="event.preventDefault();linePickProduct('+uid+','+p.id+',\\''+escJs(label)+'\\')"><strong>'+escHtml(p.name)+'</strong>'+(p.sku?' <span style="color:var(--text3);font-size:.8rem">['+escHtml(p.sku)+']</span>':'')+' <span style="color:var(--text3);font-size:.8rem">'+escHtml(p.product_code||'')+'</span></div>';
+          return '<div style="padding:.5rem .7rem;cursor:pointer;border-bottom:1px solid var(--border)" data-pc="lin-pick" data-uid="'+uid+'" data-id="'+p.id+'" data-label="'+escJs(label)+'"><strong>'+escHtml(p.name)+'</strong>'+(p.sku?' <span style="color:var(--text3);font-size:.8rem">['+escHtml(p.sku)+']</span>':'')+' <span style="color:var(--text3);font-size:.8rem">'+escHtml(p.product_code||'')+'</span></div>';
         }).join('');
         box.style.display='';
       } catch(e){ box.style.display='none'; }
@@ -824,8 +824,8 @@ function capturePage({ sym, bands, today, preload = null }) {
         +'<td style="text-align:right">'+l.pedido+'</td>'
         +'<td style="text-align:right">'+l.recibido+'</td>'
         +'<td style="text-align:right;font-weight:600">'+l.pendiente+'</td>'
-        +'<td><input class="form-control" type="number" min="0" step="1" value="'+l.quantity+'" style="width:90px" oninput="orderSet('+l.uid+',\\'quantity\\',this.value)">'+warn+'</td>'
-        +'<td><input class="form-control" type="number" min="0" step="0.01" value="'+Number(l.unit_cost).toFixed(2)+'" style="width:110px" oninput="orderSet('+l.uid+',\\'unit_cost\\',this.value)"></td>'
+        +'<td><input class="form-control" type="number" min="0" step="1" value="'+l.quantity+'" style="width:90px" data-pc="ord-set" data-uid="'+l.uid+'" data-campo="quantity">'+warn+'</td>'
+        +'<td><input class="form-control" type="number" min="0" step="0.01" value="'+Number(l.unit_cost).toFixed(2)+'" style="width:110px" data-pc="ord-set" data-uid="'+l.uid+'" data-campo="unit_cost"></td>'
         +'<td class="sub" style="font-weight:600">'+dineroEs(sub, SYM)+'</td>'
         +'</tr>';
     }).join('');
@@ -943,5 +943,45 @@ function capturePage({ sym, bands, today, preload = null }) {
 
   // Precarga desde el chat de DISA (sin re-extraer): salta el Paso 1 y monta la revisión.
   if (PRELOAD) { DATA = PRELOAD; buildReview(); }
-  </script>`;
+  
+      // ── 5 SEP 2026 (csp-erp-migrar-handlers) — ENGANCHE DE LA CAPTURA DE FACTURAS ─────────────
+      // Casi TODO aqui se pinta despues: las lineas que saca el lector, la lista de proveedores que
+      // sugiere y la de productos. Delegacion entera. Los mousedown de las sugerencias necesitan
+      // preventDefault o el blur del campo cierra la lista antes de que llegue el clic.
+      document.addEventListener('click', function(e){
+        var t = e.target.closest('[data-pc]'); if (!t) return;
+        var a = t.getAttribute('data-pc'), uid = Number(t.getAttribute('data-uid'));
+        if (a === 'extraer') extract();
+        else if (a === 'reset') resetCapture();
+        else if (a === 'add-linea') addBlankLine();
+        else if (a === 'confirmar') confirmCapture();
+        else if (a === 'sup-cambiar') supplierChange();
+        else if (a === 'sup-nuevo') supplierNew();
+        else if (a === 'lin-cambiar') lineChangeProduct(uid);
+        else if (a === 'lin-nuevo') lineNewProduct(uid);
+        else if (a === 'lin-quitar') lineRemove(uid);
+      });
+      document.addEventListener('mousedown', function(e){
+        var t = e.target.closest('[data-pc="sup-pick"], [data-pc="lin-pick"]'); if (!t) return;
+        e.preventDefault();
+        if (t.getAttribute('data-pc') === 'sup-pick') pickSupplier(Number(t.getAttribute('data-id')), t.getAttribute('data-nombre'));
+        else linePickProduct(Number(t.getAttribute('data-uid')), Number(t.getAttribute('data-id')), t.getAttribute('data-label'));
+      });
+      document.addEventListener('input', function(e){
+        var t = e.target.closest('[data-pc]'); if (!t) return;
+        var a = t.getAttribute('data-pc');
+        if (a === 'sup-nombre') supplier.name = t.value;
+        else if (a === 'sup-nif') supplier.fiscal_id = t.value;
+        else if (a === 'lin-set') lineSet(Number(t.getAttribute('data-uid')), t.getAttribute('data-campo'), t.value);
+        else if (a === 'ord-set') orderSet(Number(t.getAttribute('data-uid')), t.getAttribute('data-campo'), t.value);
+      });
+      document.addEventListener('change', function(e){
+        var t = e.target.closest('[data-pc]'); if (!t) return;
+        var a = t.getAttribute('data-pc');
+        if (a === 'file') onFilePick();
+        else if (a === 'dest') pickDest(t.getAttribute('data-tipo'),
+                                        t.getAttribute('data-id') ? Number(t.getAttribute('data-id')) : null);
+        else if (a === 'lin-set') lineSet(Number(t.getAttribute('data-uid')), t.getAttribute('data-campo'), t.value);
+      });
+</script>`;
 }

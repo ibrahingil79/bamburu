@@ -28,7 +28,9 @@
 // ─────────────────────────────────────────────────────────────────────────────────────────────────
 import Database from 'better-sqlite3';
 import { randomBytes } from 'crypto';
-import { tenantDb } from './lib/gate-env.mjs';
+import { readFileSync } from 'fs';
+import { join } from 'path';
+import { tenantDb, APP_DIR } from './lib/gate-env.mjs';
 import { MENU, CONFIG_NEGOCIO, FIJAS, CUENTA, condicionesConfig } from '../modules/erp/menu.js';
 
 const SLUG = 'desarrollo-bamburu';
@@ -63,6 +65,21 @@ for (const [tabla, ruta] of [['clients','clients'], ['invoices','invoices'], ['q
   ['portal_mensajes','portal/mensajes']]) {
   for (const r of uno(`SELECT id FROM ${tabla} ORDER BY id LIMIT 40`)) meter(`/admin/${ruta}/${r.id}`);
 }
+// ⚙️ 5 SEP 2026 — Y TODA REGLA LITERAL, LEÍDA DE `core/security-headers.js`. Antes esta lista se
+// escribía a mano, y una pantalla endurecida que no colgara del menú quedaba SIN VIGILAR: pasó con
+// `/admin/purchases/capture`, que estuvo devolviendo 500 y este gate ni la miraba. Ahora, cada regla
+// que sea una ruta literal entra sola: añadir una regla nueva ya no puede olvidarse de vigilarla.
+try {
+  const src = readFileSync(join(APP_DIR, 'core', 'security-headers.js'), 'utf8');
+  const bloque = (src.match(/const SUPERFICIES_ESTRICTAS = \[([\s\S]*?)\n\];/) || [])[1] || '';
+  for (const m of bloque.matchAll(/^\s*\/\^([^,]+)\/,/gm)) {
+    const cuerpo = m[1];
+    if (/[\\[(*+?|]/.test(cuerpo.replace(/\\\//g, '/'))) continue;   // solo las literales
+    const ruta = cuerpo.replace(/\\\//g, '/').replace(/\$$/, '');
+    if (ruta.startsWith('/admin')) meter(ruta);
+  }
+} catch (e) { console.error('  ⚠️  no se pudieron leer las reglas: ' + (e?.message || e)); }
+
 // Y las pantallas de ALTA y EDICIÓN, que tienen reglas propias desde el 4 sep 2026 y no cuelgan del
 // menú: sin esto quedarían endurecidas y sin vigilar.
 for (const ruta of ['quotes', 'pedidos', 'albaranes', 'supplier-returns', 'purchase-orders', 'purchases']) {
@@ -74,11 +91,19 @@ for (const [tabla, ruta] of [['quotes','quotes'], ['purchase_orders','purchase-o
 
 const cookie = 'asess=' + tok;
 const sucias = [];
+const rotas = [];
 let endurecidas = 0, miradas = 0;
 try {
   for (const ruta of rutas) {
     let r, html;
     try { r = await fetch(BASE + ruta, { headers: { cookie } }); html = await r.text(); } catch { continue; }
+    // ⚙️ 5 SEP 2026 — UN 5xx NO SE SALTA, SE CANTA. Este gate hacía `continue` con cualquier
+    // respuesta que no fuera 200, así que una pantalla ENDURECIDA que hubiera dejado de funcionar
+    // salía verde por no mirarla. Pasó dos veces el mismo día: el nonce se escribió dentro de una
+    // plantilla que no tiene el contexto de Hono a mano (`paginaCita`, `capturePage`) y esas dos
+    // pantallas devolvían 500. Un 4xx sí se salta —hay rutas que exigen permiso o no existen—,
+    // pero un 5xx es una pantalla rota.
+    if (r.status >= 500) { rotas.push(ruta + ' → HTTP ' + r.status); continue; }
     if (r.status !== 200) continue;
     miradas++;
     const csp = r.headers.get('content-security-policy') || '';
@@ -97,6 +122,9 @@ try {
 
 console.log(`\n  pantallas miradas: ${miradas} · endurecidas: ${endurecidas}\n`);
 ok(endurecidas > 0, 'hay pantallas endurecidas que vigilar', String(endurecidas));
+ok(rotas.length === 0, 'NINGUNA pantalla del panel responde con un error del servidor',
+   rotas.length ? rotas.length + ' rota(s) · la 1ª: ' + rotas[0] : '');
+for (const r of rotas.slice(0, 10)) console.error('      · ' + r);
 ok(sucias.length === 0,
    'NINGUNA pantalla endurecida sirve código en un atributo ni un bloque sin nonce',
    sucias.length ? sucias.length + ' sucias · la 1ª: ' + sucias[0] : '');

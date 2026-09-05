@@ -193,6 +193,11 @@ const SUPERFICIES_ESTRICTAS = [
   /^\/admin\/supplier-invoices$/,
   /^\/admin\/supplier-invoices\/new$/,
   /^\/admin\/supplier-invoices\/\d+$/,
+  /^\/admin\/purchases\/capture$/,
+  // ⚙️ 5 SEP 2026, 14ª tanda — LAS ÚLTIMAS. Con éstas, el panel entero queda endurecido.
+  /^\/admin\/settings$/,
+  /^\/admin\/settings\/plantillas$/,
+  /^\/admin\/settings\/situacion-fiscal$/,
 ];
 
 export function securityHeaders() {
