@@ -34,7 +34,7 @@ export function createPagosRoutes(db) {
         </div>
       </div>
       <div class="card">
-        <div class="card-head"><h3>Deudas con proveedores (más urgentes arriba)</h3><input class="search" id="searchBox" placeholder="Buscar proveedor o factura..." oninput="filterRows()"></div>
+        <div class="card-head"><h3>Deudas con proveedores (más urgentes arriba)</h3><input class="search" id="searchBox" placeholder="Buscar proveedor o factura..."></div>
         <div class="table-wrap"><table>
           <thead><tr><th>Proveedor</th><th>Factura</th><th>Vence</th><th>Pendiente</th><th>Estado</th><th></th></tr></thead>
           <tbody id="pagosBody">${skeletonRows(6)}</tbody>
@@ -43,7 +43,7 @@ export function createPagosRoutes(db) {
 
       ${pagoModalHtml()}
       ${pagoCuentaModalHtml()}
-      <script>
+      <script nonce="${c.get('cspNonce')}">
       ${pagoModalScript(sym)}
       const SYM = ${JSON.stringify(sym)};
       const ESTADO_LABEL = { pendiente:'Pendiente', parcial:'Pagada en parte', vencida:'Vencida', abono:'Abono (a tu favor)', reembolsado:'Reembolsado' };
@@ -67,9 +67,9 @@ export function createPagosRoutes(db) {
             ? '<strong style="color:var(--ok)">'+dineroEs(r.pendiente||0, SYM)+'</strong> <span style="color:var(--muted);font-size:.78rem">(a tu favor)</span>'
             : '<strong>'+dineroEs(r.pendiente||0, SYM)+'</strong>';
           const btn = esAbono
-            ? '<button class="btn btn-secondary btn-sm" onclick="openPagos('+r.supplier_invoice_id+')">Reembolso</button>'
-            : '<button class="btn btn-secondary btn-sm" onclick="openPagos('+r.supplier_invoice_id+')">Pagar</button>'
-              + ' <button class="btn btn-secondary btn-sm" title="Saldar varias facturas de este proveedor a la vez" onclick="openPagoCuenta('+r.supplier_id+')">A cuenta</button>';
+            ? '<button class="btn btn-secondary btn-sm" data-pg="pagar" data-id="'+r.supplier_invoice_id+'">Reembolso</button>'
+            : '<button class="btn btn-secondary btn-sm" data-pg="pagar" data-id="'+r.supplier_invoice_id+'">Pagar</button>'
+              + ' <button class="btn btn-secondary btn-sm" title="Saldar varias facturas de este proveedor a la vez" data-pg="cuenta" data-id="'+r.supplier_id+'">A cuenta</button>';
           return '<tr class="frow">'
             +'<td>'+escHtml(r.supplier_name||'')+'</td>'
             +'<td><a href="/admin/supplier-invoices/'+r.supplier_invoice_id+'"><strong>'+escHtml(r.internal_code||'')+'</strong></a>'+(r.supplier_invoice_number?' <span style="color:var(--muted);font-size:.8rem">'+escHtml(r.supplier_invoice_number)+'</span>':'')+'</td>'
@@ -88,7 +88,16 @@ export function createPagosRoutes(db) {
       // Tras un pago, recarga la torre (la fila baja su pendiente; si llega a 0 sale de la lista).
       window.pagoOnSaved = function(){ loadPagos(); };
       loadPagos();
-      </script>`;
+      
+      // 5 SEP 2026 — el buscador es fijo; las filas se pintan despues. Los dos botones abren las
+      // ventanas compartidas de pago, que ya vienen migradas desde views/pago-modal.js.
+      document.getElementById('searchBox')?.addEventListener('input', function(){ filterRows(); });
+      document.addEventListener('click', function(e){
+        var t = e.target.closest('[data-pg]'); if (!t) return;
+        var id = Number(t.getAttribute('data-id'));
+        if (t.getAttribute('data-pg') === 'pagar') openPagos(id); else openPagoCuenta(id);
+      });
+</script>`;
     return c.html(adminLayout('Pagos a proveedores', content, 'pagos', c.get('session')?.csrfToken || '', c));
   });
 

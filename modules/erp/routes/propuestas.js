@@ -352,7 +352,7 @@ export function createPropuestasRoutes(db) {
     const sym = db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get()?.currency_symbol || '€';
     const content = `
       <div class="ph"><h2>Propuestas de DISA</h2>
-        <button class="btn btn-secondary" onclick="loadProps()"><i class="ti ti-refresh"></i> Actualizar</button>
+        <button class="btn btn-secondary" id="btnRecargar"><i class="ti ti-refresh"></i> Actualizar</button>
       </div>
       <div class="card" style="margin-bottom:1rem"><div class="card-body" style="color:var(--muted)">
         DISA prepara el trabajo y te lo deja listo: recordatorios de cobro para tus facturas vencidas,
@@ -382,7 +382,7 @@ export function createPropuestasRoutes(db) {
         .prop-tag.t-fiscal{background:rgba(37,99,235,.12);color:#1d4ed8}
         .prop-tag.t-reposicion{background:rgba(217,119,6,.14);color:#b45309}
       </style>
-      <script>
+      <script nonce="${c.get('cspNonce')}">
       ${pagoModalScript(sym)}
       const SYM = ${JSON.stringify(sym)};
       const PUEDE_APROBAR = ${puedeAprobar ? 'true' : 'false'};
@@ -399,7 +399,7 @@ export function createPropuestasRoutes(db) {
         const imp = (p.importe!=null ? p.importe.toFixed(2) : '—');
         const noViva = p.viva ? '' : '<p class="prop-warn">⚠ Esta factura ya no figura como deuda viva (¿cobrada?). Revisa antes de enviar.</p>';
         const acciones = PUEDE_APROBAR
-          ? '<button class="btn btn-primary btn-sm" onclick="aprobar('+p.id+')">Aprobar y enviar</button>'
+          ? '<button class="btn btn-primary btn-sm" data-pr="aprobar" data-id="'+p.id+'">Aprobar y enviar</button>'
           : '<span class="prop-meta">Necesitas permiso de gestión de cobros para enviar.</span>';
         return '<div class="prop-card" id="prop'+p.id+'">'
           +'<div class="prop-head"><div><span class="prop-tag t-cobro">Cobro</span> <strong>'+escHtml(p.client_name||'Cliente')+'</strong> · '+escHtml(p.invoice_number||('#'+p.invoice_id))+'</div>'
@@ -409,7 +409,7 @@ export function createPropuestasRoutes(db) {
           +'<div class="prop-field"><label>Asunto</label><input id="subj'+p.id+'" value="'+escHtml(p.subject||'')+'"></div>'
           +'<div class="prop-field"><label>Mensaje</label><textarea id="body'+p.id+'">'+escHtml(p.body||'')+'</textarea></div>'
           +'<div class="prop-actions">'+acciones
-          +' <button class="btn btn-secondary btn-sm" onclick="descartar('+p.id+')">Descartar</button></div>'
+          +' <button class="btn btn-secondary btn-sm" data-pr="descartar" data-id="'+p.id+'">Descartar</button></div>'
           +'</div>';
       }
 
@@ -426,7 +426,7 @@ export function createPropuestasRoutes(db) {
           + (p.supplier_invoice_number ? ' <span class="prop-meta">'+escHtml(p.supplier_invoice_number)+'</span>' : '');
         const noViva = p.viva ? '' : '<p class="prop-warn">⚠ Esta factura ya no figura como deuda viva (¿pagada?). Revísala antes de pagar.</p>';
         const acciones = PUEDE_PAGAR
-          ? '<button class="btn btn-primary btn-sm" onclick="openPagos('+p.supplier_invoice_id+')">Aprobar y registrar pago</button>'
+          ? '<button class="btn btn-primary btn-sm" data-pr="pagar" data-id="'+p.supplier_invoice_id+'">Aprobar y registrar pago</button>'
           : '<span class="prop-meta">Necesitas permiso de compras para registrar el pago.</span>';
         return '<div class="prop-card" id="prop'+p.id+'">'
           +'<div class="prop-head"><div><span class="prop-tag t-pago">Pago</span> <strong>'+escHtml(p.supplier_name||'Proveedor')+'</strong> · '+factura+'</div>'
@@ -434,7 +434,7 @@ export function createPropuestasRoutes(db) {
           +'<div class="prop-meta">Vencimiento: '+escHtml(p.due_date||'—')+' · importe pendiente '+SYM+imp+'</div>'
           + noViva
           +'<div class="prop-actions">'+acciones
-          +' <button class="btn btn-secondary btn-sm" onclick="descartar('+p.id+')">Descartar</button></div>'
+          +' <button class="btn btn-secondary btn-sm" data-pr="descartar" data-id="'+p.id+'">Descartar</button></div>'
           +'</div>';
       }
 
@@ -449,7 +449,7 @@ export function createPropuestasRoutes(db) {
         const noViva = p.viva ? ''
           : '<p class="prop-warn">⚠ Este borrador ya no está pendiente'+(p.occ_status?' ('+escHtml(p.occ_status)+')':'')+'. Se emitió u omitió desde Recurrentes. Descártala.</p>';
         const acciones = (PUEDE_EMITIR && p.viva)
-          ? '<button class="btn btn-primary btn-sm" onclick="emitir('+p.id+')">Aprobar y emitir</button>'
+          ? '<button class="btn btn-primary btn-sm" data-pr="emitir" data-id="'+p.id+'">Aprobar y emitir</button>'
           : (!PUEDE_EMITIR ? '<span class="prop-meta">Necesitas permiso para emitir facturas.</span>' : '');
         return '<div class="prop-card" id="prop'+p.id+'">'
           +'<div class="prop-head"><div><span class="prop-tag t-recurrente">Recurrente</span> <strong>'+escHtml(p.client_name||'Cliente')+'</strong> · '+escHtml(p.document_name||'Factura')+'</div>'
@@ -457,7 +457,7 @@ export function createPropuestasRoutes(db) {
           +'<div class="prop-meta">'+escHtml(p.concepto||'—')+(desglose?' · '+desglose:'')+'</div>'
           + noViva
           +'<div class="prop-actions">'+acciones
-          +' <button class="btn btn-secondary btn-sm" onclick="descartar('+p.id+')">Descartar</button></div>'
+          +' <button class="btn btn-secondary btn-sm" data-pr="descartar" data-id="'+p.id+'">Descartar</button></div>'
           +'</div>';
       }
 
@@ -472,7 +472,7 @@ export function createPropuestasRoutes(db) {
           : '<p class="prop-warn">⚠ Este cliente YA NO está dormido: te ha comprado desde que se propuso. Descártala — no le escribas que le echas de menos.</p>';
         if (!p.redactada) {
           const acc = (PUEDE_ESCRIBIR && p.viva)
-            ? '<button class="btn btn-primary btn-sm" onclick="redactar('+p.id+')">Aprobar — DISA redacta el email</button>'
+            ? '<button class="btn btn-primary btn-sm" data-pr="redactar" data-id="'+p.id+'">Aprobar — DISA redacta el email</button>'
             : (!PUEDE_ESCRIBIR ? '<span class="prop-meta">Necesitas permiso de CRM para escribir a clientes.</span>' : '');
           return '<div class="prop-card" id="prop'+p.id+'">'
             +'<div class="prop-head"><div><span class="prop-tag t-dormido">Dormido</span> <strong>'+escHtml(p.client_name||'Cliente')+'</strong></div>'
@@ -482,12 +482,12 @@ export function createPropuestasRoutes(db) {
             + noViva
             +'<div class="prop-meta" style="margin-top:.4rem;font-style:italic">Aprobar NO envía nada: DISA te redacta el borrador y lo lees antes.</div>'
             +'<div class="prop-actions">'+acc
-            +' <button class="btn btn-secondary btn-sm" onclick="descartar('+p.id+')">Descartar</button></div>'
+            +' <button class="btn btn-secondary btn-sm" data-pr="descartar" data-id="'+p.id+'">Descartar</button></div>'
             +'</div>';
         }
         // Ya redactada: el borrador, editable, y el botón de enviar de verdad.
         const acc = PUEDE_ESCRIBIR
-          ? '<button class="btn btn-primary btn-sm" onclick="enviarDormido('+p.id+')">Enviar email</button>'
+          ? '<button class="btn btn-primary btn-sm" data-pr="enviar-dormido" data-id="'+p.id+'">Enviar email</button>'
           : '<span class="prop-meta">Necesitas permiso de CRM para enviar.</span>';
         return '<div class="prop-card" id="prop'+p.id+'">'
           +'<div class="prop-head"><div><span class="prop-tag t-dormido">Dormido</span> <strong>'+escHtml(p.client_name||'Cliente')+'</strong> · <span class="prop-meta">borrador listo</span></div>'
@@ -498,7 +498,7 @@ export function createPropuestasRoutes(db) {
           +'<div class="prop-field"><label>Asunto</label><input id="subj'+p.id+'" value="'+escHtml(p.subject||'')+'"></div>'
           +'<div class="prop-field"><label>Mensaje (edítalo si quieres)</label><textarea id="body'+p.id+'">'+escHtml(p.body||'')+'</textarea></div>'
           +'<div class="prop-actions">'+acc
-          +' <button class="btn btn-secondary btn-sm" onclick="descartar('+p.id+')">Descartar</button></div>'
+          +' <button class="btn btn-secondary btn-sm" data-pr="descartar" data-id="'+p.id+'">Descartar</button></div>'
           +'</div>';
       }
 
@@ -524,7 +524,7 @@ export function createPropuestasRoutes(db) {
         const noViva = p.viva ? ''
           : '<p class="prop-warn">⚠ Ya no declaras este modelo en tu ficha fiscal. Descártala, o revisa tu situación en Ajustes › Situación fiscal.</p>';
         const acciones = p.viva
-          ? '<button class="btn btn-primary btn-sm" onclick="preparar('+p.id+')">Marcar como preparado</button>'
+          ? '<button class="btn btn-primary btn-sm" data-pr="preparar" data-id="'+p.id+'">Marcar como preparado</button>'
           : '';
         return '<div class="prop-card" id="prop'+p.id+'">'
           +'<div class="prop-head"><div><span class="prop-tag t-fiscal">Fiscal</span> <strong>'+escHtml(p.etiqueta||p.model_nombre||'Modelo')+'</strong></div>'
@@ -536,7 +536,7 @@ export function createPropuestasRoutes(db) {
           + noViva
           +'<div class="prop-meta" style="margin-top:.4rem;font-style:italic">Marcar como preparado NO presenta nada a la AEAT: preséntalo tú.</div>'
           +'<div class="prop-actions">'+acciones
-          +' <button class="btn btn-secondary btn-sm" onclick="descartar('+p.id+')">Descartar</button></div>'
+          +' <button class="btn btn-secondary btn-sm" data-pr="descartar" data-id="'+p.id+'">Descartar</button></div>'
           +'</div>';
       }
 
@@ -562,7 +562,7 @@ export function createPropuestasRoutes(db) {
         const noViva = p.viva ? ''
           : '<p class="prop-warn">⚠ Este proveedor ya no tiene productos bajo mínimo (repuesto). Descártala.</p>';
         const acciones = p.viva
-          ? '<button class="btn btn-primary btn-sm" onclick="preparaCompra('+p.id+')">Preparar borrador de compra</button>'
+          ? '<button class="btn btn-primary btn-sm" data-pr="preparar-compra" data-id="'+p.id+'">Preparar borrador de compra</button>'
           : '';
         return '<div class="prop-card" id="prop'+p.id+'">'
           +'<div class="prop-head"><div><span class="prop-tag t-reposicion">Reposición</span> <strong>'+escHtml(p.supplier_name||'Proveedor')+'</strong></div>'
@@ -570,7 +570,7 @@ export function createPropuestasRoutes(db) {
           + tabla + total + noViva
           +'<div class="prop-meta" style="margin-top:.4rem;font-style:italic">Preparar NO envía nada al proveedor: crea el borrador y te lleva a revisarlo.</div>'
           +'<div class="prop-actions">'+acciones
-          +' <button class="btn btn-secondary btn-sm" onclick="descartar('+p.id+')">Descartar</button></div>'
+          +' <button class="btn btn-secondary btn-sm" data-pr="descartar" data-id="'+p.id+'">Descartar</button></div>'
           +'</div>';
       }
 
@@ -662,7 +662,23 @@ export function createPropuestasRoutes(db) {
         catch(e){ toast(e.message||'Error','err'); }
       };
       loadProps();
-      </script>`;
+      
+      // 5 SEP 2026 (csp-erp-migrar-handlers) — TODAS las propuestas se pintan despues de pedirlas,
+      // y cada tipo trae sus propios botones: delegacion, un solo oyente. Los ids vuelven a numero.
+      document.getElementById('btnRecargar')?.addEventListener('click', function(){ loadProps(); });
+      document.addEventListener('click', function(e){
+        var t = e.target.closest('[data-pr]'); if (!t) return;
+        var a = t.getAttribute('data-pr'), id = Number(t.getAttribute('data-id'));
+        if (a === 'aprobar') aprobar(id);
+        else if (a === 'descartar') descartar(id);
+        else if (a === 'emitir') emitir(id);
+        else if (a === 'redactar') redactar(id);
+        else if (a === 'enviar-dormido') enviarDormido(id);
+        else if (a === 'preparar') preparar(id);
+        else if (a === 'preparar-compra') preparaCompra(id);
+        else if (a === 'pagar') openPagos(id);
+      });
+</script>`;
     return c.html(adminLayout('Propuestas de DISA', content, 'propuestas', csrf, c));
   });
 

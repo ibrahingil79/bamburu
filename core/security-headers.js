@@ -163,6 +163,13 @@ const SUPERFICIES_ESTRICTAS = [
   /^\/admin\/citas\/horarios$/,
   /^\/admin\/citas\/publica$/,
   /^\/cita(\/|$)/,
+  // ⚙️ 5 SEP 2026, 10ª tanda — las cuatro del dinero y el stock. Sus filas se pintan desde
+  // JavaScript, y sus botones abren las ventanas COMPARTIDAS de cobro, pago y stock, que ya venían
+  // migradas: aquí solo quedaba el filtro fijo de cada una y el bloque sin nonce.
+  /^\/admin\/cobros$/,
+  /^\/admin\/pagos$/,
+  /^\/admin\/inventory$/,
+  /^\/admin\/propuestas$/,
 ];
 
 export function securityHeaders() {

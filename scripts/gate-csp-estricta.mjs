@@ -628,12 +628,14 @@ try {
   ok(!avi.noCierra, '  y el aspa de cada una la cierra', avi.noCierra || '');
   ok((await violaciones(p13)).length === 0, '  y sin una sola violación de CSP');
 
-  // Y EL GUARDIA DE LAS OTRAS DIEZ. Las ventanas de `views/` las comparten pantallas que siguen en
-  // legado (inventario, productos, cobros, pagos, facturas…). Migrarlas allí no rompe nada solo si
-  // lo de DENTRO sigue respondiendo: se abre el kardex en una pantalla NO endurecida y se pulsa el
-  // botón migrado que vive dentro de él.
+  // Y EL GUARDIA DE LAS OTRAS PANTALLAS que comparten las ventanas de `views/`. Migrarlas allí no
+  // rompe nada solo si lo de DENTRO sigue respondiendo cuando la ventana la abre OTRA pantalla.
+  // ⚙️ 5 SEP 2026 — antes esto exigía además que `/admin/inventory` siguiera EN LEGADO. Era una
+  // condición que caduca por construcción: el día que le tocó el turno, el gate se puso rojo sin
+  // que nada estuviera roto. La comprobación que importa es la de abajo (abrir el kardex desde
+  // aquí y pulsar dentro), y ésa no depende de qué política sirva la pantalla.
   const rInv = await p13.goto(ERP_BASE + '/admin/inventory', { waitUntil: 'networkidle0' });
-  ok(/script-src[^;]*'unsafe-inline'/.test(cabecera(rInv)), '/admin/inventory sigue en legado (no es de esta cola)');
+  ok(rInv.status() === 200, '/admin/inventory abre (usa las ventanas compartidas desde fuera)');
   await new Promise(x => setTimeout(x, 900));
   const kx = await p13.evaluate(async () => {
     const res = {};
@@ -973,8 +975,70 @@ try {
   }
   ok((await violaciones(p16)).length === 0, 'la agenda entera, sin una violación de CSP');
 
+
+  // ── 17 · LAS DEL DINERO Y EL STOCK: filas pintadas, ventanas compartidas ──
+  console.log('\n[17] Cobros, pagos, inventario y propuestas: se pulsa una fila de cada una');
+  // Estas cuatro pintan sus filas desde JavaScript y sus botones abren las ventanas compartidas.
+  // Se abren y se CIERRAN: no se registra un cobro, ni un pago, ni un ajuste, ni se aprueba una
+  // propuesta. Lo que se mide es que el botón de una fila —que no existía al cargar— responde.
+  const p17 = await nuevaPagina();
+  await p17.setCookie({ name: 'asess', value: erpTok, domain: 'desarrollo-bamburu.localhost', path: '/' });
+  const DINERO = [
+    ['/admin/cobros',    '[data-act="cm-abrir-cobros"]', 'cobroModal'],
+    ['/admin/pagos',     '[data-pg="pagar"]',            'pagoModal'],
+    ['/admin/inventory', '[data-act="inv-kardex"]',      'stockKardexModal'],
+  ];
+  for (const [ruta, sel, modal] of DINERO) {
+    const r = await p17.goto(ERP_BASE + ruta, { waitUntil: 'networkidle0' });
+    ok(/script-src[^;]*'nonce-/.test(cabecera(r)), ruta + ' — endurecida');
+    await new Promise(x => setTimeout(x, 1100));
+    const res = await p17.evaluate(async (sel, modal) => {
+      const b = document.querySelector(sel);
+      if (!b) return 'ninguna fila trae ese botón';
+      b.click(); await new Promise(r => setTimeout(r, 1200));
+      const m = document.getElementById(modal);
+      if (!m?.classList.contains('open')) return 'la ventana NO abre';
+      m.querySelector('.modal-close')?.click();
+      await new Promise(r => setTimeout(r, 400));
+      return m.classList.contains('open') ? 'abre pero no cierra' : 'ok';
+    }, sel, modal);
+    ok(res === 'ok', '  PULSAR el botón de una fila abre su ventana y se cierra', res);
+  }
+  // El buscador de cada una, que es lo único fijo que tienen.
+  for (const ruta of ['/admin/cobros', '/admin/pagos', '/admin/inventory']) {
+    await p17.goto(ERP_BASE + ruta, { waitUntil: 'networkidle0' });
+    await new Promise(x => setTimeout(x, 900));
+    const res = await p17.evaluate(async () => {
+      const s = document.getElementById('searchBox'); if (!s) return 'sin buscador';
+      const visibles = () => [...document.querySelectorAll('tbody tr')].filter(t => t.style.display !== 'none').length;
+      const antes = visibles();
+      if (!antes) return 'sin filas que filtrar';
+      s.value = 'zzzz-no-existe'; s.dispatchEvent(new Event('input', { bubbles: true }));
+      await new Promise(r => setTimeout(r, 400));
+      const menos = visibles() < antes;
+      s.value = ''; s.dispatchEvent(new Event('input', { bubbles: true }));
+      return menos ? 'ok' : 'el buscador no filtra';
+    });
+    ok(res === 'ok', '  y su buscador filtra al teclear · ' + ruta, res);
+  }
+  // Propuestas: se pulsa «Descartar», que pregunta antes en la propia página.
+  const r17 = await p17.goto(ERP_BASE + '/admin/propuestas', { waitUntil: 'networkidle0' });
+  ok(/script-src[^;]*'nonce-/.test(cabecera(r17)), '/admin/propuestas — endurecida');
+  await new Promise(x => setTimeout(x, 1300));
+  const prop = await p17.evaluate(async () => {
+    const b = document.querySelector('[data-pr="descartar"]');
+    if (!b) return 'no hay propuestas hoy';
+    const antes = document.body.innerHTML.length;
+    b.click(); await new Promise(r => setTimeout(r, 800));
+    const ov = document.querySelector('.modal-overlay.open, #pdOverlay.open');
+    if (ov) ov.remove();                         // se cancela: no se descarta nada
+    return (ov || document.body.innerHTML.length !== antes) ? 'ok' : 'MUDO';
+  });
+  ok(prop === 'ok', '  PULSAR «Descartar» en una propuesta abre su confirmación', prop);
+  ok((await violaciones(p17)).length === 0, '  las cuatro, sin una violación de CSP');
+
   const todas = [...(await violaciones(p3)), ...(await violaciones(p4)),
-                 ...(await violaciones(p11)), ...(await violaciones(p12)), ...(await violaciones(p13)), ...(await violaciones(p14)), ...(await violaciones(p15)), ...(await violaciones(p16)),
+                 ...(await violaciones(p11)), ...(await violaciones(p12)), ...(await violaciones(p13)), ...(await violaciones(p14)), ...(await violaciones(p15)), ...(await violaciones(p16)), ...(await violaciones(p17)),
                  ...(await violaciones(p9)),
                  ...(await violaciones(p8)),
                  ...(await violaciones(p5)), ...(await violaciones(p6)), ...(await violaciones(p7))];

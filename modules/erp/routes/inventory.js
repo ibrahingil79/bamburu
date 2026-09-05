@@ -24,7 +24,7 @@ export function createInventoryRoutes(db, cfg = {}) {
       <div class="ph"><h2>Inventario</h2>
         <div style="display:flex;align-items:center;gap:.5rem">
           <label style="color:var(--muted);font-size:.85rem">Almacén</label>
-          <select class="form-control" id="whFilter" style="width:auto;min-width:170px" onchange="onWhChange()">
+          <select class="form-control" id="whFilter" style="width:auto;min-width:170px">
             <option value="">Todos (total)</option>
             ${whOptions}
           </select>
@@ -40,7 +40,7 @@ export function createInventoryRoutes(db, cfg = {}) {
         <div class="bf-card inerte"><span class="bf-k" id="kValLabel">Valor del almacén</span><span class="bf-v gana" id="kVal">—</span></div>
       </div>
       <div class="card">
-        <div class="card-head"><h3>Existencias (productos físicos)</h3><input class="search" id="searchBox" placeholder="Buscar nombre o SKU..." oninput="filterTable()"></div>
+        <div class="card-head"><h3>Existencias (productos físicos)</h3><input class="search" id="searchBox" placeholder="Buscar nombre o SKU..."></div>
         <div class="table-wrap"><table>
           <thead><tr><th>Producto</th><th>SKU</th><th>Categoría</th><th>Stock</th><th>Reservado</th><th>Disponible</th><th>Coste medio</th><th>Valor</th><th>Estado</th><th></th></tr></thead>
           <tbody id="invBody">${skeletonRows(10)}</tbody>
@@ -48,7 +48,7 @@ export function createInventoryRoutes(db, cfg = {}) {
       </div>
 
       ${stockModalHtml()}
-      <script>
+      <script nonce="${c.get('cspNonce')}">
       ${stockModalScript(sym, warehouses)}
       const CAN_EDIT = ${canEdit ? 'true' : 'false'};
       const WAREHOUSES = ${jsonForScript(warehouses)};
@@ -109,8 +109,8 @@ export function createInventoryRoutes(db, cfg = {}) {
           const nm = (p.name||'').replace(/'/g,'');
           // "Ver stock" abre el kardex (con desglose por almacén); "Ajustar" usa el stock GLOBAL
           // (el ajuste por almacén es Capa 2): por eso pasa p.stock, no la cantidad filtrada.
-          const acts = '<button class="btn btn-secondary btn-sm" onclick="openStockKardex('+p.id+',\\''+escHtml(nm)+'\\')">Ver stock</button>'
-            + (CAN_EDIT?' <button class="btn btn-secondary btn-sm" onclick="openAjustar('+p.id+',\\''+escHtml(nm)+'\\','+p.stock+')">Ajustar</button>':'');
+          const acts = '<button class="btn btn-secondary btn-sm" data-act="inv-kardex" data-id="'+p.id+'" data-nombre="'+escHtml(nm)+'">Ver stock</button>'
+            + (CAN_EDIT?' <button class="btn btn-secondary btn-sm" data-act="sm-ajustar" data-id="'+p.id+'" data-nombre="'+escHtml(nm)+'" data-stock="'+p.stock+'">Ajustar</button>':'');
           const avg=Number(p.average_cost||0);
           const val=avg*s;
           const rsv=reservedOf(p), avl=availableOf(p);
@@ -129,7 +129,17 @@ export function createInventoryRoutes(db, cfg = {}) {
       const _q = new URLSearchParams(location.search).get('q');
       if (_q) document.getElementById('searchBox').value = _q;
       loadInv();
-      </script>`;
+      
+      // 5 SEP 2026 (csp-erp-migrar-handlers) — los dos filtros son fijos. Las filas se pintan
+      // despues: el boton de Ajustar lo despacha el enganche COMPARTIDO de views/stock-modal.js
+      // (clave sm-ajustar); el de Ver stock se despacha aqui, porque esa clave no existe alli.
+      document.getElementById('whFilter')?.addEventListener('change', function(){ onWhChange(); });
+      document.getElementById('searchBox')?.addEventListener('input', function(){ filterTable(); });
+      document.addEventListener('click', function(e){
+        var t = e.target.closest('[data-act="inv-kardex"]');
+        if (t) openStockKardex(Number(t.getAttribute('data-id')), t.getAttribute('data-nombre'));
+      });
+</script>`;
     return c.html(adminLayout('Inventario', content, 'inventory', c.get('session')?.csrfToken || '', c));
   });
 

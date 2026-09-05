@@ -36,7 +36,7 @@ export function createCobrosRoutes(db) {
         </div>
       </div>
       <div class="card">
-        <div class="card-head"><h3>Pipeline de cobro (más urgentes arriba)</h3><input class="search" id="searchBox" placeholder="Buscar cliente o factura..." oninput="filterRows()"></div>
+        <div class="card-head"><h3>Pipeline de cobro (más urgentes arriba)</h3><input class="search" id="searchBox" placeholder="Buscar cliente o factura..."></div>
         <div class="table-wrap"><table>
           <thead><tr><th>Cliente</th><th>Factura</th><th>Pendiente</th><th>Etapa</th><th>Próxima acción</th><th></th></tr></thead>
           <tbody id="cobrosBody">${skeletonRows(6)}</tbody>
@@ -44,7 +44,7 @@ export function createCobrosRoutes(db) {
       </div>
 
       ${cobroModalHtml()}
-      <script>
+      <script nonce="${c.get('cspNonce')}">
       ${cobroModalScript(sym)}
       const SYM = ${JSON.stringify(sym)};
       let cobrosRows = [];
@@ -75,7 +75,7 @@ export function createCobrosRoutes(db) {
             // formulario ya precargado (importe pendiente + fecha hoy + forma)—; "Gestionar" (la
             // reclamación: próxima acción, recordatorios) queda a un clic. Antes se llegaba al
             // cobro pasando SIEMPRE por Gestionar (3 clics); ahora son 2, como el espejo de Pagos.
-            +'<td style="white-space:nowrap"><button class="btn btn-primary btn-sm" onclick="openCobros('+r.invoice_id+')">Registrar cobro</button> <button class="btn btn-secondary btn-sm" onclick="openGestion('+r.invoice_id+')">Gestionar</button></td>'
+            +'<td style="white-space:nowrap"><button class="btn btn-primary btn-sm" data-act="cm-abrir-cobros" data-id="'+r.invoice_id+'">Registrar cobro</button> <button class="btn btn-secondary btn-sm" data-cb="gestion" data-id="'+r.invoice_id+'">Gestionar</button></td>'
             +'</tr>';
         }).join('') : window.emptyRow(6, 'No hay nada pendiente de cobro ahora mismo. Todo al día.', { tone: 'ok' });
         filterRows();
@@ -90,7 +90,16 @@ export function createCobrosRoutes(db) {
       // (la fila baja su pendiente; si llega a 0 sale de la lista y el total se actualiza).
       window.cobroOnSaved = function(id){ loadCobros(); };
       loadCobros();
-      </script>`;
+      
+      // 5 SEP 2026 (csp-erp-migrar-handlers) — el buscador es fijo. Las filas se pintan despues:
+      // el boton de cobro lo despacha el enganche COMPARTIDO de views/cobro-modal.js (misma clave
+      // cm-abrir-cobros), y el de gestion se despacha aqui porque es de esta pantalla.
+      document.getElementById('searchBox')?.addEventListener('input', function(){ filterRows(); });
+      document.addEventListener('click', function(e){
+        var t = e.target.closest('[data-cb="gestion"]');
+        if (t) openGestion(Number(t.getAttribute('data-id')));
+      });
+</script>`;
     return c.html(adminLayout('Cobros', content, 'cobros', c.get('session')?.csrfToken || '', c));
   });
 
