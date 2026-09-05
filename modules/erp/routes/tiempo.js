@@ -233,13 +233,13 @@ export function createTiempoRoutes(db) {
             <select class="form-control" id="tProyecto">${proyectoOptions || '<option value="">— No hay proyectos —</option>'}</select></div>
           <div class="form-group" style="flex:2;min-width:200px;margin:0"><label class="form-label">¿En qué trabajas?</label>
             <input class="form-control" id="tDesc" placeholder="Descripción corta" maxlength="300"></div>
-          <button class="btn btn-primary" id="tBtnStart" onclick="tStart()">▶ Empezar</button>
-          <button class="btn btn-secondary" id="tBtnManual" onclick="tOpenManual()">+ Entrada manual</button>
+          <button class="btn btn-primary" id="tBtnStart">▶ Empezar</button>
+          <button class="btn btn-secondary" id="tBtnManual">+ Entrada manual</button>
         </div>
         <div id="tRunning" style="display:none;margin-top:.75rem;padding:.6rem .8rem;background:var(--accent-soft);border-radius:8px;display:none;align-items:center;justify-content:space-between;gap:.5rem">
           <span id="tRunningTx" style="color:var(--text)"></span>
           <span style="display:flex;align-items:center;gap:.75rem"><strong id="tRunningClock" style="font-family:monospace;font-size:1.1rem">0:00:00</strong>
-          <button class="btn btn-danger btn-sm" onclick="tStop()">■ Parar</button></span>
+          <button class="btn btn-danger btn-sm" data-tp="parar">■ Parar</button></span>
         </div>
       </div></div>` : ''}
 
@@ -247,7 +247,7 @@ export function createTiempoRoutes(db) {
 
       <div class="modal-overlay" id="tModal">
         <div class="modal" style="max-width:560px">
-          <div class="modal-head"><h3 id="tModalTitle">Entrada manual</h3><button class="modal-close" onclick="closeModal('tModal')">✕</button></div>
+          <div class="modal-head"><h3 id="tModalTitle">Entrada manual</h3><button class="modal-close" data-tp="cerrar">✕</button></div>
           <div class="modal-body">
             <input type="hidden" id="tId">
             <div class="form-group"><label class="form-label">Proyecto *</label><select class="form-control" id="tmProyecto">${proyectoOptions}</select></div>
@@ -259,11 +259,11 @@ export function createTiempoRoutes(db) {
             </div>
             <div class="form-group"><label style="display:flex;align-items:center;gap:.5rem"><input type="checkbox" id="tmFact" checked> Facturable</label></div>
           </div>
-          <div class="modal-foot"><button class="btn btn-secondary" onclick="closeModal('tModal')">Cancelar</button><button class="btn btn-primary" onclick="tSaveManual()">Guardar</button></div>
+          <div class="modal-foot"><button class="btn btn-secondary" data-tp="cerrar">Cancelar</button><button class="btn btn-primary" data-tp="guardar">Guardar</button></div>
         </div>
       </div>
 
-      <script>
+      <script nonce="${c.get('cspNonce')}">
       const T_SYM=${JSON.stringify(sym)}, T_LUNES=${JSON.stringify(lunes)}, T_HOY=${JSON.stringify(hoy)}, T_EDIT=${puedeEditar ? 'true' : 'false'};
       const T_DIAS=${JSON.stringify(dias)};
       // El dinero, escrito como en España. window.eur vive en layout.js.
@@ -313,7 +313,7 @@ export function createTiempoRoutes(db) {
         // Facturada = ya cobrada en una factura emitida: candado, no botones (se libera sola si se anula la factura).
         const fact = e.facturada?('<span class="badge b-blue" title="Facturada en '+escHtml(e.invoice_number||'')+'">🔒 Facturada</span>')
           : (e.facturable?'<span class="badge b-green">Sí</span>':'<span class="badge b-gray">No</span>');
-        const acc = (T_EDIT && !e.corriendo && !e.facturada) ? '<button class="btn btn-secondary btn-sm" onclick="tEdit('+e.id+')">Editar</button> <button class="btn btn-danger btn-sm" onclick="tDel('+e.id+')">Eliminar</button>' : '';
+        const acc = (T_EDIT && !e.corriendo && !e.facturada) ? '<button class="btn btn-secondary btn-sm" data-tp="editar" data-id="'+e.id+'">Editar</button> <button class="btn btn-danger btn-sm" data-tp="borrar" data-id="'+e.id+'">Eliminar</button>' : '';
         return '<tr><td><strong>'+escHtml(e.proyecto_nombre||'')+'</strong>'+(e.proyecto_codigo?'<br><span style="color:var(--muted);font-size:.75rem;font-family:monospace">'+escHtml(e.proyecto_codigo)+'</span>':'')+'</td>'
           +'<td>'+escHtml(e.descripcion||'—')+'</td>'
           +'<td style="white-space:nowrap">'+(e.corriendo?'<span style="color:var(--accent)">⏱ corriendo</span>':fmtDur(e.duracion_seg))+'</td>'
@@ -347,7 +347,21 @@ export function createTiempoRoutes(db) {
       }
       async function tDel(id){ if(!await window.confirmarEnPagina({titulo:'Eliminar la entrada de tiempo',texto:'Se oculta de la lista. El dato se conserva.',aceptar:'Sí, eliminarla'}))return; try{ await api('DELETE','/api/erp/tiempo/'+id); toast('Eliminada'); tCargar(); }catch(e){ toast(e.message,'err'); } }
       tCargar();
-      </script>`;
+      
+      // 5 SEP 2026 — el boton de Parar y las filas se pintan despues (aparecen solo con un
+      // cronometro en marcha o con entradas ya guardadas): delegacion.
+      document.getElementById('tBtnStart')?.addEventListener('click', function(){ tStart(); });
+      document.getElementById('tBtnManual')?.addEventListener('click', function(){ tOpenManual(); });
+      document.addEventListener('click', function(e){
+        var t = e.target.closest('[data-tp]'); if (!t) return;
+        var a = t.getAttribute('data-tp'), id = Number(t.getAttribute('data-id'));
+        if (a === 'parar') tStop();
+        else if (a === 'cerrar') closeModal('tModal');
+        else if (a === 'guardar') tSaveManual();
+        else if (a === 'editar') tEdit(id);
+        else if (a === 'borrar') tDel(id);
+      });
+</script>`;
     return c.html(adminLayout('Registro de tiempo', content, 'tiempo', c.get('session')?.csrfToken || '', c));
   });
 

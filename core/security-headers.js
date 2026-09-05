@@ -171,6 +171,13 @@ const SUPERFICIES_ESTRICTAS = [
   /^\/admin\/inventory$/,
   /^\/admin\/propuestas$/,
   /^\/admin\/proyectos$/,
+  // ⚙️ 5 SEP 2026, 11ª tanda — las cinco de mantenimiento. Todas tienen la misma forma: un filtro
+  // fijo, una ventana, y una tabla con menú «···» que pinta sus botones AL ABRIRLO.
+  /^\/admin\/suppliers$/,
+  /^\/admin\/categories$/,
+  /^\/admin\/warehouses$/,
+  /^\/admin\/users$/,
+  /^\/admin\/tiempo$/,
 ];
 
 export function securityHeaders() {

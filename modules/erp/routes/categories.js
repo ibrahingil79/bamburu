@@ -38,9 +38,9 @@ export function createCategoryRoutes(db) {
 
   views.get('/', requirePerm('categories.read'), c => {
     const content = `
-      <div class="ph"><h2>Categorías</h2>${can(c,'categories.create')?'<button class="btn btn-primary" onclick="openModal(\'catModal\')">Nueva categoría</button>':''}</div>
+      <div class="ph"><h2>Categorías</h2>${can(c,'categories.create')?'<button class="btn btn-primary" data-ct="nueva">Nueva categoría</button>':''}</div>
       <div class="card">
-        <div class="card-head"><h3>Todas las categorías</h3><input class="search" id="searchBox" placeholder="Buscar..." oninput="renderCats()"></div>
+        <div class="card-head"><h3>Todas las categorías</h3><input class="search" id="searchBox" placeholder="Buscar..."></div>
         <div class="table-wrap"><table>
           <thead><tr><th>Nombre</th><th>Descripción</th><th>Productos</th><th></th></tr></thead>
           <tbody id="catBody">${skeletonRows(4)}</tbody>
@@ -49,17 +49,17 @@ export function createCategoryRoutes(db) {
 
       <div class="modal-overlay" id="catModal">
         <div class="modal">
-          <div class="modal-head"><h3 id="catModalTitle">Nueva Categoría</h3><button class="modal-close" onclick="closeModal('catModal')">✕</button></div>
+          <div class="modal-head"><h3 id="catModalTitle">Nueva Categoría</h3><button class="modal-close" data-ct="cerrar">✕</button></div>
           <div class="modal-body">
             <input type="hidden" id="catId">
             <div class="form-group"><label class="form-label">Nombre *</label><input class="form-control" id="catName"></div>
             <div class="form-group"><label class="form-label">Descripción</label><textarea class="form-control" id="catDesc" rows="2"></textarea></div>
           </div>
-          <div class="modal-foot"><button class="btn btn-secondary" onclick="closeModal('catModal')">Cancelar</button><button class="btn btn-primary" onclick="saveCat()">Guardar</button></div>
+          <div class="modal-foot"><button class="btn btn-secondary" data-ct="cerrar">Cancelar</button><button class="btn btn-primary" data-ct="guardar">Guardar</button></div>
         </div>
       </div>
 
-      <script>
+      <script nonce="${c.get('cspNonce')}">
       let cats=[];
       async function loadCats(){
         cats=await api('GET','/api/erp/categories').catch(()=>[]);
@@ -68,7 +68,7 @@ export function createCategoryRoutes(db) {
       function renderCats(){
         const q=(document.getElementById('searchBox').value||'').toLowerCase();
         const f=q?cats.filter(c=>(c.name||'').toLowerCase().includes(q)||(c.description||'').toLowerCase().includes(q)):cats;
-        document.getElementById('catBody').innerHTML=f.length?f.map(c=>'<tr><td><strong>'+window.escHtml(c.name)+'</strong></td><td style="color:var(--muted);font-size:.85rem">'+window.escHtml(c.description||'-')+'</td><td><span class="badge b-blue">'+c.product_count+'</span></td><td>'+(window.canDo('categories.edit')?'<button class="btn btn-secondary btn-sm" onclick="editCat('+c.id+')">Editar</button> ':'')+( window.canDo('categories.delete')?window.rowMenu([{label:'Eliminar',danger:true,onclick:'delCat('+c.id+')'}]):'')+'</td></tr>').join(''):(q?window.emptyRow(4,'No se encontraron categorías con ese filtro.',{icon:'ti-search'}):window.emptyRow(4,'Aún no hay categorías. Organiza tu catálogo creando la primera.',window.canDo('categories.create')?{cta:'Nueva categoría',onclick:"openModal('catModal')"}:{}));
+        document.getElementById('catBody').innerHTML=f.length?f.map(c=>'<tr><td><strong>'+window.escHtml(c.name)+'</strong></td><td style="color:var(--muted);font-size:.85rem">'+window.escHtml(c.description||'-')+'</td><td><span class="badge b-blue">'+c.product_count+'</span></td><td>'+(window.canDo('categories.edit')?'<button class="btn btn-secondary btn-sm" data-ct="editar" data-id="'+c.id+'">Editar</button> ':'')+( window.canDo('categories.delete')?window.rowMenu([{label:'Eliminar',danger:true,act:'cat-borrar',arg:c.id}]):'')+'</td></tr>').join(''):(q?window.emptyRow(4,'No se encontraron categorías con ese filtro.',{icon:'ti-search'}):window.emptyRow(4,'Aún no hay categorías. Organiza tu catálogo creando la primera.',window.canDo('categories.create')?{cta:'Nueva categoría',onclick:"openModal('catModal')"}:{}));
       }
       function editCat(id){const c=cats.find(x=>x.id===id);if(!c)return;document.getElementById('catModalTitle').textContent='Editar Categoría';document.getElementById('catId').value=id;document.getElementById('catName').value=c.name;document.getElementById('catDesc').value=c.description||'';openModal('catModal');}
       async function saveCat(){
@@ -78,7 +78,21 @@ export function createCategoryRoutes(db) {
       }
       async function delCat(id){if(!await window.confirmarEnPagina({titulo:'Eliminar la categoría',texto:'Los productos que la tengan quedarán sin categoría. No se borra ningún producto.',aceptar:'Sí, eliminarla'}))return;await api('DELETE','/api/erp/categories/'+id);toast('Eliminada');loadCats();}
       loadCats();
-      </script>`;
+      
+      // 5 SEP 2026 — la tabla se pinta despues; el menu «···» pinta sus botones al abrirlo.
+      document.getElementById('searchBox')?.addEventListener('input', function(){ renderCats(); });
+      document.addEventListener('click', function(e){
+        var t = e.target.closest('[data-ct]'); if (!t) return;
+        var a = t.getAttribute('data-ct');
+        if (a === 'nueva') openModal('catModal');
+        else if (a === 'cerrar') closeModal('catModal');
+        else if (a === 'guardar') saveCat();
+        else if (a === 'editar') editCat(Number(t.getAttribute('data-id')));
+      });
+      document.addEventListener('rowmenu:act', function(e){
+        if (e.detail.act === 'cat-borrar') delCat(Number(e.detail.arg));
+      });
+</script>`;
     return c.html(adminLayout('Categorías', content, 'categories', c.get('session')?.csrfToken || '', c));
   });
 

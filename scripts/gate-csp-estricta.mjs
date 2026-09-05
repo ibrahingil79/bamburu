@@ -72,6 +72,15 @@ pdb.prepare(`INSERT INTO citas (codigo, cliente_id, user_id, fecha, inicio_min, 
     'pedida', '', ?, ?, 0)`)
   .run(MARCA, portalClienteId, citaFecha, citaTok, Math.floor(Date.now() / 1000) + 40 * 86400);
 
+// ⚙️ 5 SEP 2026 — UNA ENTRADA DE TIEMPO DE HOY. La pantalla de tiempo enseña la SEMANA EN CURSO, y
+// las 33 entradas del negocio de desarrollo son viejas: no había ni una fila que pulsar, y el botón
+// de Editar solo se pinta si la entrada no está corriendo ni facturada. Se siembra la de hoy, con la
+// marca en la descripción, y se retira en el `finally`.
+pdb.prepare(`INSERT INTO time_entries (proyecto_id, user_id, descripcion, fecha, duracion_seg, facturable, active, created_at)
+  VALUES ((SELECT id FROM proyectos ORDER BY id LIMIT 1),
+          (SELECT id FROM admin_users WHERE active=1 ORDER BY id LIMIT 1),
+          ?, date('now'), 3600, 1, 1, datetime('now'))`).run(MARCA + ' tiempo');
+
 const oppId = pdb.prepare(`INSERT INTO opportunities
     (client_id, title, amount, stage, probability, status, stage_changed_at, active, created_at)
   VALUES (?, ?, 1000, 'nuevo', 50, 'activa', datetime('now'), 1, datetime('now'))`)
@@ -1090,8 +1099,73 @@ try {
   ok(py.modoReacciona, '  y cambiar el modo de cobro repinta lo que depende de él');
   ok((await violaciones(p18)).length === 0, '  proyectos entero, sin una violación de CSP');
 
+
+  // ── 19 · LAS DE MANTENIMIENTO: el menú «···» de la fila, abierto y pulsado ──
+  console.log('\n[19] Proveedores, categorías, almacenes, usuarios y tiempo');
+  // Las cinco comparten forma: tabla pintada desde JavaScript y menú «···» que pinta sus botones
+  // AL ABRIRLO. Se abre el menú y se comprueba que sus items NO llevan código en un atributo —que
+  // es lo que se quedaría mudo— y que el botón fijo de alta responde. No se guarda ni se archiva.
+  const p19 = await nuevaPagina();
+  await p19.setCookie({ name: 'asess', value: erpTok, domain: 'desarrollo-bamburu.localhost', path: '/' });
+  // El 4º campo es el botón de alta; el 5º, un botón DE FILA que se pulsa cuando esa tabla no
+  // tiene menú «···» — usuarios y tiempo pintan sus acciones sueltas. Sin esto, esas dos pasaban
+  // sin haber pulsado una sola fila, que es justo lo que se rompe.
+  const MANTEN = [
+    ['/admin/suppliers',  null, 'supModal',  null,                 null],
+    ['/admin/categories', null, 'catModal',  '[data-ct="nueva"]',  null],
+    ['/admin/warehouses', null, 'whModal',   '#btnNew',            null],
+    ['/admin/users',      null, 'userModal', '[data-us="nuevo"]',  ['[data-us="editar"]', 'userModal']],
+    ['/admin/tiempo',     null, 'tModal',    '#tBtnManual',        ['[data-tp="editar"]', 'tModal']],
+  ];
+  for (const [ruta, , modal, abre, fila] of MANTEN) {
+    const r = await p19.goto(ERP_BASE + ruta, { waitUntil: 'networkidle0' });
+    ok(/script-src[^;]*'nonce-/.test(cabecera(r)), ruta + ' — endurecida');
+    await new Promise(x => setTimeout(x, 1100));
+    const res = await p19.evaluate(async (modal, abre) => {
+      const out = {};
+      const trig = document.querySelector('tbody [data-act="rowmenu"]');
+      out.hayMenu = !!trig;
+      if (trig) {
+        trig.click(); await new Promise(r => setTimeout(r, 300));
+        const items = [...document.querySelectorAll('tbody .rmenu-item')];
+        out.items = items.length;
+        out.conAtributo = items.filter(i => i.getAttribute('onclick')).length;
+        out.conClave = items.filter(i => i.getAttribute('data-rm')).length;
+        trig.click();
+      }
+      if (abre) {
+        document.querySelector(abre)?.click();
+        await new Promise(r => setTimeout(r, 500));
+        out.abreVentana = !!document.getElementById(modal)?.classList.contains('open');
+      }
+      return out;
+    }, modal, abre);
+    if (res.hayMenu) {
+      ok(res.conAtributo === 0, '  los items de su menú «···» no llevan código en un atributo',
+         'con atributo: ' + res.conAtributo + ' · con clave: ' + res.conClave);
+      ok(res.conClave > 0, '  y sí llevan la clave del armazón', String(res.conClave));
+    } else {
+      ok(true, '  (esta tabla no tiene menú «···» hoy)');
+    }
+    if (abre) ok(res.abreVentana === true, '  y su botón de alta abre la ventana', String(res.abreVentana));
+    if (fila) {
+      await p19.goto(ERP_BASE + ruta, { waitUntil: 'networkidle0' });
+      await new Promise(x => setTimeout(x, 1100));
+      const rf = await p19.evaluate(async ([sel, mod]) => {
+        const b = document.querySelector(sel); if (!b) return 'ninguna fila trae ese botón';
+        b.click(); await new Promise(r => setTimeout(r, 700));
+        const m = document.getElementById(mod);
+        if (!m?.classList.contains('open')) return 'la ventana NO abre';
+        m.querySelector('.modal-close')?.click();
+        return 'ok';
+      }, fila);
+      ok(rf === 'ok', '  PULSAR «Editar» en una fila abre su ventana', rf);
+    }
+  }
+  ok((await violaciones(p19)).length === 0, '  las cinco, sin una violación de CSP');
+
   const todas = [...(await violaciones(p3)), ...(await violaciones(p4)),
-                 ...(await violaciones(p11)), ...(await violaciones(p12)), ...(await violaciones(p13)), ...(await violaciones(p14)), ...(await violaciones(p15)), ...(await violaciones(p16)), ...(await violaciones(p17)), ...(await violaciones(p18)),
+                 ...(await violaciones(p11)), ...(await violaciones(p12)), ...(await violaciones(p13)), ...(await violaciones(p14)), ...(await violaciones(p15)), ...(await violaciones(p16)), ...(await violaciones(p17)), ...(await violaciones(p18)), ...(await violaciones(p19)),
                  ...(await violaciones(p9)),
                  ...(await violaciones(p8)),
                  ...(await violaciones(p5)), ...(await violaciones(p6)), ...(await violaciones(p7))];
@@ -1105,6 +1179,7 @@ try {
     pdb.prepare('DELETE FROM portal_mensajes WHERE texto LIKE ?').run('ZZ mensaje de comprobacion CSP %');
     pdb.prepare('DELETE FROM portal_sesiones WHERE client_id IN (SELECT id FROM clients WHERE name LIKE ?)').run('ZZ CSP %');
     pdb.prepare('DELETE FROM portal_tokens   WHERE client_id IN (SELECT id FROM clients WHERE name LIKE ?)').run('ZZ CSP %');
+    pdb.prepare('DELETE FROM time_entries WHERE descripcion LIKE ?').run('ZZ CSP %');
     pdb.prepare('DELETE FROM citas WHERE codigo LIKE ?').run('ZZ CSP %');
     pdb.prepare('DELETE FROM product_tags WHERE tag_id IN (SELECT id FROM tags WHERE name LIKE ?)').run('ZZ CSP %');
     pdb.prepare('DELETE FROM tags WHERE name LIKE ?').run('ZZ CSP %');

@@ -159,7 +159,7 @@ export function createSupplierRoutes(db) {
       <div class="ph">
         <h2>Proveedores</h2>
         <div style="display:flex;gap:.5rem;align-items:center">
-          <select class="form-control" id="supState" style="width:auto;min-width:150px" onchange="loadSups()">
+          <select class="form-control" id="supState" style="width:auto;min-width:150px">
             <option value="0">Activos</option>
             <option value="1">Archivados</option>
           </select>
@@ -167,7 +167,7 @@ export function createSupplierRoutes(db) {
         </div>
       </div>
       <div class="card">
-        <div class="card-head"><h3>Lista de proveedores</h3><input class="search" id="searchBox" placeholder="Buscar nombre, NIF o email..." oninput="filterTable()"></div>
+        <div class="card-head"><h3>Lista de proveedores</h3><input class="search" id="searchBox" placeholder="Buscar nombre, NIF o email..."></div>
         <div class="table-wrap"><table>
           <thead><tr><th>Código</th><th>Nombre</th><th>NIF/CIF</th><th>Contacto</th><th>Email</th><th>Teléfono</th><th></th></tr></thead>
           <tbody id="supBody">${skeletonRows(7)}</tbody>
@@ -176,7 +176,7 @@ export function createSupplierRoutes(db) {
 
       <div class="modal-overlay" id="supModal">
         <div class="modal">
-          <div class="modal-head"><h3 id="modalTitle">Nuevo proveedor</h3><button class="modal-close" onclick="closeModal('supModal')">✕</button></div>
+          <div class="modal-head"><h3 id="modalTitle">Nuevo proveedor</h3><button class="modal-close" data-sp="cerrar">✕</button></div>
           <div class="modal-body">
             <input type="hidden" id="supId">
             <div class="form-group" id="supCodeWrap" style="display:none"><label class="form-label">Código interno</label><div id="supCode" style="font-family:monospace;color:var(--muted)"></div></div>
@@ -206,13 +206,13 @@ export function createSupplierRoutes(db) {
             <div class="form-group"><label class="form-label">Notas</label><textarea class="form-control" id="supNotes"></textarea></div>
           </div>
           <div class="modal-foot">
-            <button class="btn btn-secondary" onclick="closeModal('supModal')">Cancelar</button>
-            <button class="btn btn-primary" onclick="saveSup()">Guardar</button>
+            <button class="btn btn-secondary" data-sp="cerrar">Cancelar</button>
+            <button class="btn btn-primary" data-sp="guardar">Guardar</button>
           </div>
         </div>
       </div>
 
-      <script>
+      <script nonce="${c.get('cspNonce')}">
       var sups=[];
       var _btnNew=document.getElementById('btnNew'); if(_btnNew) _btnNew.onclick=function(){openNew();};
       function viewingArchived(){ return document.getElementById('supState').value==='1'; }
@@ -227,11 +227,11 @@ export function createSupplierRoutes(db) {
         var arch=viewingArchived();
         document.getElementById('supBody').innerHTML=f.length?f.map(function(s){
           var acts = arch
-            ? (window.canDo('suppliers.edit')?'<button class="btn btn-secondary btn-sm" onclick="restoreSup('+s.id+')">Restaurar</button>':'')
+            ? (window.canDo('suppliers.edit')?'<button class="btn btn-secondary btn-sm" data-sp="restaurar" data-id="'+s.id+'">Restaurar</button>':'')
             : (window.canDo('purchases.read')?'<a class="btn btn-secondary btn-sm" href="/admin/supplier-invoices?supplier='+s.id+'">Deuda</a> ':'')
               + ((window.canDo('suppliers.edit')||window.canDo('suppliers.delete')) ? window.rowMenu([
-                  window.canDo('suppliers.edit') ? {label:'Editar', onclick:'editSup('+s.id+')'} : null,
-                  window.canDo('suppliers.delete') ? {label:'Archivar', danger:true, onclick:'delSup('+s.id+')'} : null
+                  window.canDo('suppliers.edit') ? {label:'Editar', act:'sup-editar', arg:s.id} : null,
+                  window.canDo('suppliers.delete') ? {label:'Archivar', danger:true, act:'sup-archivar', arg:s.id} : null
                 ].filter(Boolean)) : '');
           return '<tr><td style="color:var(--muted);font-family:monospace;font-size:.8rem">'+escHtml(s.supplier_code||'-')+'</td><td><strong>'+escHtml(s.name)+'</strong></td><td style="color:var(--muted)">'+escHtml(s.fiscal_id||'-')+'</td><td>'+escHtml(s.contact||'-')+'</td><td>'+escHtml(s.email||'-')+'</td><td>'+escHtml(s.phone||'-')+'</td><td style="text-align:right;white-space:nowrap">'+acts+'</td></tr>';
         }).join(''):(arch?window.emptyRow(7,'No tienes proveedores archivados.',{icon:'ti-search'}):(q?window.emptyRow(7,'No se encontraron proveedores con ese filtro.',{icon:'ti-search'}):window.emptyRow(7,'Todavía no tienes proveedores. ¿Damos de alta el primero?',window.canDo('suppliers.create')?{cta:'Nuevo proveedor',onclick:'openNew()'}:{})));
@@ -294,7 +294,24 @@ export function createSupplierRoutes(db) {
         catch(e){toast(e.message,'err');}
       }
       loadSups();
-      </script>`;
+      
+      // 5 SEP 2026 (csp-erp-migrar-handlers) — filtro y buscador fijos; la tabla y su menu «···»
+      // se pintan despues, asi que van por delegacion y por la clave act del armazon.
+      document.getElementById('supState')?.addEventListener('change', function(){ loadSups(); });
+      document.getElementById('searchBox')?.addEventListener('input', function(){ filterTable(); });
+      document.addEventListener('click', function(e){
+        var t = e.target.closest('[data-sp]'); if (!t) return;
+        var a = t.getAttribute('data-sp');
+        if (a === 'cerrar') closeModal('supModal');
+        else if (a === 'guardar') saveSup();
+        else if (a === 'restaurar') restoreSup(Number(t.getAttribute('data-id')));
+      });
+      document.addEventListener('rowmenu:act', function(e){
+        var id = Number(e.detail.arg);
+        if (e.detail.act === 'sup-editar') editSup(id);
+        else if (e.detail.act === 'sup-archivar') delSup(id);
+      });
+</script>`;
     return c.html(adminLayout('Proveedores', content, 'suppliers', c.get('session')?.csrfToken||'', c));
   });
 

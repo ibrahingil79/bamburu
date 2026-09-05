@@ -259,7 +259,7 @@ export function createUserRoutes(db) {
       .all().filter(p => !HIDDEN_PERMS.has(p.module + '.' + p.action));
     const permsJson = JSON.stringify(allPerms);
     const content = `
-      <div class="ph"><h2>Usuarios Administradores</h2><button class="btn btn-primary" onclick="newUser()">Nuevo usuario</button></div>
+      <div class="ph"><h2>Usuarios Administradores</h2><button class="btn btn-primary" data-us="nuevo">Nuevo usuario</button></div>
       <div class="card">
         <div class="table-wrap"><table>
           <thead><tr><th>Nombre</th><th>Email</th><th>Acceso</th><th>Permisos</th><th>Estado</th><th>Creado</th><th></th></tr></thead>
@@ -277,7 +277,7 @@ export function createUserRoutes(db) {
       <!-- Modal usuario -->
       <div class="modal-overlay" id="userModal">
         <div class="modal" style="max-width:600px">
-          <div class="modal-head"><h3 id="userModalTitle">Nuevo Usuario</h3><button class="modal-close" onclick="closeModal('userModal')">✕</button></div>
+          <div class="modal-head"><h3 id="userModalTitle">Nuevo Usuario</h3><button class="modal-close" data-us="cerrar">✕</button></div>
           <div class="modal-body" style="max-height:75vh;overflow-y:auto">
             <input type="hidden" id="userId">
             <div class="form-row">
@@ -314,8 +314,8 @@ export function createUserRoutes(db) {
               <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem">
                 <label class="form-label" style="margin:0">Permisos</label>
                 <div style="display:flex;gap:.5rem">
-                  <button type="button" class="btn btn-secondary btn-sm" onclick="selectAllPerms(true)">Todos</button>
-                  <button type="button" class="btn btn-secondary btn-sm" onclick="selectAllPerms(false)">Ninguno</button>
+                  <button type="button" class="btn btn-secondary btn-sm" data-us="todos">Todos</button>
+                  <button type="button" class="btn btn-secondary btn-sm" data-us="ninguno">Ninguno</button>
                 </div>
               </div>
               <div id="permsContainer"></div>
@@ -324,13 +324,13 @@ export function createUserRoutes(db) {
             <div class="form-group" style="margin-top:1rem"><label class="form-label"><input type="checkbox" id="uActive" checked> Activo</label></div>
           </div>
           <div class="modal-foot">
-            <button class="btn btn-secondary" onclick="closeModal('userModal')">Cancelar</button>
-            <button class="btn btn-primary" onclick="saveUser()">Guardar</button>
+            <button class="btn btn-secondary" data-us="cerrar">Cancelar</button>
+            <button class="btn btn-primary" data-us="guardar">Guardar</button>
           </div>
         </div>
       </div>
 
-      <script>
+      <script nonce="${c.get('cspNonce')}">
       const SYSTEM_ROLES={owner:'Propietario',admin:'Administrador',employee:'Empleado',readonly:'Solo lectura'};
       const MODULE_LABELS={activity:'Actividad',admin:'Administración',analytics:'Analítica',categories:'Categorías',clients:'Clientes',cobros:'Cobros',discounts:'Descuentos',inventory:'Inventario',invoices:'Facturas',orders:'Pedidos',products:'Productos',purchases:'Compras',quotes:'Presupuestos',pedidos:'Pedidos de venta',albaranes:'Albaranes',sales:'Ventas',feedback:'Feedback',suppliers:'Proveedores',tags:'Etiquetas',proyectos:'Proyectos',tiempo:'Registro de tiempo',citas:'Citas y agenda',crm:'Oportunidades (CRM)',conciliacion:'Conciliación',recurrentes:'Recurrentes'};
       const ALL_PERMS=${permsJson};
@@ -355,7 +355,7 @@ export function createUserRoutes(db) {
             <div style="display:flex;flex-wrap:wrap;gap:.4rem">
               \${perms.map(p=>\`
                 <label style="display:inline-flex;align-items:center;gap:.35rem;padding:.3rem .65rem;border:1px solid \${selectedPermIds.has(p.id)?'var(--teal)':'var(--border)'};border-radius:20px;font-size:.8rem;cursor:pointer;background:\${selectedPermIds.has(p.id)?'rgba(58,65,80,.1)':'transparent'};color:\${selectedPermIds.has(p.id)?'var(--teal)':'var(--text2)'};transition:all .15s" id="plabel_\${p.id}">
-                  <input type="checkbox" value="\${p.id}" \${selectedPermIds.has(p.id)?'checked':''} onchange="togglePerm(\${p.id},this.checked)" style="display:none">
+                  <input type="checkbox" value="\${p.id}" \${selectedPermIds.has(p.id)?'checked':''} data-us="perm" data-id="\${p.id}" style="display:none">
                   \${p.description}
                 </label>\`).join('')}
             </div>
@@ -399,10 +399,10 @@ export function createUserRoutes(db) {
             // enseñar el botón sería ofrecer algo que no se puede hacer. Y quien está archivada lleva
             // su botón de RECUPERAR al lado, que es como se deshace una baja.
             '<td style="white-space:nowrap">'+
-              '<button class="btn btn-secondary btn-sm" onclick="editUser('+u.id+')">Editar</button> '+
+              '<button class="btn btn-secondary btn-sm" data-us="editar" data-id="'+u.id+'">Editar</button> '+
               (u.active
-                ? (u.role==='owner'||u.id===YO ? '' : '<button class="btn btn-danger btn-sm" onclick="delUser('+u.id+')">Dar de baja</button>')
-                : '<button class="btn btn-secondary btn-sm" onclick="recuperarUser('+u.id+')">Recuperar</button>')+
+                ? (u.role==='owner'||u.id===YO ? '' : '<button class="btn btn-danger btn-sm" data-us="baja" data-id="'+u.id+'">Dar de baja</button>')
+                : '<button class="btn btn-secondary btn-sm" data-us="recuperar" data-id="'+u.id+'">Recuperar</button>')+
             '</td>'+
             '</tr>';
         }).join(''):window.emptyRow(7,'Por ahora solo estás tú. Invita a tu equipo cuando quieras.',window.canDo('admin.manage_users')?{cta:'Nuevo usuario',onclick:'newUser()'}:{});
@@ -488,7 +488,27 @@ export function createUserRoutes(db) {
       }
 
       loadUsers();
-      </script>`;
+      
+      // 5 SEP 2026 (csp-erp-migrar-handlers) — la tabla y las casillas de permisos se pintan
+      // despues: delegacion. Los botones de la ventana estan en el HTML, pero se despachan aqui
+      // mismo para tener un solo sitio donde mirar.
+      document.addEventListener('click', function(e){
+        var t = e.target.closest('[data-us]'); if (!t) return;
+        var a = t.getAttribute('data-us'), id = Number(t.getAttribute('data-id'));
+        if (a === 'nuevo') newUser();
+        else if (a === 'cerrar') closeModal('userModal');
+        else if (a === 'todos') selectAllPerms(true);
+        else if (a === 'ninguno') selectAllPerms(false);
+        else if (a === 'guardar') saveUser();
+        else if (a === 'editar') editUser(id);
+        else if (a === 'baja') delUser(id);
+        else if (a === 'recuperar') recuperarUser(id);
+      });
+      document.addEventListener('change', function(e){
+        var t = e.target.closest('[data-us="perm"]');
+        if (t) togglePerm(Number(t.getAttribute('data-id')), t.checked);
+      });
+</script>`;
     return c.html(adminLayout('Usuarios Admin', content, 'users', c.get('session')?.csrfToken || '', c));
   });
 

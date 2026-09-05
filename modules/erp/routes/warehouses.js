@@ -241,15 +241,15 @@ export function createWarehouseRoutes(db) {
       <div class="ph">
         <h2>Almacenes</h2>
         <div style="display:flex;gap:.5rem;align-items:center">
-          <select class="form-control" id="whState" style="width:auto;min-width:150px" onchange="loadWh()">
+          <select class="form-control" id="whState" style="width:auto;min-width:150px">
             <option value="0">Activos</option>
             <option value="1">Archivados</option>
           </select>
-          ${canEdit ? '<button class="btn btn-primary" id="btnNew" onclick="openNew()">Nuevo almacén</button>' : ''}
+          ${canEdit ? '<button class="btn btn-primary" id="btnNew">Nuevo almacén</button>' : ''}
         </div>
       </div>
       <div class="card">
-        <div class="card-head"><h3>Lista de almacenes</h3><input class="search" id="searchBox" placeholder="Buscar por nombre..." oninput="filterTable()"></div>
+        <div class="card-head"><h3>Lista de almacenes</h3><input class="search" id="searchBox" placeholder="Buscar por nombre..."></div>
         <div class="table-wrap"><table>
           <thead><tr><th>Nombre</th><th>Principal</th><th></th></tr></thead>
           <tbody id="whBody">${skeletonRows(3)}</tbody>
@@ -258,19 +258,19 @@ export function createWarehouseRoutes(db) {
 
       <div class="modal-overlay" id="whModal">
         <div class="modal" style="max-width:460px">
-          <div class="modal-head"><h3 id="whModalTitle">Nuevo almacén</h3><button class="modal-close" onclick="closeModal('whModal')">✕</button></div>
+          <div class="modal-head"><h3 id="whModalTitle">Nuevo almacén</h3><button class="modal-close" data-wh="cerrar">✕</button></div>
           <div class="modal-body">
             <input type="hidden" id="whId">
             <div class="form-group"><label class="form-label">Nombre *</label><input class="form-control" id="whName" maxlength="120"></div>
           </div>
           <div class="modal-foot">
-            <button class="btn btn-secondary" onclick="closeModal('whModal')">Cancelar</button>
-            <button class="btn btn-primary" onclick="saveWh()">Guardar</button>
+            <button class="btn btn-secondary" data-wh="cerrar">Cancelar</button>
+            <button class="btn btn-primary" data-wh="guardar">Guardar</button>
           </div>
         </div>
       </div>
 
-      <script>
+      <script nonce="${c.get('cspNonce')}">
       const CAN_EDIT = ${canEdit ? 'true' : 'false'};
       let whs = [];
       function viewingArchived(){ return document.getElementById('whState').value === '1'; }
@@ -288,12 +288,12 @@ export function createWarehouseRoutes(db) {
           let acts = '';
           if (CAN_EDIT){
             if (arch){
-              acts = '<button class="btn btn-secondary btn-sm" onclick="restoreWh('+w.id+')">Restaurar</button>';
+              acts = '<button class="btn btn-secondary btn-sm" data-wh="restaurar" data-id="'+w.id+'">Restaurar</button>';
             } else {
-              acts = '<button class="btn btn-secondary btn-sm" onclick="editWh('+w.id+')">Editar</button> ';
+              acts = '<button class="btn btn-secondary btn-sm" data-wh="editar" data-id="'+w.id+'">Editar</button> ';
               if (!w.is_default) acts += window.rowMenu([
-                { label:'Marcar principal', onclick:'defaultWh('+w.id+')' },
-                { label:'Archivar', danger:true, onclick:'archiveWh('+w.id+')' }
+                { label:'Marcar principal', act:'wh-principal', arg:w.id },
+                { label:'Archivar', danger:true, act:'wh-archivar', arg:w.id }
               ]);
             }
           }
@@ -338,7 +338,25 @@ export function createWarehouseRoutes(db) {
         catch(e){ toast(e.message||'Error','err'); }
       }
       loadWh();
-      </script>`;
+      
+      // 5 SEP 2026 — filtro, alta y buscador fijos; la tabla y su menu «···», por delegacion.
+      document.getElementById('whState')?.addEventListener('change', function(){ loadWh(); });
+      document.getElementById('btnNew')?.addEventListener('click', function(){ openNew(); });
+      document.getElementById('searchBox')?.addEventListener('input', function(){ filterTable(); });
+      document.addEventListener('click', function(e){
+        var t = e.target.closest('[data-wh]'); if (!t) return;
+        var a = t.getAttribute('data-wh'), id = Number(t.getAttribute('data-id'));
+        if (a === 'cerrar') closeModal('whModal');
+        else if (a === 'guardar') saveWh();
+        else if (a === 'restaurar') restoreWh(id);
+        else if (a === 'editar') editWh(id);
+      });
+      document.addEventListener('rowmenu:act', function(e){
+        var id = Number(e.detail.arg);
+        if (e.detail.act === 'wh-principal') defaultWh(id);
+        else if (e.detail.act === 'wh-archivar') archiveWh(id);
+      });
+</script>`;
     return c.html(adminLayout('Almacenes', content, 'warehouses', c.get('session')?.csrfToken || '', c));
   });
 
