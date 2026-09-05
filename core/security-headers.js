@@ -154,6 +154,15 @@ const SUPERFICIES_ESTRICTAS = [
   /^\/admin\/purchase-order-receipts\/\d+$/,
   /^\/admin\/stock-transfers\/\d+$/,
   /^\/admin\/stock-transfers\/new$/,
+  // ⚙️ 5 SEP 2026, 9ª tanda — `routes/citas.js` ENTERO a cero handlers, así que entran sus cinco
+  // pantallas que faltaban y la página que ve el CLIENTE con el enlace de su cita, que vive en el
+  // mismo fichero y es anónima: la que más falta le hacía.
+  /^\/admin\/citas\/cola$/,
+  /^\/admin\/citas\/ajustes$/,
+  /^\/admin\/citas\/recursos$/,
+  /^\/admin\/citas\/horarios$/,
+  /^\/admin\/citas\/publica$/,
+  /^\/cita(\/|$)/,
 ];
 
 export function securityHeaders() {

@@ -1069,7 +1069,7 @@ export function createCitasPublicRoutes(db) {
   app.get('/:token', c => {
     const cita = resolver(c.req.param('token'));
     if (!cita) return c.html(paginaCitaError(), 403);
-    return c.html(paginaCita(db, cita, c.req.param('token')));
+    return c.html(paginaCita(db, cita, c.req.param('token'), c.get('cspNonce')));
   });
 
   app.post('/:token/confirmar', async c => {
@@ -1100,7 +1100,7 @@ function paginaCitaError() {
     <body><div class="box"><h1>Enlace no válido o caducado</h1><p>Este enlace ya no funciona. Ponte en contacto con el negocio si necesitas gestionar tu cita.</p></div></body></html>`;
 }
 
-function paginaCita(db, cita, token) {
+function paginaCita(db, cita, token, nonce = '') {
   const aj = ajustesCitas(db);
   const servicios = serviciosDeCita(db, cita.id).join(' + ');
   const contacto = contactoDeCita(db, cita);
@@ -1166,17 +1166,17 @@ function paginaCita(db, cita, token) {
       </div>
       ${esPub && res.politica_texto ? `<div class="card pol"><b>Política de cancelación</b>${E(res.politica_texto)}</div>` : ''}
       <div id="acciones">
-        ${esPub ? '' : `<button class="btn ok" id="btnOk" onclick="accion('confirmar')"${yaConfirmada ? ' style="display:none"' : ''}>Confirmar mi cita</button>
-        <button class="btn no" onclick="accion('avisar')">No puedo ir</button>`}
-        ${esPub && v.puede ? `<button class="btn sec" id="btnCambiar" onclick="abrirCambio()">Cambiar el día o la hora</button>
-        <button class="btn no" onclick="anular()">Anular mi cita</button>` : ''}
+        ${esPub ? '' : `<button class="btn ok" id="btnOk" data-pc="confirmar"${yaConfirmada ? ' style="display:none"' : ''}>Confirmar mi cita</button>
+        <button class="btn no" data-pc="avisar">No puedo ir</button>`}
+        ${esPub && v.puede ? `<button class="btn sec" id="btnCambiar" data-pc="abrir-cambio">Cambiar el día o la hora</button>
+        <button class="btn no" data-pc="anular">Anular mi cita</button>` : ''}
         ${esPub && !v.puede ? `<div class="nota">${E(v.motivo)}</div>` : ''}
       </div>
       ${esPub && v.puede ? `<div class="card" id="cajaCambio" style="display:none">
         <b style="font-size:.9rem">Elige otro día y otra hora</b>
-        <input type="date" id="nvFecha" onchange="cargarHuecos()">
+        <input type="date" id="nvFecha">
         <select id="nvHora"><option value="">Elige el día primero</option></select>
-        <button class="btn ok" onclick="guardarCambio()">Guardar el cambio</button>
+        <button class="btn ok" data-pc="guardar-cambio">Guardar el cambio</button>
       </div>` : ''}
       <div id="msg"></div>
       <!-- MISMAS CLASES Y MISMOS data-pd QUE EL PANEL COMPARTIDO del layout, aunque el estilo sea
@@ -1187,7 +1187,7 @@ function paginaCita(db, cita, token) {
         <button class="btn no" id="cnfSi" data-pd="ok"></button>
         <button class="btn sec" id="cnfNo" data-pd="x">No, dejarlo</button>
       </div></div>
-      <script>
+      <script nonce="${nonce}">
         var TOKEN = ${JSON.stringify(token)};
         // Confirmar sin ventanita del navegador y SIN depender del layout del panel, que aquí no
         // existe. Devuelve una promesa con true/false, igual que window.confirmarEnPagina.
@@ -1264,6 +1264,19 @@ function paginaCita(db, cita, token) {
             pinta('#991b1b','#fee2e2','Tu cita queda anulada. Gracias por avisar.','Anulada');
           }catch(e){ alert(e.message); }
         }
+      // ── 5 SEP 2026 (csp-erp-migrar-handlers) — ENGANCHE DE LA PAGINA DE LA CITA ──────────────
+      // Los botones son CONDICIONALES: confirmar y avisar solo en el enlace privado; cambiar y
+      // anular solo en el publico y si la politica lo permite. El enganche tolera que falten.
+      document.addEventListener('click', function(e){
+        var t = e.target.closest('[data-pc]'); if (!t) return;
+        var a = t.getAttribute('data-pc');
+        if (a === 'confirmar') accion('confirmar');
+        else if (a === 'avisar') accion('avisar');
+        else if (a === 'abrir-cambio') abrirCambio();
+        else if (a === 'anular') anular();
+        else if (a === 'guardar-cambio') guardarCambio();
+      });
+      document.getElementById('nvFecha')?.addEventListener('change', function(){ cargarHuecos(); });
       </script>
     </div></body></html>`;
 }
@@ -1695,7 +1708,7 @@ function vistaCola(c, db) {
         <div class="cola-cab">
           <h2 class="cola-tit">Recordatorios a clientes</h2>
           <p class="cola-sub">Despacha de una vez los avisos de tus citas, sin abrir ficha por ficha.
-            <button type="button" class="cola-i" onclick="openModal('mColaInfo')" aria-label="Cómo funciona esta pantalla" title="Cómo funciona esta pantalla"><i class="ti ti-info-circle"></i></button>
+            <button type="button" class="cola-i" data-ct="info-abrir" aria-label="Cómo funciona esta pantalla" title="Cómo funciona esta pantalla"><i class="ti ti-info-circle"></i></button>
           </p>
         </div>
         <a class="btn btn-secondary" href="/admin/citas"><i class="ti ti-arrow-left"></i> Agenda</a>
@@ -1718,7 +1731,7 @@ function vistaCola(c, db) {
          vive en la ventana del panel — incluida, ENTERA, la advertencia de que «marcado como
          enviado» no es «entregado». Esa no se toca ni se suaviza: es honestidad, no adorno. -->
     <div class="modal-overlay" id="mColaInfo"><div class="modal" style="max-width:480px">
-      <div class="modal-head"><h3>Cómo funciona esta pantalla</h3><button class="modal-close" onclick="closeModal('mColaInfo')">✕</button></div>
+      <div class="modal-head"><h3>Cómo funciona esta pantalla</h3><button class="modal-close" data-ct="info-cerrar">✕</button></div>
       <div class="modal-body">
         <p class="cola-p">Doce citas se despachan en doce clics desde aquí, sin abrir doce fichas.</p>
         <p class="cola-p">Al pulsar el botón de <b>WhatsApp</b> o <b>SMS</b> se abre el mensaje ya escrito, con el enlace de esa cita. El <b>email</b> puede salir solo.</p>
@@ -1728,7 +1741,7 @@ function vistaCola(c, db) {
         </div>
       </div>
     </div></div>
-    <script>${jsVoz(aj)}${JS_COLA}</script>`;
+    <script nonce="${c.get('cspNonce')}">${jsVoz(aj)}${JS_COLA}</script>`;
   return adminLayout('Recordatorios a clientes', content, 'citas-cola', c.get('session')?.csrfToken || '', c);
 }
 
@@ -1749,11 +1762,11 @@ function vistaRecursos(c, db) {
   const editable = can(c, 'citas.edit');
   const aj = ajustesCitas(db);
   const content = `
-    <div class="ph"><h2>${escHtml(aj.puesto_plural)}</h2><div style="display:flex;gap:.5rem"><a class="btn btn-secondary" href="/admin/settings#cfg-agenda">← Configuración</a>${editable ? '<button class="btn btn-primary" onclick="openRecurso()">Nuevo ' + escHtml(aj.puesto_sing.toLowerCase()) + '</button>' : ''}</div></div>
+    <div class="ph"><h2>${escHtml(aj.puesto_plural)}</h2><div style="display:flex;gap:.5rem"><a class="btn btn-secondary" href="/admin/settings#cfg-agenda">← Configuración</a>${editable ? '<button class="btn btn-primary" data-rc="nuevo">Nuevo ' + escHtml(aj.puesto_sing.toLowerCase()) + '</button>' : ''}</div></div>
     <div class="alert" style="margin-bottom:1rem">Sillas, cabinas, salas, boxes o equipos. Una cita puede exigir persona <strong>y</strong> ${escHtml(aj.puesto_sing.toLowerCase())}; se comprueban los dos. Puedes cambiar cómo los llamas en <a href="/admin/citas/ajustes">Cómo se piden las citas</a>.</div>
     <div class="card"><div class="table-wrap"><table><thead><tr><th>Nombre</th><th>Tipo</th><th>Notas</th><th></th></tr></thead><tbody id="recBody"><tr><td colspan="4">Cargando…</td></tr></tbody></table></div></div>
     ${modalRecurso(aj.puesto_sing)}
-    <script>window.CITAS_EDIT=${editable ? 'true' : 'false'};${jsVoz(aj)}${JS_RECURSOS}</script>`;
+    <script nonce="${c.get('cspNonce')}">window.CITAS_EDIT=${editable ? 'true' : 'false'};${jsVoz(aj)}${JS_RECURSOS}</script>`;
   return adminLayout(aj.puesto_plural, content, 'citas-recursos', c.get('session')?.csrfToken || '', c);
 }
 
@@ -1788,8 +1801,8 @@ function vistaHorarios(c, db) {
       <div class="card-body">
         <div class="hor-quien">
           <label class="form-label" style="margin:0">Horario de</label>
-          <select class="form-control" id="hScope" style="width:auto" onchange="hToggle();hCargar()"><option value="negocio">Todo el negocio</option><option value="user">Una persona en concreto</option></select>
-          <select class="form-control" id="hUser" style="width:auto;display:none" onchange="hCargar()">${opts}</select>
+          <select class="form-control" id="hScope" style="width:auto" data-hr="toggle"><option value="negocio">Todo el negocio</option><option value="user">Una persona en concreto</option></select>
+          <select class="form-control" id="hUser" style="width:auto;display:none" data-hr="cargar">${opts}</select>
         </div>
         <div class="hor-resumen" id="horResumen">Cargando…</div>
       </div>
@@ -1809,8 +1822,8 @@ function vistaHorarios(c, db) {
         <div class="hor-dias-sel" id="horDiasSel"></div>
         <div class="hor-jornada">
           <div class="segmented" role="group" aria-label="Tipo de jornada">
-            <button type="button" id="hjCorrido" onclick="horJornada('corrido')" aria-selected="true">Horario corrido</button>
-            <button type="button" id="hjPartido" onclick="horJornada('partido')" aria-selected="false">Mañana y tarde</button>
+            <button type="button" id="hjCorrido" data-hr="jornada" data-j="corrido" aria-selected="true">Horario corrido</button>
+            <button type="button" id="hjPartido" data-hr="jornada" data-j="partido" aria-selected="false">Mañana y tarde</button>
           </div>
         </div>
         <div class="hor-horas">
@@ -1822,7 +1835,7 @@ function vistaHorarios(c, db) {
             <input type="time" class="form-control" id="hpB2" value="20:00"></div>
         </div>
         <div class="hor-aplicar">
-          <button type="button" class="btn btn-primary" onclick="horAplica()">Aplicar a los días elegidos</button>
+          <button type="button" class="btn btn-primary" data-hr="aplicar">Aplicar a los días elegidos</button>
           <span class="hor-vista-previa" id="horPrevia"></span>
         </div>
       </div>
@@ -1832,7 +1845,7 @@ function vistaHorarios(c, db) {
       <div class="card-head"><h3>Día a día</h3>${editable ? '<span class="hor-ayuda" style="margin:0">Apaga un día para cerrarlo. Sus horas se recuerdan.</span>' : ''}</div>
       <div id="hGrid"></div>
       ${editable ? `<div class="hor-pie">
-        <button class="btn btn-primary" id="horGuardar" onclick="hGuardar()">Guardar horario</button>
+        <button class="btn btn-primary" id="horGuardar" data-hr="guardar">Guardar horario</button>
         <span class="hor-sucio" id="horSucio" hidden>Tienes cambios sin guardar</span>
       </div>` : ''}
     </div>
@@ -1842,15 +1855,15 @@ function vistaHorarios(c, db) {
         <p class="hor-ayuda">Un día concreto que se sale de la regla semanal. Manda sobre ella.</p>
         ${editable ? `<div class="hor-exc-alta">
           <div><label class="form-label">Qué día</label><input class="form-control" type="date" id="eFecha"></div>
-          <div><label class="form-label">Qué pasa</label><select class="form-control" id="eTipo" onchange="eToggle()"><option value="cerrado">Cierro todo el día</option><option value="horario">Abro a otras horas</option></select></div>
+          <div><label class="form-label">Qué pasa</label><select class="form-control" id="eTipo" data-hr="exc-toggle"><option value="cerrado">Cierro todo el día</option><option value="horario">Abro a otras horas</option></select></div>
           <div id="eHoras" style="display:none"><label class="form-label">De — a</label><div style="display:flex;gap:.3rem;align-items:center"><input class="form-control" type="time" id="eIni"><span class="hor-guion">–</span><input class="form-control" type="time" id="eFin"></div></div>
           <div style="flex:1;min-width:160px"><label class="form-label">Motivo (opcional)</label><input class="form-control" id="eMotivo" placeholder="Festivo, vacaciones…"></div>
-          <button class="btn btn-secondary" onclick="eAdd()">Añadir</button>
+          <button class="btn btn-secondary" data-hr="exc-add">Añadir</button>
         </div>` : ''}
         <div id="excList"></div>
       </div>
     </div>
-    <script>window.CITAS_EDIT=${editable ? 'true' : 'false'};${JS_HORARIOS}</script>`;
+    <script nonce="${c.get('cspNonce')}">window.CITAS_EDIT=${editable ? 'true' : 'false'};${JS_HORARIOS}</script>`;
   return adminLayout('Cuándo abro', content, 'citas-horarios', c.get('session')?.csrfToken || '', c);
 }
 
@@ -1885,9 +1898,9 @@ function vistaAjustes(c, db) {
           <div style="font-size:.7rem;color:var(--muted)">Así los llamarás en tus pantallas (silla, cabina, sala…). No cambia nada por dentro.</div></div>
       </div>
       <div class="alert" style="font-size:.85rem">Los avisos por WhatsApp y SMS <strong>siempre van a mano</strong> (se abre el mensaje ya escrito). Solo el <strong>email</strong> puede salir solo, por el envío diario. Nunca decimos "entregado": solo "marcado como enviado".</div>
-      <button class="btn btn-primary" onclick="ajGuardar()">Guardar ajustes</button>
+      <button class="btn btn-primary" data-aj="guardar">Guardar ajustes</button>
     </div>
-    <script>${JS_AJUSTES}</script>`;
+    <script nonce="${c.get('cspNonce')}">${JS_AJUSTES}</script>`;
   return adminLayout('Cómo se piden las citas', content, 'citas-ajustes', c.get('session')?.csrfToken || '', c);
 }
 
@@ -1915,7 +1928,7 @@ function vistaPublica(c, db) {
         <div style="font-size:.75rem;color:var(--muted);margin-top:.3rem">Corta y fácil de decir por teléfono. Si la dejas vacía, se genera del nombre de tu negocio.</div>
         <div style="margin-top:.5rem;display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
           <code id="pbUrl" style="font-size:.85rem;word-break:break-all"></code>
-          <button class="btn btn-secondary btn-sm" onclick="pbCopiar()">Copiar</button>
+          <button class="btn btn-secondary btn-sm" data-pb="copiar">Copiar</button>
           <a class="btn btn-secondary btn-sm" id="pbAbrir" href="#" target="_blank" rel="noopener">Abrir</a>
         </div>
       </div>
@@ -1935,7 +1948,7 @@ function vistaPublica(c, db) {
       <h3 style="margin-top:0">¿Se confirma sola o la apruebas tú?</h3>
       <div class="form-row">
         <div class="form-group"><label class="form-label">Modo</label>
-          <select class="form-control" id="pbModo" onchange="pbModoToggle()">
+          <select class="form-control" id="pbModo" data-pb="modo">
             <option value="auto">Se confirma sola</option>
             <option value="aprobar">La apruebo yo</option>
           </select></div>
@@ -1946,7 +1959,7 @@ function vistaPublica(c, db) {
 
     <div class="card bf-caja" style="margin-bottom:1rem">
       <h3 style="margin-top:0">¿Puede el cliente cambiar o anular?</h3>
-      <label style="display:flex;gap:.6rem;align-items:center;font-size:.9rem"><input type="checkbox" id="pbCancAct" onchange="pbCancToggle()"> Sí, desde su enlace</label>
+      <label style="display:flex;gap:.6rem;align-items:center;font-size:.9rem"><input type="checkbox" id="pbCancAct" data-pb="canc"> Sí, desde su enlace</label>
       <div class="form-group" id="pbCancWrap" style="margin-top:.75rem"><label class="form-label">Hasta cuántas horas antes</label><input class="form-control" type="number" min="0" id="pbCancH" style="max-width:160px">
         <div style="font-size:.7rem;color:var(--muted)">Pasado ese plazo, su enlace le dice que te llame. <strong>Las citas que creas tú en la agenda no cambian</strong>: su enlace sigue igual que siempre.</div></div>
     </div>
@@ -1965,13 +1978,13 @@ function vistaPublica(c, db) {
       <div id="pbPersonas"></div>
     </div>
 
-    <button class="btn btn-primary" onclick="pbGuardar()">Guardar</button>
+    <button class="btn btn-primary" data-pb="guardar">Guardar</button>
 
     <div class="card bf-caja" id="pbSolWrap" style="display:none;margin-top:1.5rem">
       <h3 style="margin-top:0">Solicitudes pendientes de aprobar</h3>
       <div id="pbSolicitudes">Cargando…</div>
     </div>
-    <script>${JS_PUBLICA}</script>`;
+    <script nonce="${c.get('cspNonce')}">${JS_PUBLICA}</script>`;
   return adminLayout('Mi página de reservas', content, 'citas-publica', c.get('session')?.csrfToken || '', c);
 }
 
@@ -2049,8 +2062,8 @@ async function pbSolicitudes(){
       +list.map(function(r){ return '<tr><td>'+esc(r.cliente)+'<div style="font-size:.75rem;color:var(--muted)">'+esc(r.email||r.cliente_suelto_movil||'')+'</div></td>'
         +'<td>'+fechaEs(r.fecha)+' '+esc(r.hora)+'</td><td>'+esc(r.servicios)+'</td>'
         +'<td>'+(r.horas_restantes==null?'—':(r.horas_restantes+' h'))+'</td>'
-        +'<td style="white-space:nowrap"><button class="btn btn-primary btn-sm" onclick="pbAprobar('+r.id+')">Aprobar</button> '
-        +'<button class="btn btn-secondary btn-sm" onclick="pbRechazar('+r.id+')">Rechazar</button></td></tr>'; }).join('')
+        +'<td style="white-space:nowrap"><button class="btn btn-primary btn-sm" data-pb="aprobar" data-id="'+r.id+'">Aprobar</button> '
+        +'<button class="btn btn-secondary btn-sm" data-pb="rechazar" data-id="'+r.id+'">Rechazar</button></td></tr>'; }).join('')
       +'</tbody></table></div>';
   }catch(e){ box.textContent='No hemos podido cargar las solicitudes.'; }
 }
@@ -2062,6 +2075,22 @@ async function pbRechazar(id){
   try{ var r=await api('POST','/api/erp/reserva-publica/solicitudes/'+id+'/rechazar'); toast(r.message); pbSolicitudes(); }catch(e){ toast(e.message,'err'); }
 }
 pbCargar();
+
+// ── 5 SEP 2026 — ENGANCHE DE LA PAGINA PUBLICA. Las solicitudes pendientes se pintan despues, y
+// sus dos botones son CONDICIONALES: solo salen mientras la solicitud sigue sin resolver.
+document.addEventListener('click', function(e){
+  var t = e.target.closest('[data-pb]'); if (!t) return;
+  var a = t.getAttribute('data-pb'), id = Number(t.getAttribute('data-id'));
+  if (a === 'copiar') pbCopiar();
+  else if (a === 'guardar') pbGuardar();
+  else if (a === 'aprobar') pbAprobar(id);
+  else if (a === 'rechazar') pbRechazar(id);
+});
+document.addEventListener('change', function(e){
+  var t = e.target.closest('[data-pb]'); if (!t) return;
+  if (t.getAttribute('data-pb') === 'modo') pbModoToggle();
+  else if (t.getAttribute('data-pb') === 'canc') pbCancToggle();
+});
 `;
 
 // ── Modales (HTML) ────────────────────────────────────────────────────────────────────────────────
@@ -2219,14 +2248,14 @@ const modalNuevoServicio = (esSalud = false) => `
 
 const modalRecurso = (puestoSing = 'Puesto') => `
   <div class="modal-overlay" id="mRec"><div class="modal" style="max-width:480px">
-    <div class="modal-head"><h3 id="mRecTitle">Nuevo ${escHtml(puestoSing.toLowerCase())}</h3><button class="modal-close" onclick="closeModal('mRec')">✕</button></div>
+    <div class="modal-head"><h3 id="mRecTitle">Nuevo ${escHtml(puestoSing.toLowerCase())}</h3><button class="modal-close" data-rc="cerrar">✕</button></div>
     <div class="modal-body">
       <input type="hidden" id="recId">
       <div class="form-group"><label class="form-label">Nombre *</label><input class="form-control" id="recNombre"></div>
       <div class="form-group"><label class="form-label">Tipo</label><select class="form-control" id="recTipo"><option value="silla">Silla</option><option value="cabina">Cabina</option><option value="sala">Sala</option><option value="box">Box</option><option value="equipo">Equipo</option><option value="otro">Otro</option></select></div>
       <div class="form-group"><label class="form-label">Notas</label><input class="form-control" id="recNotas"></div>
     </div>
-    <div class="modal-foot"><button class="btn btn-secondary" onclick="closeModal('mRec')">Cancelar</button><button class="btn btn-primary" onclick="recGuardar()">Guardar</button></div>
+    <div class="modal-foot"><button class="btn btn-secondary" data-rc="cerrar">Cancelar</button><button class="btn btn-primary" data-rc="guardar">Guardar</button></div>
   </div></div>`;
 
 // ── JS de las vistas (cliente). Usa los helpers api()/toast()/openModal()/closeModal() del layout. ──
@@ -3538,10 +3567,10 @@ function botones(r,tipo){
   // wa/sms YA vienen del servidor con el texto y el ENLACE real de la cita (con su token). No se recompone aquí.
   var out='';
   if(r.movil_valido && r.wa){
-    out+='<a class="btn btn-primary btn-sm" target="_blank" href="'+r.wa+'" onclick="marcar('+r.id+',\''+tipo+'\',\'whatsapp\')">WhatsApp</a> ';
-    out+='<a class="btn btn-secondary btn-sm" href="'+r.sms+'" onclick="marcar('+r.id+',\''+tipo+'\',\'sms\')">SMS</a> ';
+    out+='<a class="btn btn-primary btn-sm" target="_blank" href="'+r.wa+'" data-ct="marcar" data-id="'+r.id+'" data-tipo="'+tipo+'" data-canal="whatsapp">WhatsApp</a> ';
+    out+='<a class="btn btn-secondary btn-sm" href="'+r.sms+'" data-ct="marcar" data-id="'+r.id+'" data-tipo="'+tipo+'" data-canal="sms">SMS</a> ';
   }
-  if(r.email){ out+='<button class="btn btn-secondary btn-sm" onclick="marcar('+r.id+',\''+tipo+'\',\'email\',true)">Email</button>'; }
+  if(r.email){ out+='<button class="btn btn-secondary btn-sm" data-ct="marcar" data-id="'+r.id+'" data-tipo="'+tipo+'" data-canal="email">Email</button>'; }
   if(!r.movil_valido&&!r.email){ out='<span style="color:var(--danger);font-size:.8rem">Sin móvil ni email</span>'; }
   return out;
 }
@@ -3550,6 +3579,20 @@ async function marcar(id,tipo,canal,esEmail){
   catch(e){ toast(e.message,'err'); }
 }
 cargar();
+
+// ── 5 SEP 2026 (csp-erp-migrar-handlers) — ENGANCHE DE LA COLA DE RECORDATORIOS ────────────────
+// Las filas y sus botones de aviso se pintan DESPUES de pedir la lista: delegacion. La (i) y el
+// aspa de su ventana estan en el HTML, pero se despachan aqui mismo para tener un solo sitio.
+document.addEventListener('click', function(e){
+  var t = e.target.closest('[data-ct]'); if (!t) return;
+  var a = t.getAttribute('data-ct');
+  if (a === 'info-abrir') openModal('mColaInfo');
+  else if (a === 'info-cerrar') closeModal('mColaInfo');
+  else if (a === 'marcar') {
+    var canal = t.getAttribute('data-canal');
+    marcar(Number(t.getAttribute('data-id')), t.getAttribute('data-tipo'), canal, canal === 'email');
+  }
+});
 `;
 
 const JS_SERVICIOS = String.raw`
@@ -3685,7 +3728,7 @@ var LIST=[];
 async function cargar(){ LIST=await api('GET','/api/erp/citas/recursos/list'); render(); }
 function render(){
   var b=document.getElementById('recBody');
-  b.innerHTML=LIST.length?LIST.map(r=>'<tr><td>'+esc(r.nombre)+'</td><td>'+esc(r.tipo)+'</td><td style="color:var(--muted)">'+esc(r.notas||'—')+'</td><td>'+(window.CITAS_EDIT?'<button class="btn btn-secondary btn-sm" onclick="edit('+r.id+')">Editar</button> <button class="btn btn-danger btn-sm" onclick="del('+r.id+')">Archivar</button>':'')+'</td></tr>').join(''):'<tr><td colspan="4" style="color:var(--muted)">Aún no hay '+(window.PUESTO_PLURAL||'puestos').toLowerCase()+'.</td></tr>';
+  b.innerHTML=LIST.length?LIST.map(r=>'<tr><td>'+esc(r.nombre)+'</td><td>'+esc(r.tipo)+'</td><td style="color:var(--muted)">'+esc(r.notas||'—')+'</td><td>'+(window.CITAS_EDIT?'<button class="btn btn-secondary btn-sm" data-rc="editar" data-id="'+r.id+'">Editar</button> <button class="btn btn-danger btn-sm" data-rc="borrar" data-id="'+r.id+'">Archivar</button>':'')+'</td></tr>').join(''):'<tr><td colspan="4" style="color:var(--muted)">Aún no hay '+(window.PUESTO_PLURAL||'puestos').toLowerCase()+'.</td></tr>';
 }
 function openRecurso(){ document.getElementById('recId').value=''; document.getElementById('mRecTitle').textContent='Nuevo '+(window.PUESTO_SING||'Puesto').toLowerCase(); document.getElementById('recNombre').value=''; document.getElementById('recTipo').value='silla'; document.getElementById('recNotas').value=''; openModal('mRec'); }
 function edit(id){ var r=LIST.find(x=>x.id===id); document.getElementById('recId').value=id; document.getElementById('mRecTitle').textContent='Editar '+(window.PUESTO_SING||'Puesto').toLowerCase(); document.getElementById('recNombre').value=r.nombre; document.getElementById('recTipo').value=r.tipo; document.getElementById('recNotas').value=r.notas||''; openModal('mRec'); }
@@ -3693,6 +3736,17 @@ async function recGuardar(){ var id=document.getElementById('recId').value; var 
   try{ if(id) await api('PUT','/api/erp/citas/recursos/'+id,body); else await api('POST','/api/erp/citas/recursos',body); closeModal('mRec'); toast('Guardado'); cargar(); }catch(e){ toast(e.message,'err'); } }
 async function del(id){ if(!await window.confirmarEnPagina({titulo:'Archivar el puesto',texto:'Deja de estar disponible para citas nuevas. Las citas que ya lo tenían no cambian.',aceptar:'Sí, archivarlo'}))return; try{ await api('DELETE','/api/erp/citas/recursos/'+id); toast('Archivado'); cargar(); }catch(e){ toast(e.message,'err'); } }
 cargar();
+
+// ── 5 SEP 2026 — ENGANCHE DE RECURSOS. La tabla se pinta despues: delegacion.
+document.addEventListener('click', function(e){
+  var t = e.target.closest('[data-rc]'); if (!t) return;
+  var a = t.getAttribute('data-rc'), id = Number(t.getAttribute('data-id'));
+  if (a === 'nuevo') openRecurso();
+  else if (a === 'cerrar') closeModal('mRec');
+  else if (a === 'guardar') recGuardar();
+  else if (a === 'editar') edit(id);
+  else if (a === 'borrar') del(id);
+});
 `;
 
 // ── LA CARA DE «CUÁNDO ABRO» ─────────────────────────────────────────────────────────────────────
@@ -3977,11 +4031,30 @@ function renderExc(exc){
   var box=document.getElementById('excList');
   if(!exc||!exc.length){ box.innerHTML='<div style="color:var(--text3);font-size:.85rem">No tienes ningún día suelto apuntado.</div>'; return; }
   box.innerHTML='<div class="table-wrap"><table><thead><tr><th>Día</th><th>Qué pasa</th><th>Horario</th><th>Motivo</th><th></th></tr></thead><tbody>'
-    +exc.map(e=>'<tr><td>'+fechaEs(e.fecha)+'</td><td>'+(e.tipo==='cerrado'?'Cerrado todo el día':'Abre a otras horas')+'</td><td>'+(e.tipo==='horario'?hcorta(e.inicio_min)+'–'+hcorta(e.fin_min):'—')+'</td><td>'+esc(e.motivo||'')+'</td><td>'+(window.CITAS_EDIT?'<button class="hor-quitar" onclick="eDel('+e.id+')" title="Quitar" aria-label="Quitar">✕</button>':'')+'</td></tr>').join('')+'</tbody></table></div>';
+    +exc.map(e=>'<tr><td>'+fechaEs(e.fecha)+'</td><td>'+(e.tipo==='cerrado'?'Cerrado todo el día':'Abre a otras horas')+'</td><td>'+(e.tipo==='horario'?hcorta(e.inicio_min)+'–'+hcorta(e.fin_min):'—')+'</td><td>'+esc(e.motivo||'')+'</td><td>'+(window.CITAS_EDIT?'<button class="hor-quitar" data-hr="exc-del" data-id="'+e.id+'" title="Quitar" aria-label="Quitar">✕</button>':'')+'</td></tr>').join('')+'</tbody></table></div>';
 }
 async function eDel(id){ try{ await api('DELETE','/api/erp/citas/excepcion/'+id); toast('Quitado'); hCargar(); }catch(e){ toast(e.message,'err'); } }
 ['hpA1','hpB1','hpA2','hpB2'].forEach(function(id){ var el=document.getElementById(id); if(el) el.addEventListener('change', pintaPrevia); });
 hToggle(); pintaDiasSel(); hCargar();
+
+// ── 5 SEP 2026 — ENGANCHE DE HORARIOS. Las excepciones se pintan despues, y las casillas de cada
+// dia se repintan al cambiar de persona: todo por delegacion.
+document.addEventListener('click', function(e){
+  var t = e.target.closest('[data-hr]'); if (!t) return;
+  var a = t.getAttribute('data-hr');
+  if (a === 'jornada') horJornada(t.getAttribute('data-j'));
+  else if (a === 'aplicar') horAplica();
+  else if (a === 'guardar') hGuardar();
+  else if (a === 'exc-add') eAdd();
+  else if (a === 'exc-del') eDel(Number(t.getAttribute('data-id')));
+});
+document.addEventListener('change', function(e){
+  var t = e.target.closest('[data-hr]'); if (!t) return;
+  var a = t.getAttribute('data-hr');
+  if (a === 'toggle') { hToggle(); hCargar(); }
+  else if (a === 'cargar') hCargar();
+  else if (a === 'exc-toggle') eToggle();
+});
 `;
 
 const JS_AJUSTES = String.raw`
@@ -3994,4 +4067,7 @@ async function ajGuardar(){
     cita_puesto_sing:pu[0], cita_puesto_plural:pu[1]||pu[0] };
   try{ await api('POST','/api/erp/citas/ajustes',body); toast('Ajustes guardados'); setTimeout(function(){location.reload();},400); }catch(e){ toast(e.message,'err'); }
 }
+
+// ── 5 SEP 2026 — el unico boton de los ajustes de agenda.
+document.querySelector('[data-aj="guardar"]')?.addEventListener('click', function(){ ajGuardar(); });
 `;

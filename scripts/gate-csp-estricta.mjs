@@ -29,7 +29,13 @@ import { join } from 'path';
 
 const BASE = 'http://localhost:3000';
 let pass = 0, fail = 0;
-const ok = (c, m) => { if (c) { pass++; console.log('  ✓ ' + m); } else { fail++; console.error('  ✗ ' + m); } };
+// ⚙️ 5 SEP 2026 — el detalle SE IMPRIME. Hasta hoy `ok` recibía tres argumentos en medio gate y solo
+// usaba dos: los fallos salían sin decir QUÉ había medido, y había que volver a instrumentar a mano
+// cada vez. Un rojo que no explica nada obliga a repetir el trabajo para leerlo.
+const ok = (c, m, det) => {
+  const cola = det === undefined || det === '' ? '' : ' · ' + det;
+  if (c) { pass++; console.log('  ✓ ' + m + cola); } else { fail++; console.error('  ✗ ' + m + cola); }
+};
 
 const cdb = new Database(join(APP_DIR, 'data', 'control.db'));
 const saToken = randomBytes(32).toString('base64url');
@@ -54,6 +60,18 @@ const portalToken = createToken(pdb, portalClienteId, 1);
 // pero dos están archivadas y la otra perdida: el tablero sale VACÍO y no habría nada que pulsar.
 // Un gate que no puede pulsar no verifica nada, así que se siembra la suya, con la misma MARCA que
 // el resto, y se retira en el `finally` por la marca (no por el id de esta pasada).
+// ⚙️ 5 SEP 2026 — UNA CITA FUTURA CON ENLACE VIVO. El enlace de una cita CADUCA en cuanto pasa el
+// día (`resolverCitaPorToken`), y en el negocio de desarrollo todas las citas con enlace son de
+// agosto: la página del cliente devolvía 403 y el gate estaba midiendo la pantalla de error, no la
+// página. Se siembra una a 30 días vista, con el código marcado, y se retira en el `finally`.
+const citaTok = 'ZZCSP' + randomBytes(24).toString('base64url');
+const citaFecha = new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10);
+pdb.prepare(`INSERT INTO citas (codigo, cliente_id, user_id, fecha, inicio_min, dur_min, margen_min,
+    estado, nota, token, token_expira, archived)
+  VALUES (?, ?, (SELECT id FROM admin_users WHERE active=1 ORDER BY id LIMIT 1), ?, 600, 30, 0,
+    'pedida', '', ?, ?, 0)`)
+  .run(MARCA, portalClienteId, citaFecha, citaTok, Math.floor(Date.now() / 1000) + 40 * 86400);
+
 const oppId = pdb.prepare(`INSERT INTO opportunities
     (client_id, title, amount, stage, probability, status, stage_changed_at, active, created_at)
   VALUES (?, ?, 1000, 'nuevo', 50, 'activa', datetime('now'), 1, datetime('now'))`)
@@ -871,8 +889,92 @@ try {
   }
   ok((await violaciones(p15)).length === 0, 'la tanda de las pequeñas, sin una violación de CSP');
 
+
+  // ── 16 · LA AGENDA ENTERA, y la página que ve el CLIENTE con su enlace ──
+  console.log('\n[16] Las cinco pantallas que le faltaban a la agenda, y la página de la cita');
+  const p16 = await nuevaPagina();
+  await p16.setCookie({ name: 'asess', value: erpTok, domain: 'desarrollo-bamburu.localhost', path: '/' });
+  const AGENDA = [
+    ['/admin/citas/cola', async () => {
+      const b = document.querySelector('[data-ct="info-abrir"]'); if (!b) return 'sin la (i)';
+      b.click(); await new Promise(r => setTimeout(r, 400));
+      if (!document.getElementById('mColaInfo')?.classList.contains('open')) return 'la (i) no abre';
+      document.querySelector('[data-ct="info-cerrar"]')?.click();
+      await new Promise(r => setTimeout(r, 300));
+      return document.getElementById('mColaInfo')?.classList.contains('open') ? 'no cierra' : 'ok';
+    }],
+    ['/admin/citas/recursos', async () => {
+      const b = document.querySelector('[data-rc="nuevo"]'); if (!b) return 'sin botón de nuevo';
+      b.click(); await new Promise(r => setTimeout(r, 500));
+      if (!document.getElementById('mRec')?.classList.contains('open')) return 'no abre';
+      document.querySelector('[data-rc="cerrar"]')?.click();
+      await new Promise(r => setTimeout(r, 300));
+      return document.getElementById('mRec')?.classList.contains('open') ? 'no cierra' : 'ok';
+    }],
+    // `horJornada` no toca las horas: marca el botón elegido y DESPLIEGA el segundo tramo. Se
+    // comprueba lo que el botón hace de verdad, no lo que uno supone que hace.
+    ['/admin/citas/horarios', async () => {
+      const b = document.querySelector('[data-hr="jornada"][data-j="partido"]');
+      if (!b) return 'sin botón de jornada';
+      const par2 = document.getElementById('hpPar2');
+      if (!par2) return 'sin el segundo tramo';
+      const oculto = par2.hasAttribute('hidden');
+      b.click(); await new Promise(r => setTimeout(r, 400));
+      if (par2.hasAttribute('hidden')) return 'la jornada partida no despliega el segundo tramo';
+      if (b.getAttribute('aria-selected') !== 'true') return 'el botón no queda marcado';
+      document.querySelector('[data-hr="jornada"][data-j="corrido"]').click();
+      await new Promise(r => setTimeout(r, 300));
+      return par2.hasAttribute('hidden') === true || !oculto ? 'ok' : 'no vuelve a plegarse';
+    }],
+    ['/admin/citas/ajustes', async () => (document.querySelector('[data-aj="guardar"]') ? 'ok' : 'sin botón')],
+    ['/admin/citas/publica', async () => {
+      const b = document.querySelector('[data-pb="copiar"]'); if (!b) return 'sin botón de copiar';
+      // Copiar al portapapeles puede estar denegado en el navegador de pruebas: lo que se mide es
+      // que el botón LLAMA a su función, no que el sistema deje copiar.
+      let llamo = false;
+      const orig = window.pbCopiar; window.pbCopiar = function () { llamo = true; };
+      b.click(); await new Promise(r => setTimeout(r, 300));
+      window.pbCopiar = orig;
+      return llamo ? 'ok' : 'MUDO';
+    }],
+  ];
+  for (const [ruta, prueba] of AGENDA) {
+    const r = await p16.goto(ERP_BASE + ruta, { waitUntil: 'networkidle0' });
+    ok(/script-src[^;]*'nonce-/.test(cabecera(r)), ruta + ' — endurecida');
+    await new Promise(x => setTimeout(x, 900));
+    const res = await p16.evaluate(prueba);
+    ok(res === 'ok', '  y su control responde al pulsarlo', String(res));
+  }
+  // LA PÁGINA DE LA CITA: es ANÓNIMA, la abre el cliente desde el enlace del recordatorio, y sus
+  // botones son condicionales. Se entra SIN sesión de panel, como entra él.
+  const p16b = await nuevaPagina();
+  ok(!!citaTok, 'hay una cita con enlace VIVO para probar la página del cliente', citaFecha);
+  if (citaTok) {
+    const r16 = await p16b.goto(ERP_BASE + '/cita/' + citaTok, { waitUntil: 'networkidle0' });
+    // ⚠️ SE EXIGE 200. El 5 sep esta comprobación dio verde sobre un **500**: el nonce se metió en
+    // una plantilla que no tiene el contexto de Hono a mano y la página del cliente reventaba
+    // entera. Una cabecera correcta sobre una pantalla rota no es un aprobado.
+    ok(r16.status() === 200, '/cita/<enlace> — la página del cliente ABRE', 'HTTP ' + r16.status());
+    ok(/script-src[^;]*'nonce-/.test(cabecera(r16)), '  y va con la política estricta');
+    await new Promise(x => setTimeout(x, 600));
+    const pc = await p16b.evaluate(async () => {
+      const botones = [...document.querySelectorAll('[data-pc]')].map(b => b.getAttribute('data-pc'));
+      if (!botones.length) return 'sin botones (¿cita anulada o pasada?)';
+      // Se pulsa «No puedo ir», que abre una confirmación antes de avisar de nada.
+      const b = document.querySelector('[data-pc="avisar"]') || document.querySelector('[data-pc]');
+      const antes = document.body.innerHTML.length;
+      b.click(); await new Promise(r => setTimeout(r, 600));
+      const ov = document.querySelector('.modal-overlay.open, #pdOverlay.open');
+      if (ov) ov.remove();
+      return (ov || document.body.innerHTML.length !== antes) ? 'ok' : 'MUDO';
+    });
+    ok(pc === 'ok', '  y sus botones responden: el cliente puede contestar a su cita', String(pc));
+    ok((await violaciones(p16b)).length === 0, '  sin una violación de CSP en la página del cliente');
+  }
+  ok((await violaciones(p16)).length === 0, 'la agenda entera, sin una violación de CSP');
+
   const todas = [...(await violaciones(p3)), ...(await violaciones(p4)),
-                 ...(await violaciones(p11)), ...(await violaciones(p12)), ...(await violaciones(p13)), ...(await violaciones(p14)), ...(await violaciones(p15)),
+                 ...(await violaciones(p11)), ...(await violaciones(p12)), ...(await violaciones(p13)), ...(await violaciones(p14)), ...(await violaciones(p15)), ...(await violaciones(p16)),
                  ...(await violaciones(p9)),
                  ...(await violaciones(p8)),
                  ...(await violaciones(p5)), ...(await violaciones(p6)), ...(await violaciones(p7))];
@@ -886,6 +988,7 @@ try {
     pdb.prepare('DELETE FROM portal_mensajes WHERE texto LIKE ?').run('ZZ mensaje de comprobacion CSP %');
     pdb.prepare('DELETE FROM portal_sesiones WHERE client_id IN (SELECT id FROM clients WHERE name LIKE ?)').run('ZZ CSP %');
     pdb.prepare('DELETE FROM portal_tokens   WHERE client_id IN (SELECT id FROM clients WHERE name LIKE ?)').run('ZZ CSP %');
+    pdb.prepare('DELETE FROM citas WHERE codigo LIKE ?').run('ZZ CSP %');
     pdb.prepare('DELETE FROM product_tags WHERE tag_id IN (SELECT id FROM tags WHERE name LIKE ?)').run('ZZ CSP %');
     pdb.prepare('DELETE FROM tags WHERE name LIKE ?').run('ZZ CSP %');
     pdb.prepare('DELETE FROM opportunities WHERE title LIKE ?').run('ZZ CSP %');
