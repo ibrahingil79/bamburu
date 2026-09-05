@@ -41,3 +41,7 @@ logs/
 
 # Estado en vivo del orquestador (no se versiona)
 .orquestador/
+
+# Guiones de sonda de usar y tirar (5 sep 2026): se me colaron tres al repo en 3b58c17.
+# Van con punto delante justo para distinguirlos de los gates de verdad.
+scripts/.*.mjs
