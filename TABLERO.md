@@ -9676,8 +9676,15 @@ escenarios y los dos casos incómodos, con relojes de prueba de Stripe) ·
 > van SIETE.** **⚙️ Y OCHO, con `copias-cifradas-con-entorno-y-certificados`** (las copias ya salen
 > cifradas). El bloque tiene **16 fichas**, de las que van **9 hechas** (las ocho de hoy +
 > `manifiesto-huellas-backups`) y **quedan 7 PENDIENTES**. Contado sobre el documento con las marcas
-> de sección, no de memoria ni con números de línea. **La siguiente es
-> `restauracion-prueba-el-sistema-entero`**, que sigue siendo del BLOQUE 2.
+> de sección, no de memoria ni con números de línea. ~~**La siguiente es
+> `restauracion-prueba-el-sistema-entero`**, que sigue siendo del BLOQUE 2.~~
+>
+> **⚙️ AL DÍA EL 5 SEP 2026, contado otra vez sobre el documento:** el BLOQUE 2 tiene **18 fichas**,
+> de las que van **16 hechas**. Hoy se cerraron dos: `csp-erp-migrar-handlers` y, con ella,
+> `csp-unsafe-inline`, que llevaba pendiente a propósito esperándola.
+> **La siguiente es `cifrado-en-reposo-bases`** — el cifrado en reposo de las bases de cada negocio.
+> Lleva **`firma: Ibrahin`**: construir el cifrado es técnico, **custodiar la llave no**, y esa parte
+> es suya. Detrás quedan `permisos-paso-1-censo-rutas` y `retencion-backup-fallo-parcial`.
 > Se tacha en vez de borrarse, que es lo que manda este
 > documento — y porque un puntero rancio manda al siguiente chat al sitio equivocado con toda la
 > confianza del mundo.
@@ -10635,10 +10642,10 @@ dos cuentas de Drive. Al sacarlas de esa carpeta, las dos cosas se acaban solas.
 > **funcionó tres veces el 3 de septiembre** (03:36, 12:40 y 19:38) y **falló una sola vez**, la
 > madrugada del 4, después de que la rotación del token dejara la cuenta sin autorizar. Y avisó.
 
-## TAREA — La CSP todavía permite `unsafe-inline`
+## ✅ TAREA — La CSP todavía permite `unsafe-inline`
 
 - **id:** csp-unsafe-inline
-- **estado:** pendiente
+- **estado:** ✅ **HECHA — 5 sep 2026.** Se quedó pendiente a propósito esperando a `csp-erp-migrar-handlers`; con esa cerrada, `unsafe-inline` no está en `script-src` de ninguna respuesta.
 - **origen:** TABLERO.md §Backlog 31 ago 2026 · Seguridad y datos
 
 ~~**8 usos** de `unsafe-inline` en `core/security-headers.js` … **Verificado el 1 sep 2026: son
@@ -10674,11 +10681,17 @@ formulario del portal (se envía **y se comprueba que el mensaje llegó a la bas
 **3 fallos**, incluido `script-src-attr`. Es exactamente el fallo que esta ficha teme: el botón se
 queda mudo y la página carga perfecta.
 
-**LO QUE FALTA, Y POR QUÉ NO SE CIERRA HOY:** el ERP. **546 handlers de atributo y 88 bloques de
-código en línea**, medidos hoy. Eso no es «lo que queda de esta ficha»: es una pieza propia, la que
-el propio código llama **C4b-4** y dejó escrita como «hasta que se decida». Va como ficha aparte al
-final de la cola (`csp-erp-migrar-handlers`). **Esta ficha sigue PENDIENTE a propósito**: cerrarla
-con el ERP entero en `unsafe-inline` sería rebajar el criterio.
+**~~LO QUE FALTA, Y POR QUÉ NO SE CIERRA HOY:~~ el ERP. **546 handlers de atributo y 88 bloques de
+código en línea**, medidos el 4 sep. Eso no era «lo que quedaba de esta ficha»: era una pieza propia,
+la que el propio código llama **C4b-4**, y fue como ficha aparte (`csp-erp-migrar-handlers`).
+**Esta ficha se quedó PENDIENTE a propósito**: cerrarla con el ERP entero en `unsafe-inline` habría
+sido rebajar el criterio.
+
+✅ **5 SEP 2026 — LA PIEZA QUE FALTABA ESTÁ HECHA, y con ella ésta.** `csp-erp-migrar-handlers`
+cerró con **336 de 336 pantallas del panel limpias**, la tienda migrada y las páginas de error
+comprobadas, y **`script-src 'unsafe-inline'` salió de `core/security-headers.js`**. Verificado en
+producción cargando y **pulsando** en panel, entrada, portal, página de la cita y landing. El
+criterio no se rebajó: se esperó a cumplirlo.
 
 **LA LECCIÓN DE C4b, QUE ESTÁ EN `CLAUDE.md` Y MANDA SOBRE EL PLANO:** la CSP es una cabecera **POR
 RESPUESTA**, así que **se endurece POR SUPERFICIE, no de golpe**. Y en cuanto una respuesta lleva
@@ -13447,10 +13460,10 @@ Y su propia limpieza no lo recogió: `cleanup(slug)` empieza con `if (!slug) ret
 - [ ] Hay un centinela que falla si aparece un `new Database` sobre `data/tenants/` sin `fileMustExist`, probado en rojo.
 
 
-## TAREA — Migrar el ERP para quitarle el `unsafe-inline`
+## ✅ TAREA — Migrar el ERP para quitarle el `unsafe-inline`
 
 - **id:** csp-erp-migrar-handlers
-- **estado:** pendiente · **EN CURSO — 7ª sesión, 5 sep 2026: el panel entero MIGRADO (336/336). Queda UN paso: quitar `unsafe-inline`.**
+- **estado:** ✅ **HECHA — 5 sep 2026.** `script-src 'unsafe-inline'` **no existe en ninguna respuesta de Bamburu**. 8 sesiones, del 4 al 5 de septiembre.
 - **origen:** Desgajada de `csp-unsafe-inline` el 4 sep 2026, al medir el tamaño real. Es la pieza que el código llama **C4b-4**.
 
 **Medido el 4 sep 2026, no estimado:** `modules/erp` tiene **546 handlers de atributo** y **88
@@ -13465,9 +13478,9 @@ una vez**.
 
 **Criterios de aceptación**
 
-- [ ] Se migra **pantalla a pantalla**, y cada pantalla se endurece **solo después** de migrar su código incrustado.
-- [ ] Cada pantalla endurecida entra en `gate-csp-estricta` **pulsando** sus controles, no solo cargándola.
-- [ ] Al terminar, `script-src 'unsafe-inline'` **desaparece** de `core/security-headers.js`.
+- [x] Se migra **pantalla a pantalla**, y cada pantalla se endurece **solo después** de migrar su código incrustado.
+- [x] Cada pantalla endurecida entra en `gate-csp-estricta` **pulsando** sus controles, no solo cargándola.
+- [x] Al terminar, `script-src 'unsafe-inline'` **desaparece** de `core/security-headers.js`.
 - [ ] `style-src 'unsafe-inline'` **se queda**: es una decisión escrita, con 2.642 atributos `style=` detrás y un valor mucho menor. Quitarlo NO es parte de esto.
 
 **No se empieza sin encargo de Ibrahin:** es esfuerzo alto y toca todas las pantallas del panel.
@@ -13963,3 +13976,96 @@ las superficies que no son el panel.
 **Aparte, sin tocar:** el **constructor de tienda** de `settings.js` tiene 27 handlers, pero **su
 ruta está comentada** en `routes/index.js` y no se sirve. Si algún día se monta, hay que migrarlo
 antes de endurecer su pantalla.
+
+---
+
+### ✅ CERRADA — 5 sep 2026 · `unsafe-inline` FUERA, EN TODO
+
+**`script-src 'unsafe-inline'` ya no existe en ninguna respuesta de Bamburu.** Panel, landing,
+registro, entrada, portal del cliente, página de la cita, páginas de error y respuestas que no son
+HTML: **todas llevan `script-src 'self' 'nonce-…'`**. `style-src 'unsafe-inline'` **se queda**, como
+estaba decidido.
+
+**QUÉ SE MIDIÓ ANTES DE QUITARLO, porque esto no se hace a ojo:**
+
+- **La TIENDA pública.** Estaba apagada **globalmente** por la decisión D1 —el montaje de `/store`
+  comentado—, no por negocio, así que no se podía «encender en un negocio de prueba». Se montó **un
+  rato y solo en la instancia de sonda**, con producción sirviendo la versión apagada todo el
+  tiempo. Tenía **19 handlers y su bloque sin nonce**: migrados. Comprobado en modo aviso con un
+  navegador de verdad —**0 violaciones**— y **pulsando**: el buscador del catálogo filtra, el
+  carrito sube cantidad y quita línea, y el botón de entrar llama a su función. **La tienda vuelve
+  apagada**: D1 sigue en pie, pero el día que se descomenten esas dos líneas ya cumple la política.
+- **Las páginas de ERROR** (404 dentro y fuera del panel, 403 del portal): **0 handlers, 0 bloques
+  sin nonce**.
+- **Las respuestas que NO son HTML** (PDF, CSV, XLSX, JSON): no llevan script, así que una política
+  de `script-src` no las toca. Comprobado que **se siguen sirviendo** con la política puesta.
+
+**VERIFICADO EN PRODUCCIÓN, cargando y PULSANDO** — panel (menú de cuenta), clientes (menú «···» de
+una fila), agenda (una celda de la rejilla), entrada, portal, página de la cita del cliente y
+landing: **todas 200, todas estrictas, cero violaciones, cero errores de JavaScript**.
+
+**ROJO PROVOCADO FINAL, en sus dos formas:**
+
+- devolver un handler de atributo **junto** al oyente → `gate-csp-superficies-limpias` cae y **nombra
+  la pantalla** (`/admin/tiempo`);
+- devolverlo **en vez** del oyente —la regresión de verdad, la que deja el botón muerto— → caen
+  **los dos**: el de superficies y el de pulsar.
+
+`gate-csp-estricta` **260 OK / 0 fallos** · `gate-csp-superficies-limpias` **3 ✓ / 0 ✗** con 291
+pantallas vigiladas · `gate-armazon-sin-handlers` **11 ✓ / 0 ✗** · `gate-menu-navegacion` 157 OK ·
+`gate-portal-sin-llave-en-url` 29 ✓ · `gate-agenda-visual` 88 OK.
+
+**Tres comprobaciones del gate se reescribieron**, porque decían lo contrario de lo que ahora es
+cierto: exigían que `/admin` **conservara** `unsafe-inline`, y que una vecina «sin migrar» no se
+arrastrara. Esa segunda se había caducado **cuatro veces** apoyándose en pantallas que acababan
+migrándose; ahora el anclaje se comprueba **leyendo las propias reglas** —que todas terminen en
+ancla—, que es la propiedad que importaba y no puede caducar.
+
+### 📌 LO QUE QUEDA APUNTADO, Y NO ES DE ESTA FICHA
+
+- **El constructor de tienda** (`settings.js`, 27 handlers): su ruta está comentada en
+  `routes/index.js` y **no se sirve**. Si algún día se monta, hay que migrarlo antes de endurecer su
+  pantalla. → ficha `constructor-tienda-sin-migrar`.
+- **La tienda tiene roturas anteriores y ajenas a la CSP**, vistas al medirla: `/store/checkout`
+  responde **500** (`no such table: shipping_methods`, tabla archivada en el Pilar 3) y
+  `/store/product/<id>` **siempre redirige** al catálogo. → ficha `tienda-rota-antes-de-encenderla`.
+
+
+## TAREA — El constructor de tienda no está migrado
+
+- **id:** constructor-tienda-sin-migrar
+- **estado:** pendiente
+- **origen:** Visto el 5 sep 2026 al cerrar `csp-erp-migrar-handlers`.
+
+`modules/erp/routes/settings.js` tiene **27 handlers de atributo** en el constructor de tienda (las
+funciones `sb*`). **No se sirven**: su ruta (`admin.route('/store-settings', storeSettViews)`) está
+comentada en `routes/index.js`. Por eso no se migraron: tocar código que no se sirve es refactorizar,
+no cerrar una ficha.
+
+**Criterios de aceptación**
+
+- [ ] Si se decide montar esa pantalla, se migra **antes** de servirla y se endurece con regla anclada.
+- [ ] Entra en `gate-csp-estricta` **pulsando** sus controles.
+
+
+## TAREA — La tienda pública está rota por dentro
+
+- **id:** tienda-rota-antes-de-encenderla
+- **estado:** pendiente
+- **origen:** Medido el 5 sep 2026, montando la tienda un rato en una instancia de sonda.
+
+La tienda sigue apagada por D1. Al montarla para medir su CSP salieron **dos roturas anteriores y
+ajenas a esa ficha**:
+
+- **`/store/checkout` responde 500**: `no such table: shipping_methods`. La propia nota de D1 ya
+  avisaba de que el pago estaba roto (escribía en `inventory_movements`, archivada en el Pilar 3).
+- **`/store/product/<id>` SIEMPRE redirige** a `/store/catalog`, para cualquier id, incluidos los
+  que el propio `/api/store/products` devuelve. O sea: **no hay ficha de producto**.
+
+**Lo que SÍ está bien:** el catálogo, el carrito, la cuenta y las páginas legales abren y responden,
+y su código ya está migrado a la política estricta.
+
+**Criterios de aceptación**
+
+- [ ] Antes de encender la tienda, `/store/checkout` y `/store/product/<id>` funcionan.
+- [ ] Hay un gate que recorre el flujo de compra entero y falla si alguno de los dos se rompe.

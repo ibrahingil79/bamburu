@@ -907,7 +907,7 @@ function buildPage(db, title, content, bodyScript = '', c = null) {
     </div>
     <div style="margin-top:.75rem">© ${new Date().getFullYear()} ${escHtml(s.store_name||'')}</div>
   </footer>
-  <script>
+  <script${c && c.get ? ` nonce="${c.get('cspNonce')}"` : ''}>
     function escHtml(s){if(s==null)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
     function getCart(){return JSON.parse(localStorage.getItem('cart')||'[]')}
     function saveCart(c){localStorage.setItem('cart',JSON.stringify(c))}
@@ -930,6 +930,42 @@ function buildPage(db, title, content, bodyScript = '', c = null) {
     }
     updateCartUI();
     ${bodyScript}
+
+    // ── 5 SEP 2026 (csp-erp-migrar-handlers) — ENGANCHE DE LA TIENDA ────────────────────────────
+    // Un solo despachador para las diez pantallas: cada una trae los controles que trae, y la rama
+    // solo se ejecuta si su elemento existe, asi que no hace falta saber en cual estamos. El
+    // carrito y la lista de deseos se PINTAN desde JavaScript, de modo que esto tiene que ir por
+    // delegacion o cada linea nueva naceria con el boton muerto.
+    document.addEventListener('click', function(e){
+      var t = e.target.closest('[data-tn]'); if (!t) return;
+      var a = t.getAttribute('data-tn');
+      if (a === 'newsletter') subscribeNewsletter();
+      else if (a === 'img') setMainImg(t.getAttribute('data-img'), t);
+      else if (a === 'add-carrito') addToCartFromPage();
+      else if (a === 'deseos') addToWishlist();
+      else if (a === 'resena') submitReview();
+      else if (a === 'cant') changeQty(Number(t.getAttribute('data-i')), Number(t.getAttribute('data-d')));
+      else if (a === 'quitar') removeItem(Number(t.getAttribute('data-i')));
+      else if (a === 'cupon') applyCoupon();
+      else if (a === 'pedido') placeOrder();
+      else if (a === 'salir') logout();
+      else if (a === 'quitar-deseo') removeWish(Number(t.getAttribute('data-id')));
+      else if (a === 'entrar') doLogin();
+      else if (a === 'registrar') doRegister();
+    });
+    document.addEventListener('input', function(e){
+      if (e.target.closest('[data-tn="filtrar"]')) filterCatalog();
+    });
+    document.addEventListener('change', function(e){
+      var t = e.target.closest('[data-tn]'); if (!t) return;
+      if (t.getAttribute('data-tn') === 'filtrar') filterCatalog();
+      else if (t.getAttribute('data-tn') === 'envio') updateTotal();
+    });
+    // La foto que no carga: 'error' NO burbujea como los demas, pero SI se ve en captura.
+    document.addEventListener('error', function(e){
+      var img = e.target.closest ? e.target.closest('[data-tn="img-rota"]') : null;
+      if (img) img.style.display = 'none';
+    }, true);
   </script>
 </body>
 </html>`;
@@ -1298,7 +1334,7 @@ export function createRoutes(app, db) {
               ${opt.subtitle ? `<p class="newsletter-subtitle">${escHtml(opt.subtitle)}</p>` : ''}
               <div class="newsletter-form">
                 <input id="nlEmail" type="email" placeholder="tu@email.com" class="form-control" style="flex:1;">
-                <button class="btn btn-primary" style="width:auto;padding:.5rem 1.5rem" onclick="subscribeNewsletter()">${escHtml(opt.button_text || opt.btn_text || 'Suscribirme')}</button>
+                <button class="btn btn-primary" style="width:auto;padding:.5rem 1.5rem" data-tn="newsletter">${escHtml(opt.button_text || opt.btn_text || 'Suscribirme')}</button>
               </div>
               <div id="nlMsg" style="margin-top:.75rem;font-size:.85rem"></div>
             </section>
@@ -1333,12 +1369,12 @@ export function createRoutes(app, db) {
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;flex-wrap:wrap;gap:.75rem">
         <h1 style="font-size:1.5rem">Catálogo</h1>
         <div style="display:flex;gap:.5rem;flex-wrap:wrap">
-          <input id="searchQ" placeholder="Buscar..." style="padding:.5rem .75rem;border:1px solid #e2e8f0;border-radius:6px;font-size:.875rem;min-width:180px" oninput="filterCatalog()">
-          <select id="catFilter" style="padding:.5rem .75rem;border:1px solid #e2e8f0;border-radius:6px;font-size:.875rem" onchange="filterCatalog()">
+          <input id="searchQ" placeholder="Buscar..." style="padding:.5rem .75rem;border:1px solid #e2e8f0;border-radius:6px;font-size:.875rem;min-width:180px" data-tn="filtrar">
+          <select id="catFilter" style="padding:.5rem .75rem;border:1px solid #e2e8f0;border-radius:6px;font-size:.875rem" data-tn="filtrar">
             <option value="">Todas las categorías</option>
             ${catOpts}
           </select>
-          <select id="sortFilter" style="padding:.5rem .75rem;border:1px solid #e2e8f0;border-radius:6px;font-size:.875rem" onchange="filterCatalog()">
+          <select id="sortFilter" style="padding:.5rem .75rem;border:1px solid #e2e8f0;border-radius:6px;font-size:.875rem" data-tn="filtrar">
             <option value="default">Orden por defecto</option>
             <option value="price_asc">Precio: menor a mayor</option>
             <option value="price_desc">Precio: mayor a menor</option>
@@ -1377,7 +1413,7 @@ export function createRoutes(app, db) {
       const stars = n => '★'.repeat(Math.round(n)) + '☆'.repeat(5-Math.round(n));
 
       const allImgs = [p.image_url, ...p.images.map(i=>i.url)].filter(Boolean);
-      const gallery = allImgs.length > 1 ? `<div style="display:flex;gap:.5rem;margin-top:.5rem;flex-wrap:wrap">${allImgs.map((img,i)=>`<img src="${escHtml(img)}" style="width:60px;height:60px;object-fit:cover;border-radius:6px;cursor:pointer;border:2px solid ${i===0?'var(--p)':'#e2e8f0'}" onclick="setMainImg(${escHtml(JSON.stringify(img))},this)">`).join('')}</div>` : '';
+      const gallery = allImgs.length > 1 ? `<div style="display:flex;gap:.5rem;margin-top:.5rem;flex-wrap:wrap">${allImgs.map((img,i)=>`<img src="${escHtml(img)}" style="width:60px;height:60px;object-fit:cover;border-radius:6px;cursor:pointer;border:2px solid ${i===0?'var(--p)':'#e2e8f0'}" data-tn="img" data-img="${escHtml(img)}">`).join('')}</div>` : '';
 
       const variantSelect = p.variants.length ? `<div class="form-group"><label class="form-label">Selecciona variante</label><select class="form-control" id="variantSel"><option value="">-- Elige --</option>${p.variants.map(v=>`<option value="${v.id}" data-price="${v.price||p.price}">${escHtml(v.name)} — €${(v.price||p.price).toFixed(2)} (stock: ${v.stock})</option>`).join('')}</select></div>` : '';
 
@@ -1387,7 +1423,7 @@ export function createRoutes(app, db) {
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:2.5rem;margin-bottom:3rem">
           <div>
             <div style="background:#fff;border-radius:10px;overflow:hidden;border:1px solid #e2e8f0">
-              <img id="mainImg" src="${escHtml(p.image_url||'')}" style="width:100%;height:380px;object-fit:cover" onerror="this.style.display='none'">
+              <img id="mainImg" src="${escHtml(p.image_url||'')}" style="width:100%;height:380px;object-fit:cover" data-tn="img-rota">
               ${!p.image_url ? `<div style="height:380px;display:flex;align-items:center;justify-content:center;font-size:4rem">📦</div>` : ''}
             </div>
             ${gallery}
@@ -1406,8 +1442,8 @@ export function createRoutes(app, db) {
               <label class="form-label" style="margin:0">Cantidad:</label>
               <input type="number" id="qty" value="1" min="1" style="width:70px;padding:.5rem;border:1px solid #e2e8f0;border-radius:6px;text-align:center">
             </div>
-            <button class="btn btn-primary" style="width:auto;padding:.65rem 2rem;font-size:1rem" onclick="addToCartFromPage()">🛒 Agregar al carrito</button>
-            <button style="background:none;border:none;color:#64748b;cursor:pointer;margin-left:1rem;font-size:.9rem" onclick="addToWishlist()">❤️ Guardar</button>
+            <button class="btn btn-primary" style="width:auto;padding:.65rem 2rem;font-size:1rem" data-tn="add-carrito">🛒 Agregar al carrito</button>
+            <button style="background:none;border:none;color:#64748b;cursor:pointer;margin-left:1rem;font-size:.9rem" data-tn="deseos">❤️ Guardar</button>
           </div>
         </div>
 
@@ -1427,13 +1463,13 @@ export function createRoutes(app, db) {
               </select>
             </div>
             <div class="form-group"><label class="form-label">Comentario</label><textarea class="form-control" id="rComment" rows="3"></textarea></div>
-            <button class="btn btn-primary" style="width:auto" onclick="submitReview()">Enviar reseña</button>
+            <button class="btn btn-primary" style="width:auto" data-tn="resena">Enviar reseña</button>
             <div id="rMsg" style="margin-top:.5rem;font-size:.85rem"></div>
           </div>
         </div>`;
 
       return c.html(buildPage(db, p.name, content, `
-        function setMainImg(url,el){document.getElementById('mainImg').src=url;document.querySelectorAll('[onclick^="setMainImg"]').forEach(i=>i.style.border='2px solid #e2e8f0');el.style.border='2px solid var(--p)';}
+        function setMainImg(url,el){document.getElementById('mainImg').src=url;document.querySelectorAll('[data-tn="img"]').forEach(i=>i.style.border='2px solid #e2e8f0');el.style.border='2px solid var(--p)';}
         document.getElementById('variantSel')?.addEventListener('change',function(){const opt=this.options[this.selectedIndex];const price=opt.dataset.price;if(price)document.getElementById('displayPrice').textContent='€'+parseFloat(price).toFixed(2);});
         function addToCartFromPage(){
           const v=document.getElementById('variantSel');
@@ -1483,12 +1519,12 @@ export function createRoutes(app, db) {
         el.innerHTML=cart.map((x,i)=>{sub+=x.price*x.qty;return '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:1rem;margin-bottom:.75rem;display:flex;gap:1rem;align-items:center">'+
           '<div style="flex:1"><div style="font-weight:600">'+escHtml(x.name)+'</div><div style="color:#94a3b8;font-size:.85rem">€'+x.price.toFixed(2)+' por unidad</div></div>'+
           '<div style="display:flex;align-items:center;gap:.5rem">'+
-          '<button onclick="changeQty('+i+',-1)" style="background:#f1f5f9;border:none;border-radius:4px;width:28px;height:28px;cursor:pointer;font-weight:600">-</button>'+
+          '<button data-tn="cant" data-i="'+i+'" data-d="-1" style="background:#f1f5f9;border:none;border-radius:4px;width:28px;height:28px;cursor:pointer;font-weight:600">-</button>'+
           '<span style="min-width:24px;text-align:center;font-weight:600">'+x.qty+'</span>'+
-          '<button onclick="changeQty('+i+',1)" style="background:#f1f5f9;border:none;border-radius:4px;width:28px;height:28px;cursor:pointer;font-weight:600">+</button>'+
+          '<button data-tn="cant" data-i="'+i+'" data-d="1" style="background:#f1f5f9;border:none;border-radius:4px;width:28px;height:28px;cursor:pointer;font-weight:600">+</button>'+
           '</div>'+
           '<div style="min-width:60px;text-align:right;font-weight:700">€'+(x.price*x.qty).toFixed(2)+'</div>'+
-          '<button onclick="removeItem('+i+')" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:1.1rem">✕</button>'+
+          '<button data-tn="quitar" data-i="'+i+'" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:1.1rem">✕</button>'+
           '</div>';}).join('');
         document.getElementById('sumSub').textContent='€'+sub.toFixed(2);
         document.getElementById('sumTotal').textContent='€'+sub.toFixed(2);
@@ -1532,13 +1568,13 @@ export function createRoutes(app, db) {
           </div>
           ${shippingMethods.length ? `<div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:1.5rem;margin-bottom:1rem">
             <h3 style="margin-bottom:1rem">Método de envío</h3>
-            <select class="form-control" id="shippingMethod" onchange="updateTotal()"><option value="">Sin envío / Retiro en tienda</option>${shipOpts}</select>
+            <select class="form-control" id="shippingMethod" data-tn="envio"><option value="">Sin envío / Retiro en tienda</option>${shipOpts}</select>
           </div>` : ''}
           <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:1.5rem">
             <h3 style="margin-bottom:1rem">Cupón de descuento</h3>
             <div style="display:flex;gap:.5rem">
               <input class="form-control" id="couponCode" placeholder="Código..." style="text-transform:uppercase">
-              <button class="btn btn-secondary" onclick="applyCoupon()">Aplicar</button>
+              <button class="btn btn-secondary" data-tn="cupon">Aplicar</button>
             </div>
             <div id="couponMsg" style="margin-top:.4rem;font-size:.83rem"></div>
           </div>
@@ -1552,7 +1588,7 @@ export function createRoutes(app, db) {
           <div style="display:flex;justify-content:space-between;font-size:.88rem;margin-bottom:.3rem" id="coShipRow" style="display:none"><span>Envío</span><span id="coShipping">€0.00</span></div>
           <hr style="border:none;border-top:1px solid #f1f5f9;margin:.75rem 0">
           <div style="display:flex;justify-content:space-between;font-weight:700;font-size:1.05rem"><span>Total</span><span id="coTotal">€0.00</span></div>
-          <button class="btn btn-primary" style="margin-top:1rem" onclick="placeOrder()">Confirmar pedido</button>
+          <button class="btn btn-primary" style="margin-top:1rem" data-tn="pedido">Confirmar pedido</button>
           <div id="orderMsg" style="margin-top:.5rem;font-size:.83rem"></div>
         </div>
       </div>`;
@@ -1642,7 +1678,7 @@ export function createRoutes(app, db) {
             <strong>${escHtml(cl?.name||acc.email)}</strong>
             <div style="color:#94a3b8;font-size:.82rem">${escHtml(acc.email)}</div>
           </div>
-          <button onclick="logout()" class="btn btn-secondary" style="width:100%;font-size:.85rem">Cerrar sesión</button>
+          <button data-tn="salir" class="btn btn-secondary" style="width:100%;font-size:.85rem">Cerrar sesión</button>
         </div>
         <div>
           <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;overflow:hidden">
@@ -1660,7 +1696,7 @@ export function createRoutes(app, db) {
       </div>`;
     return c.html(buildPage(db, 'Mi Cuenta', content, `
       fetch('/api/store/account/wishlist').then(r=>r.json()).then(items=>{
-        document.getElementById('wishlistItems').innerHTML=items.length?'<div class="grid grid-cards">'+items.map(p=>'<div class="card"><div class="card-img">'+(p.image_url?'<img src="'+escHtml(p.image_url)+'">':'📦')+'</div><div class="card-body"><div class="card-title">'+escHtml(p.name)+'</div><div style="color:var(--p);font-weight:700">€'+p.price.toFixed(2)+'</div><div style="display:flex;gap:.4rem;margin-top:.5rem"><a href="/store/product/'+p.id+'" class="btn btn-primary" style="flex:1">Ver</a><button onclick="removeWish('+p.id+')" class="btn btn-secondary" style="padding:.45rem .6rem">✕</button></div></div></div>').join('')+'</div>':'<p style="color:#94a3b8">Tu lista de deseos está vacía</p>';
+        document.getElementById('wishlistItems').innerHTML=items.length?'<div class="grid grid-cards">'+items.map(p=>'<div class="card"><div class="card-img">'+(p.image_url?'<img src="'+escHtml(p.image_url)+'">':'📦')+'</div><div class="card-body"><div class="card-title">'+escHtml(p.name)+'</div><div style="color:var(--p);font-weight:700">€'+p.price.toFixed(2)+'</div><div style="display:flex;gap:.4rem;margin-top:.5rem"><a href="/store/product/'+p.id+'" class="btn btn-primary" style="flex:1">Ver</a><button data-tn="quitar-deseo" data-id="'+p.id+'" class="btn btn-secondary" style="padding:.45rem .6rem">✕</button></div></div></div>').join('')+'</div>':'<p style="color:#94a3b8">Tu lista de deseos está vacía</p>';
       });
       async function removeWish(pid){await fetch('/api/store/account/wishlist/'+pid,{method:'DELETE'});location.reload();}
       async function logout(){await fetch('/api/store/account/logout',{method:'POST'});location.href='/store';}
@@ -1675,7 +1711,7 @@ export function createRoutes(app, db) {
         <div class="form-group"><label class="form-label">Email</label><input class="form-control" id="lEmail" type="email" required></div>
         <div class="form-group"><label class="form-label">Contraseña</label><input class="form-control" id="lPwd" type="password" required></div>
         <div id="lMsg" style="margin-bottom:.75rem;font-size:.83rem"></div>
-        <button class="btn btn-primary" onclick="doLogin()">Entrar</button>
+        <button class="btn btn-primary" data-tn="entrar">Entrar</button>
       </div>`;
     return c.html(buildPage(db, 'Iniciar sesión', content, `
       async function doLogin(){
@@ -1697,7 +1733,7 @@ export function createRoutes(app, db) {
         <div class="form-group"><label class="form-label">Email *</label><input class="form-control" id="rEmail" type="email" required></div>
         <div class="form-group"><label class="form-label">Contraseña *</label><input class="form-control" id="rPwd" type="password" required></div>
         <div id="rMsg" style="margin-bottom:.75rem;font-size:.83rem"></div>
-        <button class="btn btn-primary" onclick="doRegister()">Crear cuenta</button>
+        <button class="btn btn-primary" data-tn="registrar">Crear cuenta</button>
       </div>`;
     return c.html(buildPage(db, 'Registro', content, `
       async function doRegister(){
@@ -1726,6 +1762,10 @@ export function createRoutes(app, db) {
   // se comenta el montaje, NO se borra; `routes.js` permanece en el repo. /store/* y /api/store/* → 404.
   // (El checkout ya estaba roto: INSERT a `inventory_movements`, tabla archivada en el Pilar 3.)
   // Para reactivar: descomentar estas dos líneas (y revisar el clúster archivado por D1).
+  // ⚙️ 5 SEP 2026 — se montó UN RATO, y solo en una instancia de sonda, para poder medir la tienda
+  // antes de quitar `unsafe-inline` (autorizado por Ibrahin). Vuelve apagada: D1 sigue en pie.
+  // Sus plantillas SÍ quedan migradas: 0 handlers de atributo y su bloque con nonce, así que el día
+  // que se descomenten estas dos líneas la tienda ya cumple la política estricta.
   // app.route('/api/store', api);
   // app.route('/store', views);
 }

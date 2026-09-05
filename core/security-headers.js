@@ -1,6 +1,10 @@
 import { randomBytes } from 'crypto';
 
-// ── C4b · Superficies con CSP ESTRICTA (script-src SIN 'unsafe-inline', con nonce) ──────────────
+// ── C4b · CSP ESTRICTA EN TODO (script-src SIN 'unsafe-inline', con nonce) ─────────────────────
+//
+// ✅ 5 SEP 2026 — TERMINADO. `script-src 'unsafe-inline'` no existe en ninguna respuesta de Bamburu.
+// La lista de abajo ya no decide nada: se conserva como REGISTRO del orden en que se endureció cada
+// superficie, que es lo que hace falta si algún día hay que rehacer el camino hacia atrás.
 //
 // POR QUÉ SE ENDURECE POR SUPERFICIE Y NO DE GOLPE. La CSP es una cabecera POR RESPUESTA, y en cuanto
 // una respuesta lleva un nonce en script-src el navegador IGNORA 'unsafe-inline' EN ESA RESPUESTA.
@@ -231,9 +235,10 @@ export function securityHeaders() {
     //   - https: para imágenes (productos pueden tener URL externa)
     //
     // NOTAS:
-    // - 'unsafe-inline' en script-src sigue aquí porque las páginas tienen <script> inline y ~522
-    //   handlers de atributo (onclick="..."). Se quita por SUPERFICIE en C4b-1, no de golpe: en cuanto
-    //   una respuesta lleva un nonce, el navegador IGNORA 'unsafe-inline' en ESA respuesta.
+    // - 'unsafe-inline' en script-src YA NO ESTÁ (5 sep 2026). Estuvo porque las páginas tenían
+    //   ~522 handlers de atributo (onclick="...") y bloques en línea sin nonce. Se quitó por
+    //   SUPERFICIE, nunca de golpe, y solo cuando el censo del panel dio CERO: 336 de 336 pantallas
+    //   limpias, la tienda migrada y las páginas de error comprobadas.
     // - 'unsafe-inline' en style-src se queda A PROPÓSITO: son 2027 style="..." y el valor es muy
     //   inferior (inyección de estilo, no ejecución de código). Decidido en el plan de C4b.
     // - C4b-2 (16 jul 2026): FUERA cdn.jsdelivr.net. Las 4 librerías que venían de ahí (gsap +
@@ -243,6 +248,19 @@ export function securityHeaders() {
     //   CONGELADA en el repo — chart.js iba por "@4", que flotaba a la última 4.x sola.
     // - fonts.googleapis/gstatic SÍ siguen: los usan la tienda, la landing y public/bamburu.css.
 
+    // ⚙️ 5 SEP 2026 — `unsafe-inline` YA NO EXISTE. Toda respuesta lleva la política estricta.
+    //
+    // La lista de abajo se conserva a propósito, aunque ya no decida nada: es el REGISTRO de en qué
+    // orden se endureció cada superficie y por qué, que es lo que hace falta si algún día hay que
+    // deshacer un paso. `estricta` se queda calculada por el mismo motivo: los gates la leen.
+    //
+    // QUÉ SE MIDIÓ ANTES DE QUITARLO, porque esto no se hace a ojo:
+    //   · las 336 pantallas del panel — 0 handlers de atributo, 0 bloques sin nonce;
+    //   · la TIENDA pública entera, montada un rato en una instancia de sonda para poder verla
+    //     (sigue apagada por D1): 0 y 0, y su flujo de carrito probado pulsando;
+    //   · las páginas de ERROR (404 dentro y fuera del panel, 403 del portal): 0 y 0;
+    //   · y las respuestas que NO son HTML (PDF, CSV, XLSX, JSON): no llevan script, así que una
+    //     política de script-src no las toca.
     const estricta = SUPERFICIES_ESTRICTAS.some(re => re.test(c.req.path));
 
     const politica = (scriptSrc) => [
@@ -259,15 +277,17 @@ export function securityHeaders() {
     ].join('; ');
 
     const ESTRICTA = `script-src 'self' 'nonce-${nonce}'`;
-    const LEGADO = "script-src 'self' 'unsafe-inline'";
 
-    c.header('Content-Security-Policy', politica(estricta ? ESTRICTA : LEGADO));
+    c.header('Content-Security-Policy', politica(ESTRICTA));
 
     // INSTRUMENTO DE MEDIDA (C4b-0), apagado por defecto. Con CSP_PROBE=1 las superficies que aún NO
     // están endurecidas reciben ADEMÁS la política estricta en modo Report-Only: el navegador NO
     // bloquea nada, solo APUNTA lo que bloquearía. Sirve para inventariar el ERP de verdad antes de
     // decidir C4b-4 — porque el grep ya ha mentido dos veces (los "58" que eran 43; 12 puntos en
     // código muerto). Report-Only no puede romper nada: no bloquea, informa.
+    // ⚙️ 5 SEP 2026 — el instrumento se queda, pero ya no tiene nada que medir: no hay superficie
+    // sin endurecer. Se conserva porque el día que se añada una pantalla nueva volverá a hacer
+    // falta exactamente esto: verla en modo aviso ANTES de servirla con la política puesta.
     if (process.env.CSP_PROBE === '1' && !estricta) {
       c.header('Content-Security-Policy-Report-Only', politica(ESTRICTA));
     }

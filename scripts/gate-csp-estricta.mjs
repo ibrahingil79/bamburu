@@ -25,6 +25,7 @@ import puppeteer from 'puppeteer';
 import { launchOpts, APP_DIR } from './lib/gate-env.mjs';
 import Database from 'better-sqlite3';
 import { randomBytes } from 'crypto';
+import { readFileSync } from 'fs';
 import { join } from 'path';
 
 const BASE = 'http://localhost:3000';
@@ -130,11 +131,22 @@ try {
   const nonce2 = (cabecera(r1b).match(/'nonce-([^']+)'/) || [])[1];
   ok(nonceCab !== nonce2, 'el nonce CAMBIA en cada petición (no es fijo)');
 
-  // ── 2 · El ERP sigue con la política de siempre: no se ha endurecido de rebote ──
-  console.log('\n[2] El ERP NO se ha endurecido (sus 546 handlers siguen vivos, a propósito)');
-  const r2 = await p1.goto('http://desarrollo-bamburu.localhost:3000/admin/login', { waitUntil: 'networkidle0' });
-  ok(/script-src[^;]*'unsafe-inline'/.test(cabecera(r2)), "/admin — conserva 'unsafe-inline' (C4b-4 sin decidir)");
-  ok(!/script-src[^;]*'nonce-/.test(cabecera(r2)), '/admin — sin nonce: no se ha endurecido a medias');
+  // ── 2 · YA NO QUEDA NADA EN LEGADO ──
+  console.log('\n[2] Ninguna respuesta lleva ya unsafe-inline en script-src');
+  // ⚙️ 5 SEP 2026 — esta sección decía lo contrario: exigía que `/admin` CONSERVARA 'unsafe-inline'
+  // «porque C4b-4 estaba sin decidir». C4b-4 está hecha, y lo que hay que vigilar ahora es que no
+  // vuelva: se comprueba en una pantalla de dentro, una de fuera y una página de ERROR, que es la
+  // que nadie mira y la que se sirve cuando algo va mal.
+  for (const [nombre, url] of [['/admin/login', 'http://desarrollo-bamburu.localhost:3000/admin/login'],
+                               ['la landing', 'http://localhost:3000/'],
+                               ['un 404', 'http://localhost:3000/ruta-que-no-existe-zzz']]) {
+    const r2 = await p1.goto(url, { waitUntil: 'networkidle0' });
+    ok(!/script-src[^;]*'unsafe-inline'/.test(cabecera(r2)), nombre + " — sin 'unsafe-inline' en script-src");
+    ok(/script-src[^;]*'nonce-/.test(cabecera(r2)), '  y con su nonce');
+  }
+  // Y `style-src` NO se toca: es una decisión escrita, con 2.027 atributos style= detrás.
+  const rStyle = await p1.goto('http://localhost:3000/', { waitUntil: 'networkidle0' });
+  ok(/style-src[^;]*'unsafe-inline'/.test(cabecera(rStyle)), "style-src conserva 'unsafe-inline', como está decidido");
 
   // ── 3 · /registro FUNCIONA con la CSP estricta ──
   console.log('\n[3] /registro — la pantalla vive y sus botones responden');
@@ -241,13 +253,19 @@ try {
   const r8 = await p8.goto(ERP_BASE + '/admin', { waitUntil: 'networkidle0' });
   ok(/script-src[^;]*'nonce-/.test(cabecera(r8)) && !/script-src[^;]*'unsafe-inline'/.test(cabecera(r8)),
      '/admin — nonce sí, unsafe-inline no');
-  // Y LA REGLA `/^\/admin$/` NO ARRASTRA A LO QUE CUELGA DE ELLA: eso es la mitad del valor de
-  // esta ficha. ⚙️ 5 SEP 2026 — antes se probaba con `/admin/clients`, y caducó el día que esa
-  // pantalla se endureció (la TERCERA vez que una comprobación de anclaje se apoya en una vecina
-  // «aún sin migrar»). Se usa un papel que se descarga: nunca será una pantalla endurecida.
-  const r8b = await fetch(ERP_BASE + '/admin/listados/clientes/pdf', { headers: { cookie: 'asess=' + erpTok } });
-  ok(/script-src[^;]*'unsafe-inline'/.test(r8b.headers.get('content-security-policy') || ''),
-     '  y lo que cuelga de /admin NO se arrastra: la regla es exacta, no un prefijo', 'HTTP ' + r8b.status);
+  // LAS REGLAS SIGUEN ANCLADAS, y ahora eso se comprueba MIRÁNDOLAS, no por la cabecera.
+  // ⚙️ 5 SEP 2026 — esta comprobación caducó CUATRO veces: se apoyaba en una vecina «aún sin
+  // migrar» (`/admin/quotes/9`, `/admin/purchases`, `/admin/inventory`, un PDF), y al quitar
+  // `unsafe-inline` ya no queda NADA que sirva la política vieja, así que por cabecera es
+  // inobservable. La propiedad que importa —que ninguna regla sea un prefijo suelto— se lee del
+  // propio fichero: `/^\/$/` sin ancla habría endurecido el ERP entero de golpe el primer día.
+  const fuente = readFileSync(join(APP_DIR, 'core', 'security-headers.js'), 'utf8');
+  const listaRe = (fuente.match(/const SUPERFICIES_ESTRICTAS = \[([\s\S]*?)\n\];/) || [])[1] || '';
+  const reglas = [...listaRe.matchAll(/^\s*(\/\^[^,]+\/),/gm)].map(m => m[1]);
+  const sinAncla = reglas.filter(r => !/\$\/$/.test(r) && !/\(\\\/\|\$\)\/$/.test(r));
+  ok(reglas.length > 90, '  la lista de superficies sigue en su sitio', reglas.length + ' reglas');
+  ok(sinAncla.length === 0, '  y TODAS terminan en ancla: ninguna es un prefijo suelto',
+     sinAncla.length ? sinAncla[0] : '');
   await p8.goto(ERP_BASE + '/admin', { waitUntil: 'networkidle0' });
   ok((await violaciones(p8)).length === 0, 'ninguna violación de CSP al cargar /admin');
   // SE PULSA EL ARMAZÓN: es lo que se quedó mudo si la migración fallara.
@@ -309,18 +327,13 @@ try {
   const r9 = await p9.goto(ERP_BASE + '/admin/albaranes', { waitUntil: 'networkidle0' });
   ok(/script-src[^;]*'nonce-/.test(cabecera(r9)) && !/script-src[^;]*'unsafe-inline'/.test(cabecera(r9)),
      '/admin/albaranes — endurecida: nonce sí, unsafe-inline no');
-  // LA REGLA ANCLADA, comprobada por su parte peligrosa.
-  // ⚙️ 5 SEP 2026 — ESTA COMPROBACIÓN SE HA CADUCADO DOS VECES, y por el mismo motivo: se apoyaba en
-  // una pantalla vecina que «aún no estaba migrada» (primero `/admin/quotes/9`, luego
-  // `/admin/purchases`), y en cuanto le llegó su turno el anclaje dejó de probar nada. Ahora se
-  // apoya en algo que NO puede cambiar de bando: `/admin/contabilidad/ventas.pdf` es un papel que
-  // se descarga, no una pantalla, así que nunca se endurecerá — y su ruta empieza exactamente igual
-  // que la regla `/^\/admin\/contabilidad\/ventas$/`. Si alguien le quitara el `$`, esto cae.
+  // El papel que se descarga también va con la política estricta desde el 5 sep 2026 — y no le
+  // molesta, porque un PDF no ejecuta JavaScript. Lo que se comprueba aquí es que SIGUE SIRVIÉNDOSE.
   const r9b = await p9.goto(ERP_BASE + '/admin/contabilidad/ventas', { waitUntil: 'networkidle0' });
   ok(/script-src[^;]*'nonce-/.test(cabecera(r9b)), '/admin/contabilidad/ventas — endurecida');
   const r9c = await fetch(ERP_BASE + '/admin/contabilidad/ventas.pdf', { headers: { cookie: 'asess=' + erpTok } });
-  ok(/script-src[^;]*'unsafe-inline'/.test(r9c.headers.get('content-security-policy') || ''),
-     '  y ventas.pdf NO: el ancla $ impide que la regla arrastre al papel', 'HTTP ' + r9c.status);
+  ok(r9c.status === 200 && (r9c.headers.get('content-type') || '').includes('pdf'),
+     '  y su PDF se sigue descargando con la política puesta', 'HTTP ' + r9c.status);
 
   await p9.goto(ERP_BASE + '/admin/albaranes', { waitUntil: 'networkidle0' });
   ok((await violaciones(p9)).length === 0, 'ninguna violación de CSP al cargar');
