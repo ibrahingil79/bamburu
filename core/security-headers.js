@@ -170,6 +170,7 @@ const SUPERFICIES_ESTRICTAS = [
   /^\/admin\/pagos$/,
   /^\/admin\/inventory$/,
   /^\/admin\/propuestas$/,
+  /^\/admin\/proyectos$/,
 ];
 
 export function securityHeaders() {

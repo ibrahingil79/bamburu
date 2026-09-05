@@ -44,6 +44,43 @@ let a = arranque(), n = masNuevo();
 console.log('  proceso levantado: ' + new Date(a).toISOString());
 console.log('  fichero más nuevo: ' + n.fichero + ' (' + new Date(n.ms).toISOString() + ')');
 
+// ── LA SINTAXIS, ANTES DE REINICIAR ────────────────────────────────────────────────────────────
+// ⚙️ 5 SEP 2026. Nace de un fallo real de esta misma tarde: se desplegó un fichero con un acento
+// grave dentro de un comentario que vive en una plantilla de texto —el error que ya ha mordido
+// siete veces en este repositorio— y el servicio no arrancó. **Producción estuvo en 502 cerca de un
+// minuto**, y el aviso que lo habría dicho estaba silenciado en la llamada.
+//
+// Reiniciar con el código roto es la única forma de tirar Bamburu con un despliegue. Comprobar la
+// sintaxis antes cuesta un segundo y lo impide: si algo no compila, NO se reinicia y se dice cuál.
+function sintaxisSana() {
+  const malos = [];
+  const ver = (dir) => {
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      if (e.name === 'node_modules' || e.name === '.git' || e.name.startsWith('.')) continue;
+      const p2 = join(dir, e.name);
+      if (e.isDirectory()) { ver(p2); continue; }
+      if (!e.name.endsWith('.js') && !e.name.endsWith('.mjs')) continue;
+      try { execSync('node --check ' + JSON.stringify(p2), { stdio: 'pipe' }); }
+      catch (err) {
+        const txt = String(err.stderr || err.stdout || err.message);
+        malos.push(p2.replace(APP_DIR + '/', '') + ' — ' + (txt.split('\n').find(l => /Error/.test(l)) || '').trim());
+      }
+    }
+  };
+  for (const d of ['core', 'modules', 'scripts']) { try { ver(join(APP_DIR, d)); } catch { /* no existe */ } }
+  try { execSync('node --check ' + JSON.stringify(join(APP_DIR, 'index.js')), { stdio: 'pipe' }); }
+  catch { malos.push('index.js — no compila'); }
+  return malos;
+}
+const rotos = sintaxisSana();
+ok(rotos.length === 0, 'todo el código compila ANTES de reiniciar',
+   rotos.length ? rotos.length + ' fichero(s): ' + rotos[0] : '');
+for (const m of rotos.slice(0, 5)) console.error('      · ' + m);
+if (rotos.length) {
+  console.error('\n  ✗ NO SE REINICIA: reiniciar con esto tumbaría producción. Arregla y repite.');
+  process.exit(1);
+}
+
 if (n.ms > a + 2000) {
   if (soloVerificar) { ok(false, 'el proceso NO sirve el código de disco', 'falta reiniciar'); }
   else {

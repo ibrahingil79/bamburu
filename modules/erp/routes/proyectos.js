@@ -187,13 +187,13 @@ export function createProyectoRoutes(db) {
       + '<td style="font-size:.85rem">' + cobroCol(p) + '</td>'
       + '<td><span class="badge ' + (p.estado === 'abierto' ? 'b-green' : 'b-gray') + '">' + escHtml(ESTADO_LABEL[p.estado] || p.estado) + '</span></td>'
       + '<td style="white-space:nowrap">'
-        + '<button class="btn btn-secondary btn-sm" onclick="viewDetail(' + p.id + ')">Ver</button> '
+        + '<button class="btn btn-secondary btn-sm" data-py="ver" data-id="' + p.id + '">Ver</button> '
         + (verArchivados
-            ? (can(c, 'proyectos.edit') ? '<button class="btn btn-secondary btn-sm" onclick="restoreProyecto(' + p.id + ')">Restaurar</button>' : '')
+            ? (can(c, 'proyectos.edit') ? '<button class="btn btn-secondary btn-sm" data-py="restaurar" data-id="' + p.id + '">Restaurar</button>' : '')
             : (can(c, 'proyectos.edit')
                 ? rowMenu([
-                    { label: 'Editar', onclick: 'editProyecto(' + p.id + ')' },
-                    { label: 'Archivar', danger: true, onclick: 'delProyecto(' + p.id + ')' },
+                    { label: 'Editar', act: 'proy-editar', arg: p.id },
+                    { label: 'Archivar', danger: true, act: 'proy-archivar', arg: p.id },
                   ])
                 : ''))
       + '</td></tr>').join('');
@@ -203,12 +203,12 @@ export function createProyectoRoutes(db) {
         <h2>Proyectos</h2>
         <form method="get" style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
           <input class="search" type="text" name="q" value="${escHtml(q)}" placeholder="Buscar por nombre o código...">
-          <select class="form-control" name="archivados" style="width:auto;min-width:150px" onchange="this.form.submit()">
+          <select class="form-control" name="archivados" style="width:auto;min-width:150px" data-py="filtro">
             <option value=""${verArchivados ? '' : ' selected'}>Activos</option>
             <option value="1"${verArchivados ? ' selected' : ''}>Archivados</option>
           </select>
           <button class="btn btn-secondary" type="submit">Buscar</button>
-          ${can(c, 'proyectos.edit') ? '<button type="button" class="btn btn-primary" onclick="openNewProyecto()">Nuevo proyecto</button>' : ''}
+          ${can(c, 'proyectos.edit') ? '<button type="button" class="btn btn-primary" data-py="nuevo">Nuevo proyecto</button>' : ''}
         </form>
       </div>
 
@@ -229,7 +229,7 @@ export function createProyectoRoutes(db) {
 
       <div class="modal-overlay" id="proyModal">
         <div class="modal" style="max-width:640px">
-          <div class="modal-head"><h3 id="proyModalTitle">Nuevo proyecto</h3><button class="modal-close" onclick="closeModal('proyModal')">✕</button></div>
+          <div class="modal-head"><h3 id="proyModalTitle">Nuevo proyecto</h3><button class="modal-close" data-py="cerrar-modal">✕</button></div>
           <div class="modal-body">
             <input type="hidden" id="proyId">
             <div class="form-group"><label class="form-label">Nombre *</label><input class="form-control" id="pNombre"></div>
@@ -244,7 +244,7 @@ export function createProyectoRoutes(db) {
             </div>
             <div class="form-row">
               <div class="form-group"><label class="form-label">Modo de cobro *</label>
-                <select class="form-control" id="pModo" onchange="proyToggleCobro()">
+                <select class="form-control" id="pModo">
                   <option value="horas">Por horas</option>
                   <option value="precio_cerrado">Precio cerrado</option>
                 </select>
@@ -266,18 +266,18 @@ export function createProyectoRoutes(db) {
             </div>
             <div class="form-group"><label class="form-label">Notas internas</label><textarea class="form-control" id="pNotas" rows="2"></textarea></div>
           </div>
-          <div class="modal-foot"><button class="btn btn-secondary" onclick="closeModal('proyModal')">Cancelar</button><button class="btn btn-primary" onclick="saveProyecto()">Guardar</button></div>
+          <div class="modal-foot"><button class="btn btn-secondary" data-py="cerrar-modal">Cancelar</button><button class="btn btn-primary" data-py="guardar">Guardar</button></div>
         </div>
       </div>
 
       <div class="modal-overlay" id="proyDetail">
         <div class="modal" style="max-width:640px">
-          <div class="modal-head"><h3 id="proyDetailName">Detalle del proyecto</h3><button class="modal-close" onclick="closeModal('proyDetail')">✕</button></div>
+          <div class="modal-head"><h3 id="proyDetailName">Detalle del proyecto</h3><button class="modal-close" data-py="cerrar-detalle">✕</button></div>
           <div class="modal-body" id="proyDetailBody"></div>
         </div>
       </div>
 
-      <script>
+      <script nonce="${c.get('cspNonce')}">
       const PROY_SYM = ${JSON.stringify(sym)};
       const PUEDE_TIEMPO = ${can(c, 'tiempo.read') ? 'true' : 'false'};   // sección de registro de tiempo (peldaño 7 · pieza 2)
       const PUEDE_RENT = ${(can(c, 'proyectos.read') && can(c, 'invoices.read')) ? 'true' : 'false'};   // panel de rentabilidad (peldaño 7 · pieza 4): exige proyectos.read + P&G
@@ -406,7 +406,31 @@ export function createProyectoRoutes(db) {
             +'</tbody></table></div>'
             :'<div style="color:var(--muted);font-size:.85rem">Aún no hay tiempo registrado en este proyecto.</div>');
       }
-      </script>`;
+      
+      // ── 5 SEP 2026 (csp-erp-migrar-handlers) — ENGANCHE DE PROYECTOS ──────────────────────────
+      // La tabla la pinta el servidor, pero el menu «···» de cada fila pinta SUS botones al abrirlo:
+      // por eso Editar y Archivar usan la clave act del armazon y llegan por 'rowmenu:act'.
+      // El resto son fijos, y el desplegable de archivados manda su propio formulario.
+      document.addEventListener('click', function(e){
+        var t = e.target.closest('[data-py]'); if (!t) return;
+        var a = t.getAttribute('data-py'), id = Number(t.getAttribute('data-id'));
+        if (a === 'ver') viewDetail(id);
+        else if (a === 'restaurar') restoreProyecto(id);
+        else if (a === 'nuevo') openNewProyecto();
+        else if (a === 'guardar') saveProyecto();
+        else if (a === 'cerrar-modal') closeModal('proyModal');
+        else if (a === 'cerrar-detalle') closeModal('proyDetail');
+      });
+      document.addEventListener('change', function(e){
+        var t = e.target.closest('[data-py="filtro"]'); if (t) t.form.submit();
+      });
+      document.getElementById('pModo')?.addEventListener('change', function(){ proyToggleCobro(); });
+      document.addEventListener('rowmenu:act', function(e){
+        var id = Number(e.detail.arg);
+        if (e.detail.act === 'proy-editar') editProyecto(id);
+        else if (e.detail.act === 'proy-archivar') delProyecto(id);
+      });
+</script>`;
     return c.html(adminLayout('Proyectos', content, 'proyectos', c.get('session')?.csrfToken || '', c));
   });
 

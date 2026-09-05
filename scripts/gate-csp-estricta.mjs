@@ -1037,8 +1037,61 @@ try {
   ok(prop === 'ok', '  PULSAR «Descartar» en una propuesta abre su confirmación', prop);
   ok((await violaciones(p17)).length === 0, '  las cuatro, sin una violación de CSP');
 
+
+  // ── 18 · PROYECTOS: la tabla la pinta el servidor, pero el menú «···» no ──
+  console.log('\n[18] Proyectos: el menú de la fila, el detalle y el alta');
+  const p18 = await nuevaPagina();
+  await p18.setCookie({ name: 'asess', value: erpTok, domain: 'desarrollo-bamburu.localhost', path: '/' });
+  const r18 = await p18.goto(ERP_BASE + '/admin/proyectos', { waitUntil: 'networkidle0' });
+  ok(r18.status() === 200, '/admin/proyectos abre', 'HTTP ' + r18.status());
+  ok(/script-src[^;]*'nonce-/.test(cabecera(r18)), '  y va con la política estricta');
+  await new Promise(x => setTimeout(x, 700));
+  const py = await p18.evaluate(async () => {
+    const res = {};
+    // 1 · el menú «···» de una fila: sus botones NO existen hasta abrirlo.
+    const trig = document.querySelector('tbody [data-act="rowmenu"]');
+    res.hayMenu = !!trig;
+    if (trig) {
+      trig.click(); await new Promise(r => setTimeout(r, 300));
+      const items = [...document.querySelectorAll('tbody .rmenu-item')];
+      res.conAtributo = items.filter(i => i.getAttribute('onclick')).length;
+      const ed = items.find(i => i.getAttribute('data-rm') === 'proy-editar');
+      if (ed) { ed.click(); await new Promise(r => setTimeout(r, 600));
+                res.abreEditar = !!document.getElementById('proyModal')?.classList.contains('open');
+                document.querySelector('[data-py="cerrar-modal"]')?.click();
+                await new Promise(r => setTimeout(r, 300)); }
+    }
+    // 2 · «Ver», que es un botón de la fila pintado por el servidor.
+    const ver = document.querySelector('[data-py="ver"]');
+    if (ver) { ver.click(); await new Promise(r => setTimeout(r, 900));
+               res.abreDetalle = !!document.getElementById('proyDetail')?.classList.contains('open');
+               document.querySelector('[data-py="cerrar-detalle"]')?.click();
+               await new Promise(r => setTimeout(r, 300)); }
+    // 3 · «Nuevo proyecto», y el desplegable de modo de cobro que hay dentro.
+    document.querySelector('[data-py="nuevo"]')?.click();
+    await new Promise(r => setTimeout(r, 500));
+    res.abreNuevo = !!document.getElementById('proyModal')?.classList.contains('open');
+    const modo = document.getElementById('pModo');
+    if (modo) {
+      const antes = document.body.innerHTML.length;
+      modo.value = [...modo.options].map(o => o.value).find(v => v !== modo.value) || modo.value;
+      modo.dispatchEvent(new Event('change', { bubbles: true }));
+      await new Promise(r => setTimeout(r, 400));
+      res.modoReacciona = document.body.innerHTML.length !== antes;
+    }
+    document.querySelector('[data-py="cerrar-modal"]')?.click();
+    return res;
+  });
+  ok(py.hayMenu, '  hay una fila con menú «···»');
+  ok(py.conAtributo === 0, '  y sus items NO llevan código en un atributo', 'con atributo: ' + py.conAtributo);
+  ok(py.abreEditar, '  PULSAR «Editar» en el menú abre la ventana del proyecto');
+  ok(py.abreDetalle, '  PULSAR «Ver» abre el detalle');
+  ok(py.abreNuevo, '  PULSAR «Nuevo proyecto» abre su ventana');
+  ok(py.modoReacciona, '  y cambiar el modo de cobro repinta lo que depende de él');
+  ok((await violaciones(p18)).length === 0, '  proyectos entero, sin una violación de CSP');
+
   const todas = [...(await violaciones(p3)), ...(await violaciones(p4)),
-                 ...(await violaciones(p11)), ...(await violaciones(p12)), ...(await violaciones(p13)), ...(await violaciones(p14)), ...(await violaciones(p15)), ...(await violaciones(p16)), ...(await violaciones(p17)),
+                 ...(await violaciones(p11)), ...(await violaciones(p12)), ...(await violaciones(p13)), ...(await violaciones(p14)), ...(await violaciones(p15)), ...(await violaciones(p16)), ...(await violaciones(p17)), ...(await violaciones(p18)),
                  ...(await violaciones(p9)),
                  ...(await violaciones(p8)),
                  ...(await violaciones(p5)), ...(await violaciones(p6)), ...(await violaciones(p7))];
