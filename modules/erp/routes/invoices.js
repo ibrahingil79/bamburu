@@ -1221,20 +1221,20 @@ export function createInvoiceRoutes(db) {
            un listado de facturas filtrado que no dijera que está filtrado sería un documento que
            miente, y de eso se encarga el motor escribiéndolos en la cabecera. -->
       <div style="display:flex;gap:.6rem;flex-wrap:wrap;align-items:center;margin-bottom:1rem">
-        <select class="form-control" id="lstEstado" style="width:auto" onchange="pintaVerbos()">
+        <select class="form-control" id="lstEstado" style="width:auto" data-iv="verbos">
           <option value="">Todos los estados</option>
           <option value="emitida">Emitidas</option>
           <option value="rectificada">Rectificadas</option>
           <option value="anulada">Anuladas</option>
         </select>
-        <input class="form-control" type="date" id="lstDesde" style="width:auto" onchange="pintaVerbos()">
+        <input class="form-control" type="date" id="lstDesde" style="width:auto" data-iv="verbos">
         <span style="color:var(--text3)">–</span>
-        <input class="form-control" type="date" id="lstHasta" style="width:auto" onchange="pintaVerbos()">
+        <input class="form-control" type="date" id="lstHasta" style="width:auto" data-iv="verbos">
         <span id="lstVerbos"></span>
       </div>
       <div id="disaBand"></div>
       <div class="card">
-        <div class="card-head"><h3>Todas las facturas</h3><input class="search" id="searchBox" placeholder="Buscar..." oninput="filterTable()"></div>
+        <div class="card-head"><h3>Todas las facturas</h3><input class="search" id="searchBox" placeholder="Buscar..."></div>
         <div class="table-wrap"><table>
           <thead><tr><th>Número</th><th>Pedido</th><th>Cliente</th><th>Fecha</th><th>Total</th><th>Pendiente</th><th>Cobro</th><th>Estado</th><th></th></tr></thead>
           <tbody id="invBody">${skeletonRows(9)}</tbody>
@@ -1243,7 +1243,7 @@ export function createInvoiceRoutes(db) {
 
       <!-- Gestión de cobro (solo en el panel, nunca en el documento/PDF de la factura). -->
       ${cobroModalHtml()}
-      <script>
+      <script nonce="${c.get('cspNonce')}">
       ${JS_LISTADO_ENVIAR}
       // Los tres verbos se repintan al cambiar un filtro: lo que se imprime es lo que se está mirando.
       function qsListado(){
@@ -1265,7 +1265,7 @@ export function createInvoiceRoutes(db) {
           // la cadena, y la pantalla de facturas moría con «Unexpected identifier facturas». Con dos
           // llega el escape entero. Lo cazó el barrido, no yo: gate-menu-navegacion vigila que no
           // haya ni un error de JS en el recorrido, y este no se veía a simple vista.
-          + '<button type="button" class="btn btn-secondary btn-sm" onclick="enviarListado(\\'facturas\\',qsListado())"><i class="ti ti-mail"></i> Enviar por correo</button>'
+          + '<button type="button" class="btn btn-secondary btn-sm" data-iv="enviar-listado"><i class="ti ti-mail"></i> Enviar por correo</button>'
           + '</span>';
       }
       pintaVerbos();
@@ -1303,10 +1303,10 @@ export function createInvoiceRoutes(db) {
           // Ciclo de vida: solo una factura "emitida" se puede anular o rectificar.
           let acts = '<a href="/admin/invoices/'+r.id+'" target="_blank" class="btn btn-secondary btn-sm">Ver</a>';
           let mi = [];
-          if (r.cobrable) mi.push({ label:'Gestionar cobro', onclick:'openGestion('+r.id+')' });
+          if (r.cobrable) mi.push({ label:'Gestionar cobro', act:'inv-gestion', arg:r.id });
           if (r.status === 'emitida') {
             mi.push({ label:'Rectificar', href:'/admin/invoices/'+r.id+'/rectificativa/new' });
-            mi.push({ label:'Anular', danger:true, onclick:'anular('+r.id+',\\''+(r.invoice_number||'')+'\\')' });
+            mi.push({ label:'Anular', danger:true, act:'inv-anular', arg:r.id, arg2:(r.invoice_number||'') });
           }
           if (mi.length) acts += ' '+window.rowMenu(mi);
           // Cobro: para anuladas no aplica (no son deuda); para el resto, pendiente + badge en vivo.
@@ -1347,7 +1347,24 @@ export function createInvoiceRoutes(db) {
       }
 
       loadInvoices();
-      </script>`;
+      
+      // 5 SEP 2026 (csp-erp-migrar-handlers) — los tres filtros y el buscador son fijos; el boton
+      // de mandar el listado por correo vive aqui (los otros dos verbos son enlaces).
+      ['lstEstado','lstDesde','lstHasta'].forEach(function(id){
+        document.getElementById(id)?.addEventListener('change', function(){ pintaVerbos(); });
+      });
+      document.getElementById('searchBox')?.addEventListener('input', function(){ filterTable(); });
+      document.addEventListener('click', function(e){
+        if (e.target.closest('[data-iv="enviar-listado"]')) enviarListado('facturas', qsListado());
+      });
+      // El menu «···» de cada fila pinta SUS botones al abrirlo, asi que llegan por el evento del
+      // armazon. Anular necesita ademas el NUMERO de la factura para preguntar antes: viaja en arg2.
+      document.addEventListener('rowmenu:act', function(e){
+        var id = Number(e.detail.arg);
+        if (e.detail.act === 'inv-gestion') openGestion(id);
+        else if (e.detail.act === 'inv-anular') anular(id, e.detail.arg2 || '');
+      });
+</script>`;
     return c.html(adminLayout('Facturas', content, 'invoices', c.get('session')?.csrfToken || '', c));
   });
 
@@ -1394,8 +1411,8 @@ export function createInvoiceRoutes(db) {
             <div style="display:flex;gap:.5rem">
               <!-- PUNTO 11 · EL MOTOR PROPONE, EL USUARIO CONFIRMA. No se mete ningún descuento
                    solo: se calcula, se enseña en un panel con su motivo, y quien emite decide. -->
-              <button class="btn btn-secondary btn-sm" id="btnDto" onclick="mirarDescuentos()">Descuentos…</button>
-              <button class="btn btn-secondary btn-sm" onclick="addLine()">+ Añadir línea</button>
+              <button class="btn btn-secondary btn-sm" id="btnDto">Descuentos…</button>
+              <button class="btn btn-secondary btn-sm" data-iv="add-line">+ Añadir línea</button>
             </div>
           </div>
 
@@ -1422,12 +1439,12 @@ export function createInvoiceRoutes(db) {
           </div>
 
           <div style="text-align:right;margin-top:1rem">
-            <button class="btn btn-primary" id="btn-emit" onclick="emitInvoice()">Emitir factura</button>
+            <button class="btn btn-primary" id="btn-emit">Emitir factura</button>
           </div>
         </div>
       </div>
 
-      <script>
+      <script nonce="${c.get('cspNonce')}">
       const SYM = '${sym}';
       const RATES = ${ratesJson};            // [21, 10, 4, ...]
       const DEFAULT_RATE = ${defaultRate};
@@ -1490,7 +1507,7 @@ export function createInvoiceRoutes(db) {
           '<td><input type="number" class="form-control line-qty" step="0.01" min="0.01" value="1"></td>' +
           '<td><input type="number" class="form-control line-price" step="0.01" min="0" value="0"></td>' +
           '<td style="text-align:right;padding:.7rem 1rem"><span class="line-subtotal">' + SYM + '0.00</span></td>' +
-          '<td><button class="btn btn-danger btn-sm" onclick="this.closest(\\'tr\\').remove();scheduleRecalc()">✕</button></td>';
+          '<td><button class="btn btn-danger btn-sm" data-iv="quitar-fila">✕</button></td>';
         row.cells[0].insertAdjacentHTML('beforeend', '<input type="hidden" class="line-tax" value="21">');
         tbody.appendChild(row);
         if (seed) {
@@ -1721,7 +1738,16 @@ export function createInvoiceRoutes(db) {
       }
 
       loadAll();
-      </script>`;
+      
+      // 5 SEP 2026 — el alta: fijos con oyente directo, filas por delegacion.
+      document.getElementById('btnDto')?.addEventListener('click', function(){ mirarDescuentos(); });
+      document.getElementById('btn-emit')?.addEventListener('click', function(){ emitInvoice(); });
+      document.querySelector('[data-iv="add-line"]')?.addEventListener('click', function(){ addLine(); });
+      document.addEventListener('click', function(e){
+        var q = e.target.closest('[data-iv="quitar-fila"]'); if (!q) return;
+        q.closest('tr').remove(); scheduleRecalc();
+      });
+</script>`;
     return c.html(adminLayout('Nueva factura', content, 'invoices', c.get('session')?.csrfToken || '', c));
   });
 
@@ -1803,8 +1829,8 @@ export function createInvoiceRoutes(db) {
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
             <h3 style="font-size:.9rem;font-weight:600;margin:0">Líneas</h3>
             <div style="display:flex;gap:.5rem">
-              <button class="btn btn-secondary btn-sm" onclick="negarTodo()" title="Invierte el signo de todas las líneas (abono total)">± Invertir signos</button>
-              <button class="btn btn-secondary btn-sm" onclick="addLine()">+ Añadir línea</button>
+              <button class="btn btn-secondary btn-sm" data-iv="negar" title="Invierte el signo de todas las líneas (abono total)">± Invertir signos</button>
+              <button class="btn btn-secondary btn-sm" data-iv="add-line">+ Añadir línea</button>
             </div>
           </div>
 
@@ -1830,12 +1856,12 @@ export function createInvoiceRoutes(db) {
           </div>
 
           <div style="text-align:right;margin-top:1rem">
-            <button class="btn btn-primary" id="btn-emit" onclick="emitRectificativa()">Emitir rectificativa</button>
+            <button class="btn btn-primary" id="btn-emit">Emitir rectificativa</button>
           </div>
         </div>
       </div>
 
-      <script>
+      <script nonce="${c.get('cspNonce')}">
       const SYM = '${sym}';
       const RATES = ${JSON.stringify(rates)};
       const SEED_LINES = ${jsonForScript(seedLines)};
@@ -1864,7 +1890,7 @@ export function createInvoiceRoutes(db) {
           '<td><input type="number" class="form-control line-qty" step="0.01" value="1"></td>' +
           '<td><input type="number" class="form-control line-price" step="0.01" value="0"></td>' +
           '<td style="text-align:right;padding:.7rem 1rem"><span class="line-subtotal">' + SYM + '0.00</span></td>' +
-          '<td><button class="btn btn-danger btn-sm" onclick="this.closest(\\'tr\\').remove();scheduleRecalc()">✕</button></td>';
+          '<td><button class="btn btn-danger btn-sm" data-iv="quitar-fila">✕</button></td>';
         row.cells[0].insertAdjacentHTML('beforeend', '<input type="hidden" class="line-tax" value="21">');
         tbody.appendChild(row);
         row._fiscal={fiscal_treatment:'taxable',fiscal_exemption_code:'',fiscal_non_subject_code:'',fiscal_reverse_charge:false,fiscal_legal_text:'',product_id:null};
@@ -1991,7 +2017,16 @@ export function createInvoiceRoutes(db) {
       }
 
       loadAll();
-      </script>`;
+      
+      // 5 SEP 2026 — la rectificativa: mismos nombres de funcion, otra pantalla.
+      document.getElementById('btn-emit')?.addEventListener('click', function(){ emitRectificativa(); });
+      document.querySelector('[data-iv="negar"]')?.addEventListener('click', function(){ negarTodo(); });
+      document.querySelector('[data-iv="add-line"]')?.addEventListener('click', function(){ addLine(); });
+      document.addEventListener('click', function(e){
+        var q = e.target.closest('[data-iv="quitar-fila"]'); if (!q) return;
+        q.closest('tr').remove(); scheduleRecalc();
+      });
+</script>`;
     return c.html(adminLayout('Rectificativa', content, 'invoices', c.get('session')?.csrfToken || '', c));
   });
 
@@ -2048,7 +2083,7 @@ export function createInvoiceRoutes(db) {
       const proyOptions = proyRows.map(p => `<option value="${p.id}"${inv.project_id === p.id ? ' selected' : ''}>${escHtml((p.codigo ? p.codigo + ' · ' : '') + p.nombre)}</option>`).join('');
       const proyNombreActual = inv.project_id ? (db.prepare('SELECT codigo, nombre FROM proyectos WHERE id=?').get(inv.project_id)) : null;
       const proyRowHtml = puedeProyecto
-        ? `<div class="dp-row"><span class="k">Proyecto</span><span class="v"><select id="invProyecto" class="form-control" style="max-width:230px" onchange="guardarProyecto()"><option value="">— Sin proyecto —</option>${proyOptions}</select></span></div>`
+        ? `<div class="dp-row"><span class="k">Proyecto</span><span class="v"><select id="invProyecto" class="form-control" style="max-width:230px"><option value="">— Sin proyecto —</option>${proyOptions}</select></span></div>`
         : (proyNombreActual ? `<div class="dp-row"><span class="k">Proyecto</span><span class="v">${escHtml((proyNombreActual.codigo ? proyNombreActual.codigo + ' · ' : '') + proyNombreActual.nombre)}</span></div>` : '');
 
       const panel = `
@@ -2069,8 +2104,8 @@ export function createInvoiceRoutes(db) {
     <button data-act="imprimir" class="btn btn-primary">Imprimir</button>
     <a href="/admin/invoices/${inv.id}/pdf" class="btn btn-secondary">Descargar PDF</a>
     ${feStatus?.ready ? `<a href="/admin/invoices/${inv.id}/facturae.xml" class="btn btn-secondary">Generar Facturae</a>` : ''}
-    ${esTicketSustituible && can(c, 'invoices.create') ? `<button onclick="openSust()" class="btn btn-primary">Emitir factura completa</button>` : ''}
-    ${inv.status === 'emitida' ? `<button onclick="anularFactura()" class="btn btn-danger">Anular</button>
+    ${esTicketSustituible && can(c, 'invoices.create') ? `<button data-iv="sust-abrir" class="btn btn-primary">Emitir factura completa</button>` : ''}
+    ${inv.status === 'emitida' ? `<button data-iv="anular" class="btn btn-danger">Anular</button>
     <a href="/admin/invoices/${inv.id}/rectificativa/new" class="btn btn-secondary">Crear rectificativa</a>` : ''}
     <a href="/admin/invoices" class="btn btn-secondary">Volver al listado</a>
   </div>
@@ -2079,13 +2114,13 @@ export function createInvoiceRoutes(db) {
 ${esTicketSustituible ? `
 <div class="modal-overlay" id="sustModal">
   <div class="modal" style="max-width:480px">
-    <div class="modal-head"><h3>Factura completa del ticket ${escHtml(inv.invoice_number)}</h3><button class="modal-close" onclick="closeModal('sustModal')">✕</button></div>
+    <div class="modal-head"><h3>Factura completa del ticket ${escHtml(inv.invoice_number)}</h3><button class="modal-close" data-iv="sust-cerrar">✕</button></div>
     <div class="modal-body">
       <p style="font-size:.85rem;color:var(--text2);margin-bottom:.75rem">Se emitirá una factura completa (con los datos del cliente) que <strong>sustituye</strong> a este ticket. El ticket queda enlazado, sin efecto fiscal; el cobro NO se duplica y el stock NO se mueve.</p>
       <div class="form-group"><label class="form-label">Cliente</label>
         <select class="form-control" id="sustClient"><option value="">— Elige un cliente —</option></select>
       </div>
-      <div style="margin:.25rem 0 .5rem"><button class="btn btn-secondary btn-sm" onclick="toggleNuevo()" id="btnNuevo">+ Cliente nuevo</button></div>
+      <div style="margin:.25rem 0 .5rem"><button class="btn btn-secondary btn-sm" data-iv="sust-nuevo" id="btnNuevo">+ Cliente nuevo</button></div>
       <div id="nuevoCli" style="display:none;border:1px solid var(--border);border-radius:8px;padding:.6rem">
         <div class="form-group"><label class="form-label">Nombre / razón social *</label><input class="form-control" id="nc-name" maxlength="200"></div>
         <div class="form-group"><label class="form-label">NIF / CIF</label><input class="form-control" id="nc-fiscal" maxlength="50"></div>
@@ -2095,12 +2130,12 @@ ${esTicketSustituible ? `
       </div>
     </div>
     <div class="modal-foot">
-      <button class="btn btn-secondary" onclick="closeModal('sustModal')">Cancelar</button>
-      <button class="btn btn-primary" id="btn-emitir-sust" onclick="emitirSust()">Emitir factura completa</button>
+      <button class="btn btn-secondary" data-iv="sust-cerrar">Cancelar</button>
+      <button class="btn btn-primary" id="btn-emitir-sust">Emitir factura completa</button>
     </div>
   </div>
 </div>` : ''}
-<script>
+<script nonce="${c.get('cspNonce')}">
   const CSRF = ${JSON.stringify(csrfToken)};
   ${puedeProyecto ? `async function guardarProyecto(){
     const pid = document.getElementById('invProyecto').value;
@@ -2152,6 +2187,19 @@ ${esTicketSustituible ? `
     } catch(e){ toast(e.message||'Error emitiendo la factura completa','err'); btn.disabled=false; }
   }
   ` : ''}
+
+      // 5 SEP 2026 — la ficha. Emitir factura completa y Anular son CONDICIONALES: solo salen en
+      // cierto estado, asi que el enganche tolera que no existan.
+      document.getElementById('invProyecto')?.addEventListener('change', function(){ guardarProyecto(); });
+      document.getElementById('btn-emitir-sust')?.addEventListener('click', function(){ emitirSust(); });
+      document.addEventListener('click', function(e){
+        var t = e.target.closest('[data-iv]'); if (!t) return;
+        var a = t.getAttribute('data-iv');
+        if (a === 'sust-abrir') openSust();
+        else if (a === 'anular') anularFactura();
+        else if (a === 'sust-cerrar') closeModal('sustModal');
+        else if (a === 'sust-nuevo') toggleNuevo();
+      });
 </script>`;
       return c.html(adminLayout('Factura ' + inv.invoice_number, docShell(paper, panel), 'invoices', csrfToken, c));
     } catch (e) { return c.html(errorShell('No hemos podido abrir la factura', ERR.SERVER, { action: 'Ver mis facturas', href: '/admin/invoices' }), 500); }

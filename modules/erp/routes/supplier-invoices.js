@@ -509,13 +509,13 @@ export function createSupplierInvoiceRoutes(db) {
       <div class="card">
         <div class="card-head" style="gap:.5rem;flex-wrap:wrap"><h3>Documentos de deuda con proveedores</h3>
           <div style="display:flex;gap:.5rem;align-items:center;margin-left:auto">
-            <select class="form-control" id="tipoFilter" style="width:auto;min-width:120px" onchange="filterRows()">
+            <select class="form-control" id="tipoFilter" style="width:auto;min-width:120px" data-si="filtro">
               <option value="">Todos los tipos</option>
               <option value="compra">Compra (stock)</option>
               <option value="gasto">Gasto</option>
               <option value="abono">Abono (devolución)</option>
             </select>
-            <input class="search" id="searchBox" placeholder="Buscar proveedor, código o nº factura..." oninput="filterRows()">
+            <input class="search" id="searchBox" placeholder="Buscar proveedor, código o nº factura..." data-si="buscar">
           </div>
         </div>
         <div class="table-wrap"><table>
@@ -525,7 +525,7 @@ export function createSupplierInvoiceRoutes(db) {
       </div>
       ${pagoModalHtml()}
       ${pagoCuentaModalHtml()}
-      <script>
+      <script nonce="${c.get('cspNonce')}">
         ${JS_LISTADO_ENVIAR}
       ${pagoModalScript(s)}
       const SYM = ${JSON.stringify(s)};
@@ -548,8 +548,8 @@ export function createSupplierInvoiceRoutes(db) {
         document.getElementById('siBody').innerHTML = rows.length ? rows.map(function(r){
           const badge = r.status==='anulada' ? '<span class="badge b-gray">Anulada</span>' : '<span class="badge '+(ESTADO_BADGE[r.estado]||'')+'">'+(ESTADO_LABEL[r.estado]||r.estado)+(r.dias_vencida>0?' · '+r.dias_vencida+'d':'')+'</span>';
           const pend = r.status==='anulada' ? '—' : dineroEs(r.pendiente||0, SYM);
-          const payBtn = (r.pagable && r.pendiente>0.0049) ? '<button class="btn btn-secondary btn-sm" onclick="openPagos('+r.id+')">Pago</button> '
-            : (r.entity_type==='supplier_return' && r.status==='vigente' && r.pendiente<-0.0049) ? '<button class="btn btn-secondary btn-sm" onclick="openPagos('+r.id+')">Reembolso</button> '
+          const payBtn = (r.pagable && r.pendiente>0.0049) ? '<button class="btn btn-secondary btn-sm" data-si="pagar" data-id="'+r.id+'">Pago</button> '
+            : (r.entity_type==='supplier_return' && r.status==='vigente' && r.pendiente<-0.0049) ? '<button class="btn btn-secondary btn-sm" data-si="pagar" data-id="'+r.id+'">Reembolso</button> '
             : '';
           const esAbono = r.entity_type==='supplier_return';
           const esGasto = !r.entity_type;
@@ -585,7 +585,7 @@ export function createSupplierInvoiceRoutes(db) {
               ? 'Saldo a tu favor <strong style="font-size:1.3rem;color:var(--ok)">'+dineroEs(Math.abs(neto), SYM)+'</strong>'
               : 'Le debes <strong style="font-size:1.3rem">'+dineroEs(neto, SYM)+'</strong>')
             + (o ? ' · Deuda más antigua: <a href="/admin/supplier-invoices/'+o.supplier_invoice_id+'">'+escHtml(o.internal_code||'')+'</a> ('+dineroEs(o.pendiente||0, SYM)+', vence '+(o.due_date?fechaEs(o.due_date):'-')+(o.dias_vencida>0?' · '+o.dias_vencida+' días vencida':'')+')' : ' · sin deuda pendiente')
-            + (neto > 0.0049 ? ' <button class="btn btn-primary btn-sm" style="margin-left:.75rem" onclick="openPagoCuenta('+SUPPLIER_ID+')">Pagar a cuenta</button>' : '');
+            + (neto > 0.0049 ? ' <button class="btn btn-primary btn-sm" style="margin-left:.75rem" data-si="cuenta" data-id="'+SUPPLIER_ID+'">Pagar a cuenta</button>' : '');
           card.style.display='';
         } catch(e){}
       }
@@ -600,7 +600,18 @@ export function createSupplierInvoiceRoutes(db) {
       }
       window.pagoOnSaved = function(){ loadList(); };
       loadList();
-      </script>`;
+      
+      // 5 SEP 2026 (csp-erp-migrar-handlers) — filtro y buscador fijos; las filas se pintan
+      // despues y sus botones abren las ventanas compartidas de pago, ya migradas.
+      document.getElementById('tipoFilter')?.addEventListener('change', function(){ filterRows(); });
+      document.getElementById('searchBox')?.addEventListener('input', function(){ filterRows(); });
+      document.addEventListener('click', function(e){
+        var t = e.target.closest('[data-si]'); if (!t) return;
+        var a = t.getAttribute('data-si'), id = Number(t.getAttribute('data-id'));
+        if (a === 'pagar') openPagos(id);
+        else if (a === 'cuenta') openPagoCuenta(id);
+      });
+</script>`;
     return c.html(adminLayout('Facturas recibidas', content, 'supplier-invoices', c.get('session')?.csrfToken || '', c));
   });
 
@@ -619,8 +630,8 @@ export function createSupplierInvoiceRoutes(db) {
 
       <div class="card" style="max-width:760px;margin-bottom:1rem"><div class="card-body" style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
         <span style="color:var(--text2)">Tipo de factura:</span>
-        <button id="btnModeCompra" class="btn btn-primary btn-sm" onclick="setMode('compra')">Factura de compra (enlazar a mercancía)</button>
-        <button id="btnModeGasto" class="btn btn-secondary btn-sm" onclick="setMode('gasto')">Factura de gasto (sin mercancía)</button>
+        <button id="btnModeCompra" class="btn btn-primary btn-sm" data-si="modo" data-m="compra">Factura de compra (enlazar a mercancía)</button>
+        <button id="btnModeGasto" class="btn btn-secondary btn-sm" data-si="modo" data-m="gasto">Factura de gasto (sin mercancía)</button>
       </div></div>
 
       <!-- ── MODO COMPRA (paso a, intacto) ── -->
@@ -629,7 +640,7 @@ export function createSupplierInvoiceRoutes(db) {
           <p style="color:var(--text2);margin-bottom:1rem">Para cuando la mercancía llegó antes que la factura. Se enlaza a una <strong>compra recibida</strong> o <strong>recepción confirmada</strong> de stock ya existente.</p>
           ${suppliers.length ? '' : '<div class="alert alert-warn">No hay proveedores. <a href="/admin/suppliers">Crea uno primero.</a></div>'}
           <div class="form-row">
-            <div class="form-group"><label class="form-label">Proveedor *</label><select class="form-control" id="fSupplier" onchange="loadOrigins()"><option value="">— Elige —</option>${supOptions}</select></div>
+            <div class="form-group"><label class="form-label">Proveedor *</label><select class="form-control" id="fSupplier"><option value="">— Elige —</option>${supOptions}</select></div>
             <div class="form-group"><label class="form-label">Documento de origen *</label><select class="form-control" id="fOrigin"><option value="">— Elige proveedor primero —</option></select></div>
           </div>
           <div class="form-row">
@@ -637,14 +648,14 @@ export function createSupplierInvoiceRoutes(db) {
             <div class="form-group"><label class="form-label">Fecha de factura *</label><input class="form-control" type="date" id="fDate" value="${t}"></div>
           </div>
           <div class="form-row">
-            <div class="form-group"><label class="form-label">Base imponible</label><input class="form-control" type="number" step="0.01" min="0" id="fBase" value="0" oninput="syncTotal()"></div>
-            <div class="form-group"><label class="form-label">IVA</label><input class="form-control" type="number" step="0.01" min="0" id="fTax" value="0" oninput="syncTotal()"></div>
+            <div class="form-group"><label class="form-label">Base imponible</label><input class="form-control" type="number" step="0.01" min="0" id="fBase" value="0" data-si="sync"></div>
+            <div class="form-group"><label class="form-label">IVA</label><input class="form-control" type="number" step="0.01" min="0" id="fTax" value="0" data-si="sync"></div>
             <div class="form-group"><label class="form-label">Total (con IVA) *</label><input class="form-control" type="number" step="0.01" min="0.01" id="fTotal" value="0"></div>
           </div>
           <div class="form-group"><label class="form-label">Notas</label><input class="form-control" id="fNotes"></div>
           <div style="display:flex;justify-content:flex-end;gap:.5rem">
             <a href="/admin/supplier-invoices" class="btn btn-secondary">Cancelar</a>
-            <button class="btn btn-primary" onclick="saveCompra()">Registrar factura</button>
+            <button class="btn btn-primary" data-si="guardar-compra">Registrar factura</button>
           </div>
         </div>
       </div>
@@ -664,10 +675,10 @@ export function createSupplierInvoiceRoutes(db) {
           </div>
           <div class="form-row">
             <div class="form-group"><label class="form-label">Nº factura del proveedor</label><input class="form-control" id="gNumber" placeholder="(el que pone la factura)"></div>
-            <div class="form-group"><label class="form-label">Fecha de factura *</label><input class="form-control" type="date" id="gDate" value="${t}" onchange="recalcDue()"></div>
+            <div class="form-group"><label class="form-label">Fecha de factura *</label><input class="form-control" type="date" id="gDate" value="${t}"></div>
             <div class="form-group"><label class="form-label">Vencimiento</label><input class="form-control" type="date" id="gDue" value="${t}"></div>
           </div>
-          <div class="card" style="margin:0 0 1rem"><div class="card-head" style="padding:.6rem 1rem"><h3 style="font-size:.95rem">Líneas (concepto · base · IVA)</h3><button class="btn btn-secondary btn-sm" onclick="addGLine()">+ Añadir línea</button></div>
+          <div class="card" style="margin:0 0 1rem"><div class="card-head" style="padding:.6rem 1rem"><h3 style="font-size:.95rem">Líneas (concepto · base · IVA)</h3><button class="btn btn-secondary btn-sm" data-si="add-linea">+ Añadir línea</button></div>
             <div class="table-wrap" style="overflow:visible"><table>
               <thead><tr><th>Concepto</th><th style="width:120px">Base</th><th style="width:140px">IVA</th><th style="width:110px">Cuota</th><th style="width:40px"></th></tr></thead>
               <tbody id="gLinesBody"></tbody>
@@ -677,12 +688,12 @@ export function createSupplierInvoiceRoutes(db) {
           <div class="form-group"><label class="form-label">Notas</label><input class="form-control" id="gNotes"></div>
           <div style="display:flex;justify-content:flex-end;gap:.5rem">
             <a href="/admin/supplier-invoices" class="btn btn-secondary">Cancelar</a>
-            <button class="btn btn-primary" onclick="saveGasto()">Registrar factura de gasto</button>
+            <button class="btn btn-primary" data-si="guardar-gasto">Registrar factura de gasto</button>
           </div>
         </div>
       </div>
 
-      <script>
+      <script nonce="${c.get('cspNonce')}">
       var SYM = ${JSON.stringify(s)};
       var BANDS = ${JSON.stringify(bands)};
       // Banda por defecto de una línea nueva: la general (mayor tasa); si no, la primera.
@@ -747,7 +758,7 @@ export function createSupplierInvoiceRoutes(db) {
           try{
             var res=await api('GET','/api/erp/suppliers/search?q='+encodeURIComponent(q));
             if(!res.length){ box.style.display='none'; box.innerHTML=''; return; }
-            box.innerHTML=res.map(function(s){ return '<div style="padding:.5rem .7rem;cursor:pointer;border-bottom:1px solid var(--border)" onmousedown="event.preventDefault();pickGSup('+s.id+',&quot;'+escAttr(s.name)+'&quot;,'+(s.payment_term_days||0)+')"><strong>'+escHtml(s.name)+'</strong>'+(s.fiscal_id?' <span style="color:var(--text3);font-size:.8rem">'+escHtml(s.fiscal_id)+'</span>':'')+'</div>'; }).join('');
+            box.innerHTML=res.map(function(s){ return '<div style="padding:.5rem .7rem;cursor:pointer;border-bottom:1px solid var(--border)" data-si="sup-pick" data-id="'+s.id+'" data-nombre="'+escAttr(s.name)+'" data-pt="'+(s.payment_term_days||0)+')"><strong>'+escHtml(s.name)+'</strong>'+(s.fiscal_id?' <span style="color:var(--text3);font-size:.8rem">'+escHtml(s.fiscal_id)+'</span>':'')+'</div>'; }).join('');
             box.style.display='';
           }catch(e){ box.style.display='none'; }
         };
@@ -759,7 +770,7 @@ export function createSupplierInvoiceRoutes(db) {
         document.getElementById('gSupSearch').value='';
         document.getElementById('gSupSuggest').style.display='none';
         var p=document.getElementById('gSupPicked');
-        p.style.display=''; p.innerHTML='<span class="badge b-green">Proveedor</span> <strong>'+escHtml(name)+'</strong> <span style="color:var(--muted);font-size:.8rem">· plazo '+gsupplier.term+'d</span> <button class="btn btn-secondary btn-sm" onclick="clearGSup()">Cambiar</button>';
+        p.style.display=''; p.innerHTML='<span class="badge b-green">Proveedor</span> <strong>'+escHtml(name)+'</strong> <span style="color:var(--muted);font-size:.8rem">· plazo '+gsupplier.term+'d</span> <button class="btn btn-secondary btn-sm" data-si="sup-limpiar">Cambiar</button>';
         recalcDue();
       };
       window.clearGSup=function(){ gsupplier=null; document.getElementById('gSupPicked').style.display='none'; };
@@ -780,11 +791,11 @@ export function createSupplierInvoiceRoutes(db) {
         body.innerHTML=glines.map(function(l){
           var cuota=Math.round(l.base*l.tax_rate)/100;
           return '<tr data-uid="'+l.uid+'">'
-            +'<td><input class="form-control" value="'+escAttr(l.concepto)+'" placeholder="Concepto (p. ej. Asesoría junio)" oninput="gSet('+l.uid+',\\'concepto\\',this.value)"></td>'
-            +'<td><input class="form-control" type="number" min="0" step="0.01" value="'+Number(l.base).toFixed(2)+'" oninput="gSet('+l.uid+',\\'base\\',this.value)"></td>'
-            +'<td><select class="form-control" onchange="gSet('+l.uid+',\\'tax_rate\\',this.value)">'+bandOpts(l.tax_rate)+'</select></td>'
+            +'<td><input class="form-control" value="'+escAttr(l.concepto)+'" placeholder="Concepto (p. ej. Asesoría junio)" data-si="gset" data-uid="'+l.uid+'" data-campo="concepto"></td>'
+            +'<td><input class="form-control" type="number" min="0" step="0.01" value="'+Number(l.base).toFixed(2)+'" data-si="gset" data-uid="'+l.uid+'" data-campo="base"></td>'
+            +'<td><select class="form-control" data-si="gset" data-uid="'+l.uid+'" data-campo="tax_rate">'+bandOpts(l.tax_rate)+'</select></td>'
             +'<td class="gcuota" style="font-weight:600">'+dineroEs(cuota, SYM)+'</td>'
-            +'<td><button class="btn btn-danger btn-sm" onclick="gRemove('+l.uid+')">×</button></td>'
+            +'<td><button class="btn btn-danger btn-sm" data-si="gquitar" data-uid="'+l.uid+'">×</button></td>'
             +'</tr>';
         }).join('');
         renderGTotals();
@@ -826,7 +837,38 @@ export function createSupplierInvoiceRoutes(db) {
         try { var r=await api('POST','/api/erp/supplier-invoices',body); toast(r.message||'Registrada'); window.location.href='/admin/supplier-invoices/'+r.id; }
         catch(e){ toast(e.message||'Error','err'); }
       }
-      </script>`;
+      
+      // 5 SEP 2026 — el alta. Las LINEAS del gasto y la lista de proveedores se pintan al vuelo,
+      // asi que van por delegacion; el resto es fijo. El mousedown de la sugerencia necesita
+      // preventDefault o el blur del campo cierra la lista antes del clic.
+      document.getElementById('fSupplier')?.addEventListener('change', function(){ loadOrigins(); });
+      document.getElementById('gDate')?.addEventListener('change', function(){ recalcDue(); });
+      document.addEventListener('input', function(e){
+        var t = e.target.closest('[data-si]'); if (!t) return;
+        var a = t.getAttribute('data-si');
+        if (a === 'sync') syncTotal();
+        else if (a === 'gset') gSet(Number(t.getAttribute('data-uid')), t.getAttribute('data-campo'), t.value);
+      });
+      document.addEventListener('change', function(e){
+        var t = e.target.closest('[data-si="gset"]');
+        if (t) gSet(Number(t.getAttribute('data-uid')), t.getAttribute('data-campo'), t.value);
+      });
+      document.addEventListener('mousedown', function(e){
+        var t = e.target.closest('[data-si="sup-pick"]'); if (!t) return;
+        e.preventDefault();
+        pickGSup(Number(t.getAttribute('data-id')), t.getAttribute('data-nombre'), Number(t.getAttribute('data-pt')));
+      });
+      document.addEventListener('click', function(e){
+        var t = e.target.closest('[data-si]'); if (!t) return;
+        var a = t.getAttribute('data-si');
+        if (a === 'modo') setMode(t.getAttribute('data-m'));
+        else if (a === 'guardar-compra') saveCompra();
+        else if (a === 'guardar-gasto') saveGasto();
+        else if (a === 'add-linea') addGLine();
+        else if (a === 'sup-limpiar') clearGSup();
+        else if (a === 'gquitar') gRemove(Number(t.getAttribute('data-uid')));
+      });
+</script>`;
     return c.html(adminLayout('Registrar factura recibida', content, 'supplier-invoices', c.get('session')?.csrfToken || '', c));
   });
 
@@ -849,8 +891,8 @@ export function createSupplierInvoiceRoutes(db) {
     const isCredit = inv.is_credit;
     const actionBtns = (canCreate && inv.status !== 'anulada')
       ? (isCredit
-          ? (inv.refundable && pg.pendiente < -0.0049 ? `<button class="btn btn-primary" onclick="openPagos(${inv.id})">Registrar reembolso recibido</button> ` : '')
-          : `<button class="btn btn-primary" onclick="openPagos(${inv.id})">Registrar pago</button> <button class="btn btn-danger" onclick="anular()">Anular factura</button> `)
+          ? (inv.refundable && pg.pendiente < -0.0049 ? `<button class="btn btn-primary" data-si="pagar" data-id="${inv.id}">Registrar reembolso recibido</button> ` : '')
+          : `<button class="btn btn-primary" data-si="pagar" data-id="${inv.id}">Registrar pago</button> <button class="btn btn-danger" data-si="anular">Anular factura</button> `)
       : '';
     const tipoBadge = isCredit ? '<span class="badge b-purple" style="margin-left:.5rem">Abono</span>'
       : isExpense ? '<span class="badge b-purple" style="margin-left:.5rem">Gasto</span>'
@@ -892,7 +934,7 @@ export function createSupplierInvoiceRoutes(db) {
       <h2 style="font-size:14px;font-weight:500;margin:22px 0 8px">Pagos registrados</h2>
       <table>
         <thead><tr><th>Fecha</th><th style="text-align:right">Importe</th><th>Forma</th><th>Nota</th><th></th></tr></thead>
-        <tbody>${inv.payments.length ? inv.payments.map(p => `<tr><td>${fechaEs(p.paid_date)}</td><td style="text-align:right">${dineroEs(p.amount, s)}</td><td>${esc(p.payment_method || '—')}</td><td>${esc(p.note || '')}</td><td style="text-align:right">${canCreate ? `<button class="btn btn-secondary btn-sm" onclick="deshacerPago(${inv.id},${p.id})">Deshacer</button>` : ''}</td></tr>`).join('') : '<tr><td colspan="5" style="text-align:center;padding:1.5rem;color:var(--muted)">Sin pagos registrados</td></tr>'}</tbody>
+        <tbody>${inv.payments.length ? inv.payments.map(p => `<tr><td>${fechaEs(p.paid_date)}</td><td style="text-align:right">${dineroEs(p.amount, s)}</td><td>${esc(p.payment_method || '—')}</td><td>${esc(p.note || '')}</td><td style="text-align:right">${canCreate ? `<button class="btn btn-secondary btn-sm" data-si="deshacer" data-id="${inv.id}" data-pago="${p.id}">Deshacer</button>` : ''}</td></tr>`).join('') : '<tr><td colspan="5" style="text-align:center;padding:1.5rem;color:var(--muted)">Sin pagos registrados</td></tr>'}</tbody>
       </table>`;
 
     // PIEZA 4 — etiqueta de proyecto (rentabilidad). La pone quien puede editar el documento (purchases.create).
@@ -900,7 +942,7 @@ export function createSupplierInvoiceRoutes(db) {
     const proyOptions = proyRows.map(p => `<option value="${p.id}"${inv.project_id === p.id ? ' selected' : ''}>${esc((p.codigo ? p.codigo + ' · ' : '') + p.nombre)}</option>`).join('');
     const proyActual = inv.project_id ? db.prepare('SELECT codigo, nombre FROM proyectos WHERE id=?').get(inv.project_id) : null;
     const proyRowHtml = canCreate
-      ? `<div class="dp-row"><span class="k">Proyecto</span><span class="v"><select id="siProyecto" class="form-control" style="max-width:230px" onchange="guardarProyecto()"><option value="">— Sin proyecto —</option>${proyOptions}</select></span></div>`
+      ? `<div class="dp-row"><span class="k">Proyecto</span><span class="v"><select id="siProyecto" class="form-control" style="max-width:230px"><option value="">— Sin proyecto —</option>${proyOptions}</select></span></div>`
       : (proyActual ? `<div class="dp-row"><span class="k">Proyecto</span><span class="v">${esc((proyActual.codigo ? proyActual.codigo + ' · ' : '') + proyActual.nombre)}</span></div>` : '');
 
     const panel = `
@@ -918,7 +960,7 @@ export function createSupplierInvoiceRoutes(db) {
         </div>
       </div></div>
       ${pagoModalHtml()}
-      <script>
+      <script nonce="${c.get('cspNonce')}">
       ${pagoModalScript(s)}
       window.pagoOnSaved = function(){ location.reload(); };
       ${canCreate ? `async function guardarProyecto(){
@@ -937,7 +979,18 @@ export function createSupplierInvoiceRoutes(db) {
         try { await api('POST','/api/erp/supplier-invoices/${inv.id}/anular',{ motivo:motivo }); toast('Factura anulada'); location.reload(); }
         catch(e){ toast(e.message||'Error','err'); }
       }
-      </script>`;
+      
+      // 5 SEP 2026 — la ficha. Registrar pago y Anular son CONDICIONALES: dependen del estado y
+      // de si es abono. La lista de pagos se pinta con la factura, y su Deshacer va por delegacion.
+      document.getElementById('siProyecto')?.addEventListener('change', function(){ guardarProyecto(); });
+      document.addEventListener('click', function(e){
+        var t = e.target.closest('[data-si]'); if (!t) return;
+        var a = t.getAttribute('data-si'), id = Number(t.getAttribute('data-id'));
+        if (a === 'pagar') openPagos(id);
+        else if (a === 'anular') anular();
+        else if (a === 'deshacer') deshacerPago(id, Number(t.getAttribute('data-pago')));
+      });
+</script>`;
     return c.html(adminLayout('Factura recibida ' + (inv.internal_code || ('#' + inv.id)), docShell(paper, panel), 'supplier-invoices', c.get('session')?.csrfToken || '', c));
   });
 

@@ -1037,16 +1037,23 @@ try {
   const r17 = await p17.goto(ERP_BASE + '/admin/propuestas', { waitUntil: 'networkidle0' });
   ok(/script-src[^;]*'nonce-/.test(cabecera(r17)), '/admin/propuestas — endurecida');
   await new Promise(x => setTimeout(x, 1300));
+  // ⚠️ AQUÍ SE MIDE EL ENGANCHE, NO LA ACCIÓN, y el motivo es un fallo mío del 5 sep 2026:
+  // `descartar(id)` NO pregunta nada — publica directamente. Esta comprobación pulsaba el botón
+  // de verdad y **descartó 18 propuestas reales** del negocio de desarrollo en una tarde de
+  // pasadas. (Se repusieron a mano, una por una, el mismo día.) Ahora se sustituye la función por
+  // un espía ANTES de pulsar: el clic prueba que el botón está enganchado, y no se descarta nada.
   const prop = await p17.evaluate(async () => {
     const b = document.querySelector('[data-pr="descartar"]');
-    if (!b) return 'no hay propuestas hoy';
-    const antes = document.body.innerHTML.length;
-    b.click(); await new Promise(r => setTimeout(r, 800));
-    const ov = document.querySelector('.modal-overlay.open, #pdOverlay.open');
-    if (ov) ov.remove();                         // se cancela: no se descarta nada
-    return (ov || document.body.innerHTML.length !== antes) ? 'ok' : 'MUDO';
+    if (!b) return 'no hay propuestas pendientes que pulsar';
+    let llamo = null;
+    const orig = window.descartar;
+    window.descartar = function (id) { llamo = id; };
+    b.click(); await new Promise(r => setTimeout(r, 300));
+    window.descartar = orig;
+    return llamo !== null && String(llamo) === b.getAttribute('data-id') ? 'ok'
+         : (llamo === null ? 'MUDO' : 'llega otro id: ' + llamo);
   });
-  ok(prop === 'ok', '  PULSAR «Descartar» en una propuesta abre su confirmación', prop);
+  ok(prop === 'ok', '  PULSAR «Descartar» llama a su función con el id correcto (sin descartar)', prop);
   ok((await violaciones(p17)).length === 0, '  las cuatro, sin una violación de CSP');
 
 
@@ -1253,8 +1260,88 @@ try {
   ok(gr === 'ok', '  y su botón de nuevo grupo abre la ventana', gr);
   ok((await violaciones(p20)).length === 0, '  las tres, sin una violación de CSP');
 
+
+  // ── 21 · FACTURAS EMITIDAS Y RECIBIDAS ──
+  console.log('\n[21] Facturas: lista, alta, ficha y el menú «···» con DOS datos');
+  const p21 = await nuevaPagina();
+  await p21.setCookie({ name: 'asess', value: erpTok, domain: 'desarrollo-bamburu.localhost', path: '/' });
+  const r21 = await p21.goto(ERP_BASE + '/admin/invoices', { waitUntil: 'networkidle0' });
+  ok(r21.status() === 200, '/admin/invoices abre', 'HTTP ' + r21.status());
+  ok(/script-src[^;]*'nonce-/.test(cabecera(r21)), '  y va con la política estricta');
+  await new Promise(x => setTimeout(x, 900));
+  const fac = await p21.evaluate(async () => {
+    const out = {};
+    const trig = document.querySelector('tbody [data-act="rowmenu"]');
+    out.hayMenu = !!trig;
+    if (trig) {
+      trig.click(); await new Promise(r => setTimeout(r, 300));
+      const items = [...document.querySelectorAll('tbody .rmenu-item')];
+      out.conAtributo = items.filter(i => i.getAttribute('onclick')).length;
+      // EL SEGUNDO DATO: Anular necesita el NÚMERO de la factura, no solo el id — y hay que
+      // comprobar que LLEGA, no solo que está escrito en el atributo. Se pulsa con la función
+      // sustituida por un espía: no se anula ninguna factura.
+      const an = items.find(i => i.getAttribute('data-rm') === 'inv-anular');
+      if (an) {
+        let arg1 = null, arg2 = null;
+        const orig = window.anular;
+        window.anular = function (a, b2) { arg1 = a; arg2 = b2; };
+        an.click(); await new Promise(r => setTimeout(r, 300));
+        window.anular = orig;
+        out.traeNumero = arg2 != null && String(arg2).length > 0;
+        out.traeId = String(arg1) === an.getAttribute('data-rm-arg');
+      } else { out.traeNumero = null; out.traeId = null; }
+      trig.click();
+    }
+    const s = document.getElementById('searchBox');
+    if (s) { const vis = () => [...document.querySelectorAll('tbody tr')].filter(t => t.style.display !== 'none').length;
+             const antes = vis();
+             s.value = 'zzzz'; s.dispatchEvent(new Event('input', { bubbles: true }));
+             await new Promise(r => setTimeout(r, 400));
+             out.filtra = vis() < antes;
+             s.value = ''; s.dispatchEvent(new Event('input', { bubbles: true })); }
+    return out;
+  });
+  ok(fac.hayMenu, '  hay una factura con menú «···»');
+  ok(fac.conAtributo === 0, '  y sus items no llevan código en un atributo');
+  ok(fac.traeNumero !== false, '  al PULSAR «Anular» llega TAMBIÉN el número de la factura',
+     fac.traeNumero === null ? 'ninguna anulable hoy' : 'ok');
+  ok(fac.traeId !== false, '  y llega su id', fac.traeId === null ? 'ninguna anulable hoy' : 'ok');
+  ok(fac.filtra, '  y su buscador filtra al teclear');
+
+  // El alta: añadir una línea y quitarla.
+  const r21b = await p21.goto(ERP_BASE + '/admin/invoices/new', { waitUntil: 'networkidle0' });
+  ok(/script-src[^;]*'nonce-/.test(cabecera(r21b)), '/admin/invoices/new — endurecida');
+  await new Promise(x => setTimeout(x, 700));
+  const alta = await p21.evaluate(async () => {
+    const b = document.querySelector('[data-iv="add-line"]'); if (!b) return 'sin botón';
+    const antes = document.querySelectorAll('[data-iv="quitar-fila"]').length;
+    b.click(); await new Promise(r => setTimeout(r, 400));
+    const mas = document.querySelectorAll('[data-iv="quitar-fila"]').length;
+    if (mas <= antes) return 'no añade línea';
+    document.querySelector('[data-iv="quitar-fila"]').click();
+    await new Promise(r => setTimeout(r, 300));
+    return document.querySelectorAll('[data-iv="quitar-fila"]').length < mas ? 'ok' : 'el aspa no quita';
+  });
+  ok(alta === 'ok', '  añadir y quitar una línea responde', alta);
+
+  // La recibida: su alta tiene DOS modos y el buscador de proveedor se pinta al vuelo.
+  const r21c = await p21.goto(ERP_BASE + '/admin/supplier-invoices/new', { waitUntil: 'networkidle0' });
+  ok(/script-src[^;]*'nonce-/.test(cabecera(r21c)), '/admin/supplier-invoices/new — endurecida');
+  await new Promise(x => setTimeout(x, 700));
+  const rec = await p21.evaluate(async () => {
+    const g = document.querySelector('[data-si="modo"][data-m="gasto"]'); if (!g) return 'sin botón de modo';
+    g.click(); await new Promise(r => setTimeout(r, 500));
+    const add = document.querySelector('[data-si="add-linea"]');
+    if (!add) return 'el modo gasto no se abrió';
+    const antes = document.querySelectorAll('[data-si="gquitar"]').length;
+    add.click(); await new Promise(r => setTimeout(r, 400));
+    return document.querySelectorAll('[data-si="gquitar"]').length > antes ? 'ok' : 'no añade línea de gasto';
+  });
+  ok(rec === 'ok', '  cambiar a modo gasto y añadir una línea responde', rec);
+  ok((await violaciones(p21)).length === 0, '  facturas, sin una violación de CSP');
+
   const todas = [...(await violaciones(p3)), ...(await violaciones(p4)),
-                 ...(await violaciones(p11)), ...(await violaciones(p12)), ...(await violaciones(p13)), ...(await violaciones(p14)), ...(await violaciones(p15)), ...(await violaciones(p16)), ...(await violaciones(p17)), ...(await violaciones(p18)), ...(await violaciones(p19)), ...(await violaciones(p20)),
+                 ...(await violaciones(p11)), ...(await violaciones(p12)), ...(await violaciones(p13)), ...(await violaciones(p14)), ...(await violaciones(p15)), ...(await violaciones(p16)), ...(await violaciones(p17)), ...(await violaciones(p18)), ...(await violaciones(p19)), ...(await violaciones(p20)), ...(await violaciones(p21)),
                  ...(await violaciones(p9)),
                  ...(await violaciones(p8)),
                  ...(await violaciones(p5)), ...(await violaciones(p6)), ...(await violaciones(p7))];

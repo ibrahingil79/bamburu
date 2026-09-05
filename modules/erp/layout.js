@@ -48,7 +48,9 @@ export function rowMenu(items = [], opts = {}) {
   const body = items.map(it => {
     const cls = 'rmenu-item' + (it.danger ? ' danger' : '');
     if (it.href) return `<a href="${it.href}" class="${cls}"${it.target ? ` target="${it.target}"` : ''}>${it.label}</a>`;
-    if (it.act) return `<button type="button" class="${cls}" data-rm="${it.act}" data-rm-arg="${it.arg == null ? '' : it.arg}">${it.label}</button>`;
+    // `arg` y `arg2` son los dos únicos datos que viaja un item. El segundo existe porque el menú
+    // de facturas necesita también el NÚMERO para preguntar antes de anular.
+    if (it.act) return `<button type="button" class="${cls}" data-rm="${it.act}" data-rm-arg="${it.arg == null ? '' : it.arg}"${it.arg2 == null ? '' : ` data-rm-arg2="${escHtml(String(it.arg2))}"`}>${it.label}</button>`;
     return `<button type="button" class="${cls}" onclick="closeRowMenus();${it.onclick || ''}">${it.label}</button>`;
   }).join('');
   const trig = opts.label
@@ -729,7 +731,7 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
         if(it.href) return '<a href="'+it.href+'" class="'+cls+'"'+(it.target?' target="'+it.target+'"':'')+'>'+it.label+'</a>';
         // 4 SEP 2026 — con la clave act el boton lleva un NOMBRE, no codigo: es lo unico que
         // sigue vivo bajo la CSP estricta. Ver el gemelo del servidor, arriba en este fichero.
-        if(it.act) return '<button type="button" class="'+cls+'" data-rm="'+escHtmlCli(it.act)+'" data-rm-arg="'+escHtmlCli(it.arg==null?'':it.arg)+'">'+it.label+'</button>';
+        if(it.act) return '<button type="button" class="'+cls+'" data-rm="'+escHtmlCli(it.act)+'" data-rm-arg="'+escHtmlCli(it.arg==null?'':it.arg)+'"'+(it.arg2==null?'':' data-rm-arg2="'+escHtmlCli(it.arg2)+'"')+'>'+it.label+'</button>';
         return '<button type="button" class="'+cls+'" onclick="closeRowMenus();'+(it.onclick||'')+'">'+it.label+'</button>';
       }).join('');
       var trig=opts.label
@@ -1581,7 +1583,8 @@ ${ROOT_TOKENS}
       var rm=e.target.closest('[data-rm]'); if(!rm) return;
       window.closeRowMenus&&window.closeRowMenus();
       document.dispatchEvent(new CustomEvent('rowmenu:act',{detail:{
-        act:rm.getAttribute('data-rm'), arg:rm.getAttribute('data-rm-arg'), el:rm }}));
+        act:rm.getAttribute('data-rm'), arg:rm.getAttribute('data-rm-arg'),
+        arg2:rm.getAttribute('data-rm-arg2'), el:rm }}));
     });
     document.addEventListener('click',function(e){
       var el=e.target.closest('[data-act]'); if(!el) return;

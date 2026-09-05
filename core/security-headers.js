@@ -184,6 +184,15 @@ const SUPERFICIES_ESTRICTAS = [
   /^\/admin\/clients$/,
   /^\/admin\/clients\/groups$/,
   /^\/admin\/products$/,
+  // ⚙️ 5 SEP 2026, 13ª tanda — facturas emitidas y recibidas, con sus altas y sus fichas. Las dos
+  // plantillas enteras a cero, así que las formas entran completas.
+  /^\/admin\/invoices$/,
+  /^\/admin\/invoices\/new$/,
+  /^\/admin\/invoices\/\d+$/,
+  /^\/admin\/invoices\/\d+\/rectificativa\/new$/,
+  /^\/admin\/supplier-invoices$/,
+  /^\/admin\/supplier-invoices\/new$/,
+  /^\/admin\/supplier-invoices\/\d+$/,
 ];
 
 export function securityHeaders() {
