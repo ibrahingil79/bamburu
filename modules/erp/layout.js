@@ -80,9 +80,14 @@ export function estadoTabs(active = '', entries = [], q = '') {
 // opts: { cta, href } acción principal (botón azul) · soft:true → enlace suave (vacío
 // derivado) · tone:'ok' → vacío "bueno" (check verde, sin acción) · icon: icono Tabler.
 export function emptyState(text, opts = {}) {
-  const { cta = '', href = '', onclick = '', soft = false, icon = 'ti-sparkles', tone = '' } = opts;
+  const { cta = '', href = '', onclick = '', act = '', arg = '', soft = false, icon = 'ti-sparkles', tone = '' } = opts;
   let action = '';
-  if (cta && onclick) action = `<button type="button" class="btn btn-primary" onclick="${onclick}">${cta}</button>`;
+  // 5 SEP 2026 (csp-erp-migrar-handlers) — la clave `act` es la hermana de `onclick` que sobrevive a
+  // la CSP estricta: pinta un NOMBRE y la pantalla lo recoge en 'rowmenu:act'. Gemela de la de
+  // `window.emptyState`, más abajo en este mismo fichero. Van SIEMPRE las dos: esta pinta desde el
+  // servidor y aquélla desde el navegador, y una pantalla puede usar cualquiera de las dos.
+  if (cta && act) action = `<button type="button" class="btn btn-primary" data-rm="${act}" data-rm-arg="${arg == null ? '' : arg}">${cta}</button>`;
+  else if (cta && onclick) action = `<button type="button" class="btn btn-primary" onclick="${onclick}">${cta}</button>`;
   else if (cta && href) action = soft ? `<a class="empty-soft" href="${href}">${cta} →</a>` : `<a class="btn btn-primary" href="${href}">${cta}</a>`;
   const ic = tone === 'ok' ? 'ti-circle-check' : icon;
   return `<div class="empty"><span class="empty-ic${tone === 'ok' ? ' ok' : ''}"><i class="ti ${ic}"></i></span>`

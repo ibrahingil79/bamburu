@@ -62,7 +62,7 @@ function tabsBar(active, from, to) {
   return `${nivel1}<div class="tabs">${sub}</div>`;
 }
 // Selector de ejercicio + trimestre para la pestaña Modelos (usa year/q, no from/to).
-function modelosPeriodForm(year, q) {
+function modelosPeriodForm(year, q, nonce = '') {
   const opt = (v, label) => `<option value="${v}" ${Number(q) === v ? 'selected' : ''}>${label}</option>`;
   return `<form method="get" action="/admin/contabilidad/modelos" style="display:flex;gap:.75rem;align-items:end;flex-wrap:wrap;margin-bottom:1rem">
     <div><label class="doc-label">Ejercicio</label><br><input type="number" name="year" value="${escHtml(String(year))}" style="width:6rem"></div>
@@ -72,7 +72,7 @@ function modelosPeriodForm(year, q) {
     <a class="btn btn-ghost" href="/admin/contabilidad/modelos.pdf?year=${year}&q=${q}">PDF (borrador)</a>
     <!-- C9 · los tres verbos también en los borradores de modelos, que tienen su propia barra. -->
     ${botonesListado('modelos', 'anio=' + year + '&trimestre=' + q)}
-    <script>${JS_LISTADO_ENVIAR}<\/script>
+    <script nonce="${nonce}">${JS_LISTADO_ENVIAR}<\/script>
     <a class="btn btn-ghost" href="/admin/contabilidad/modelos.csv?year=${year}&q=${q}">CSV</a>
   </form>`;
 }
@@ -91,7 +91,7 @@ function avisosBox(warnings) {
   return `<div style="margin:.5rem 0;padding:.5rem .75rem;border-left:3px solid var(--warn);background:var(--warn-s);font-size:12px;color:var(--warn)">
     <b>Antes de presentar, revisa:</b><ul style="margin:.3rem 0 0;padding-left:1.1rem">${warnings.map(w => `<li>${escHtml(w)}</li>`).join('')}</ul></div>`;
 }
-function periodForm(kind, from, to) {
+function periodForm(kind, from, to, nonce = '') {
   const q = `from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
   return `<form method="get" action="/admin/contabilidad/${kind}" style="display:flex;gap:.75rem;align-items:end;flex-wrap:wrap;margin-bottom:1rem">
     <div><label class="doc-label">Desde</label><br><input type="date" name="from" value="${escHtml(from)}"></div>
@@ -106,7 +106,7 @@ function periodForm(kind, from, to) {
     <!-- C9 · LOS TRES VERBOS también aquí. Hasta hoy un libro solo se podía DESCARGAR: no había
          forma de mandárselo a la gestoría sin bajarlo y adjuntarlo a mano. -->
     ${botonesListado(CLAVE_LISTADO[kind] || kind, q.replace('from=', 'desde=').replace('to=', 'hasta='))}
-    <script>${JS_LISTADO_ENVIAR}<\/script>
+    <script nonce="${nonce}">${JS_LISTADO_ENVIAR}<\/script>
   </form>`;
 }
 
@@ -211,7 +211,7 @@ export function createContabilidadRoutes(db) {
     const sym = symbolOf(db); const { from, to } = rangeOf(c, db); backfillLedger(db);
     const libro = libroVentas(db, from, to);
     const content = `<div class="ph"><h2>Contabilidad — Libros registro</h2></div>
-      ${tabsBar('ventas', from, to)}${periodForm('ventas', from, to)}
+      ${tabsBar('ventas', from, to)}${periodForm('ventas', from, to, c.get('cspNonce'))}
       <div class="card"><div class="card-body"><h3>Libro de ventas e ingresos — facturas expedidas</h3>
         <span style="color:var(--text2);font-size:12px">Formato AEAT: un asiento por línea (una fila por tipo de IVA; las facturas multi-tipo aparecen en varias filas con el mismo número). Anuladas neteadas; sustituidas fuera; rectificativas marcadas (R·S/I).</span></div>
         ${ventasTable(libro, sym)}</div>`;
@@ -222,7 +222,7 @@ export function createContabilidadRoutes(db) {
     const sym = symbolOf(db); const { from, to } = rangeOf(c, db); backfillLedger(db);
     const libro = libroCompras(db, from, to);
     const content = `<div class="ph"><h2>Contabilidad — Libros registro</h2></div>
-      ${tabsBar('compras', from, to)}${periodForm('compras', from, to)}
+      ${tabsBar('compras', from, to)}${periodForm('compras', from, to, c.get('cspNonce'))}
       <div class="card"><div class="card-body"><h3>Libro de compras y gastos — facturas recibidas</h3>
         <span style="color:var(--text2);font-size:12px">Formato AEAT: un asiento por línea (una fila por tipo de IVA). Abonos en negativo; anuladas fuera.</span></div>
         ${comprasTable(libro, sym)}</div>`;
@@ -271,7 +271,7 @@ export function createContabilidadRoutes(db) {
     const sym = symbolOf(db); const { from, to } = rangeOf(c, db); backfillLedger(db);
     const diario = libroDiario(db, from, to);
     const content = `<div class="ph"><h2>Contabilidad — Libros registro</h2></div>
-      ${tabsBar('diario', from, to)}${periodForm('diario', from, to)}
+      ${tabsBar('diario', from, to)}${periodForm('diario', from, to, c.get('cspNonce'))}
       <div class="card"><div class="card-body"><h3>Libro diario — asientos de doble cara</h3>
         <span style="color:var(--text2);font-size:12px">Lista cronológica; cada asiento con sus líneas al Debe/Haber sobre el plan de cuentas. Derivado del cuaderno (solo lectura).</span></div>
         ${diarioTable(diario, sym)}</div>`;
@@ -285,7 +285,7 @@ export function createContabilidadRoutes(db) {
     const cuenta = (c.req.query('cuenta') || '').replace(/[^0-9A-Za-z]/g, '');
     const detalle = cuenta ? mayorDetalle(mayorCuenta(db, cuenta, from, to), sym) : '';
     const content = `<div class="ph"><h2>Contabilidad — Libros registro</h2></div>
-      ${tabsBar('mayor', from, to)}${periodForm('mayor', from, to)}
+      ${tabsBar('mayor', from, to)}${periodForm('mayor', from, to, c.get('cspNonce'))}
       <div class="card"><div class="card-body"><h3>Libro mayor — saldos por cuenta</h3>
         <span style="color:var(--text2);font-size:12px">Pulsa una cuenta para ver sus movimientos con saldo acumulado.</span></div>
         ${mayorTable(mayor, sym, from, to)}</div>${detalle}`;
@@ -357,7 +357,7 @@ export function createContabilidadRoutes(db) {
         ${td(escHtml(g.start_date || ''))}${td(money(sym, g.acquisition_value), 1)}${td(money(sym, g.amortizable_base), 1)}
         ${td(Number(g.annual_rate) + '%', 1)}${td(money(sym, g.acuInicio), 1)}${td(money(sym, g.cuota), 1)}${td(money(sym, g.acuFinal), 1)}${td(money(sym, g.pendiente), 1)}
         <td>${edit}${baja}</td></tr>`;
-    }).join('') || emptyRow(13, 'Aún no has registrado bienes de inversión. Cuando compres un bien amortizable, márcalo aquí.', { cta: 'Nuevo bien', onclick: "var d=document.getElementById('altaBien');if(d)d.open=true" });
+    }).join('') || emptyRow(13, 'Aún no has registrado bienes de inversión. Cuando compres un bien amortizable, márcalo aquí.', { cta: 'Nuevo bien', act: 'abrir-alta-bien' });
     const altaForm = `<details id="altaBien"><summary class="btn" style="display:inline-block">+ Alta de bien</summary>
       <form method="post" action="/admin/contabilidad/bienes" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.5rem;margin:.75rem 0;max-width:900px">
         <input type="hidden" name="_csrf" value="${escHtml(csrf)}">
@@ -373,10 +373,20 @@ export function createContabilidadRoutes(db) {
         <div style="grid-column:1/-1"><button class="btn" type="submit">Registrar bien</button> <span style="color:var(--text2);font-size:12px">Método: lineal. Si enlazas una compra, se traen proveedor/NIF/nº/valor.</span></div>
       </form></details>`;
     const content = `<div class="ph"><h2>Contabilidad — Libros registro</h2></div>
-      ${tabsBar('bienes', from, to)}${periodForm('bienes', from, to)}
+      ${tabsBar('bienes', from, to)}${periodForm('bienes', from, to, c.get('cspNonce'))}
       <div class="card"><div class="card-body"><h3>Libro de bienes de inversión — amortización lineal</h3>
         <span style="color:var(--text2);font-size:12px">Tercer libro registro (Orden HAC/773/2019). La amortización se calcula en lectura: cuota del periodo prorrateada por días, con tope = valor amortizable; la baja la detiene.</span>
         <div style="margin-top:.5rem">${altaForm}</div></div>
+        <script nonce="${c.get('cspNonce')}">
+          // 5 SEP 2026 (csp-erp-migrar-handlers) — el boton del estado vacio ya no lleva codigo
+          // dentro: dice su NOMBRE y el armazon avisa por 'rowmenu:act'. Solo sale cuando no hay
+          // ni un bien registrado, asi que el enganche va por delegacion y no da por hecho que
+          // exista.
+          document.addEventListener('rowmenu:act', function(e){
+            if (e.detail.act !== 'abrir-alta-bien') return;
+            var d = document.getElementById('altaBien'); if (d) d.open = true;
+          });
+        <\/script>
         <table><thead><tr><th>Descripción</th><th>Documento</th><th>Proveedor</th><th>NIF</th><th>Puesta func.</th>
           <th style="text-align:right">V. adquisición</th><th style="text-align:right">V. amortizable</th><th style="text-align:right">% anual</th>
           <th style="text-align:right">Acum. inicio</th><th style="text-align:right">Cuota periodo</th><th style="text-align:right">Acum. final</th><th style="text-align:right">Pendiente</th><th>Acciones</th></tr></thead>
@@ -419,7 +429,7 @@ export function createContabilidadRoutes(db) {
     const pyg = cuentaPyG(db, from, to);
     const res = pyg.resultadoEjercicio > 0 ? 'beneficio' : (pyg.resultadoEjercicio < 0 ? 'pérdida' : 'sin resultado');
     const content = `<div class="ph"><h2>Contabilidad — Libros registro</h2></div>
-      ${tabsBar('pyg', from, to)}${periodForm('pyg', from, to)}
+      ${tabsBar('pyg', from, to)}${periodForm('pyg', from, to, c.get('cspNonce'))}
       <div class="card"><div class="card-body"><h3>Cuenta de pérdidas y ganancias</h3>
         <span style="color:var(--text2);font-size:12px">Modelo del PGC de PYMES (RD 1515/2007), derivada del libro diario (solo lectura). Los gastos figuran en negativo (entre paréntesis). Resultado del ejercicio: <b>${money(sym, pyg.resultadoEjercicio)} (${escHtml(res)})</b>.</span>
         ${avisosBox(pyg.warnings)}</div>
@@ -460,7 +470,7 @@ export function createContabilidadRoutes(db) {
     const res303 = m303.casilla71 < 0 ? 'a compensar' : (m303.casilla71 > 0 ? 'a ingresar' : 'sin resultado');
     const res130 = m130.c19 < 0 ? 'sin ingreso (negativo o cero)' : (m130.c19 > 0 ? 'a ingresar' : 'sin ingreso');
     const content = `<div class="ph"><h2>Contabilidad — Libros registro</h2></div>
-      ${tabsBar('modelos', from, to)}${modelosPeriodForm(year, q)}
+      ${tabsBar('modelos', from, to)}${modelosPeriodForm(year, q, c.get('cspNonce'))}
       <div style="color:var(--text2);font-size:12px;margin-bottom:1rem">Periodo ${fechaEs(from)} → ${fechaEs(to)}. <b>Borradores</b> calculados desde tus libros: Bamburu los deja listos para que tú o tu gestoría los revisen y presenten. Bamburu no presenta ante la AEAT.</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;align-items:start">
         <div class="card"><div class="card-body"><h3>Modelo 303 · IVA — ${escHtml(String(q))}T ${escHtml(String(year))}</h3>

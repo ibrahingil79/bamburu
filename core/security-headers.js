@@ -128,6 +128,19 @@ const SUPERFICIES_ESTRICTAS = [
   /^\/admin\/crm$/,
   /^\/admin\/crm\/cola$/,
   /^\/admin\/citas$/,
+  // ⚙️ 5 SEP 2026, 7ª tanda — EL COMPONENTE COMPARTIDO DE LISTADOS, y las nueve pantallas que
+  // desbloquea de golpe. `routes/listados.js` pinta los tres verbos (Imprimir · Descargar PDF ·
+  // Enviar por correo) en ocho pantallas; sus dos handlers eran los ÚNICOS que le quedaban a las
+  // siete de contabilidad y a la lista de compras.
+  /^\/admin\/purchases$/,
+  /^\/admin\/contabilidad$/,
+  /^\/admin\/contabilidad\/ventas$/,
+  /^\/admin\/contabilidad\/compras$/,
+  /^\/admin\/contabilidad\/modelos$/,
+  /^\/admin\/contabilidad\/diario$/,
+  /^\/admin\/contabilidad\/mayor$/,
+  /^\/admin\/contabilidad\/pyg$/,
+  /^\/admin\/contabilidad\/bienes$/,
 ];
 
 export function securityHeaders() {

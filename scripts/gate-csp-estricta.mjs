@@ -279,17 +279,18 @@ try {
   const r9 = await p9.goto(ERP_BASE + '/admin/albaranes', { waitUntil: 'networkidle0' });
   ok(/script-src[^;]*'nonce-/.test(cabecera(r9)) && !/script-src[^;]*'unsafe-inline'/.test(cabecera(r9)),
      '/admin/albaranes — endurecida: nonce sí, unsafe-inline no');
-  // LA REGLA ANCLADA, comprobada por su parte peligrosa: una vecina que NO está migrada no entra.
-  // ⚙️ 4 SEP 2026 — antes se probaba con `/admin/quotes/9`, y dejó de valer el día que esa ficha se
-  // endureció: una comprobación de anclaje solo prueba algo si su ruta SIGUE en legado. Se cambia a
-  // `/admin/purchases` (la lista), que está pegada a dos reglas nuevas —`/admin/purchases/\d+` y
-  // `/admin/purchases/new`— y no puede endurecerse todavía: sus dos handlers vienen del componente
-  // compartido de listados (`routes/listados.js`), que no es de esta cola.
-  const r9b = await p9.goto(ERP_BASE + '/admin/quotes', { waitUntil: 'networkidle0' });
-  ok(/script-src[^;]*'nonce-/.test(cabecera(r9b)), '/admin/quotes (la lista) — endurecida');
-  const r9c = await p9.goto(ERP_BASE + '/admin/purchases', { waitUntil: 'networkidle0' });
-  ok(/script-src[^;]*'unsafe-inline'/.test(cabecera(r9c)),
-     '  y /admin/purchases (la lista, sin migrar) NO: el ancla $ impide que la regla la arrastre');
+  // LA REGLA ANCLADA, comprobada por su parte peligrosa.
+  // ⚙️ 5 SEP 2026 — ESTA COMPROBACIÓN SE HA CADUCADO DOS VECES, y por el mismo motivo: se apoyaba en
+  // una pantalla vecina que «aún no estaba migrada» (primero `/admin/quotes/9`, luego
+  // `/admin/purchases`), y en cuanto le llegó su turno el anclaje dejó de probar nada. Ahora se
+  // apoya en algo que NO puede cambiar de bando: `/admin/contabilidad/ventas.pdf` es un papel que
+  // se descarga, no una pantalla, así que nunca se endurecerá — y su ruta empieza exactamente igual
+  // que la regla `/^\/admin\/contabilidad\/ventas$/`. Si alguien le quitara el `$`, esto cae.
+  const r9b = await p9.goto(ERP_BASE + '/admin/contabilidad/ventas', { waitUntil: 'networkidle0' });
+  ok(/script-src[^;]*'nonce-/.test(cabecera(r9b)), '/admin/contabilidad/ventas — endurecida');
+  const r9c = await fetch(ERP_BASE + '/admin/contabilidad/ventas.pdf', { headers: { cookie: 'asess=' + erpTok } });
+  ok(/script-src[^;]*'unsafe-inline'/.test(r9c.headers.get('content-security-policy') || ''),
+     '  y ventas.pdf NO: el ancla $ impide que la regla arrastre al papel', 'HTTP ' + r9c.status);
 
   await p9.goto(ERP_BASE + '/admin/albaranes', { waitUntil: 'networkidle0' });
   ok((await violaciones(p9)).length === 0, 'ninguna violación de CSP al cargar');
@@ -756,8 +757,43 @@ try {
   ok(ag.abreLeyenda, '  la ventana de la leyenda, que es markup fijo, también abre');
   ok((await violaciones(p13)).length === 0, '  y la agenda entera, sin una violación de CSP');
 
+
+  // ── 14 · EL COMPONENTE COMPARTIDO DE LISTADOS, y el botón del estado vacío ──
+  console.log('\n[14] Los tres verbos de listado, y el botón que solo sale cuando no hay nada');
+  // POR QUE IMPORTA: `routes/listados.js` pinta estos botones en OCHO pantallas. Si su despachador
+  // se rompe, se caen las ocho a la vez y ninguna lo dice. Se pulsa «Enviar por correo», que abre
+  // una ventana ANTES de mandar nada: la prueba llega al diálogo y lo cancela.
+  const p14 = await nuevaPagina();
+  await p14.setCookie({ name: 'asess', value: erpTok, domain: 'desarrollo-bamburu.localhost', path: '/' });
+  for (const ruta of ['/admin/purchases', '/admin/contabilidad/ventas']) {
+    const r = await p14.goto(ERP_BASE + ruta, { waitUntil: 'networkidle0' });
+    ok(/script-src[^;]*'nonce-/.test(cabecera(r)), ruta + ' — endurecida');
+    await new Promise(x => setTimeout(x, 500));
+    const res = await p14.evaluate(async () => {
+      const b = document.querySelector('[data-lst="enviar"]');
+      if (!b) return 'sin botón de enviar';
+      b.click(); await new Promise(r => setTimeout(r, 700));
+      const ov = document.querySelector('.modal-overlay.open');
+      if (ov) ov.remove();                       // se cancela: no se manda ningún correo
+      return ov ? 'ok' : 'MUDO';
+    });
+    ok(res === 'ok', '  PULSAR «Enviar por correo» abre su ventana', res);
+  }
+  // El botón del estado vacío: `emptyState` con la clave `act`, que es la forma nueva del armazón.
+  const r14 = await p14.goto(ERP_BASE + '/admin/contabilidad/bienes', { waitUntil: 'networkidle0' });
+  ok(/script-src[^;]*'nonce-/.test(cabecera(r14)), '/admin/contabilidad/bienes — endurecida');
+  await new Promise(x => setTimeout(x, 500));
+  const bienes = await p14.evaluate(async () => {
+    const b = document.querySelector('[data-rm="abrir-alta-bien"]');
+    if (!b) return 'sin botón (¿ya hay bienes registrados?)';
+    b.click(); await new Promise(r => setTimeout(r, 400));
+    return document.getElementById('altaBien')?.open ? 'ok' : 'MUDO';
+  });
+  ok(bienes === 'ok', '  PULSAR el botón del estado vacío despliega el alta de bien', bienes);
+  ok((await violaciones(p14)).length === 0, '  y las tres pantallas, sin una violación de CSP');
+
   const todas = [...(await violaciones(p3)), ...(await violaciones(p4)),
-                 ...(await violaciones(p11)), ...(await violaciones(p12)), ...(await violaciones(p13)),
+                 ...(await violaciones(p11)), ...(await violaciones(p12)), ...(await violaciones(p13)), ...(await violaciones(p14)),
                  ...(await violaciones(p9)),
                  ...(await violaciones(p8)),
                  ...(await violaciones(p5)), ...(await violaciones(p6)), ...(await violaciones(p7))];

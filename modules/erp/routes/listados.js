@@ -213,8 +213,8 @@ export function botonesListado(clave, qs = '') {
   // esa pantalla haya cargado una hoja concreta.
   return `<div style="display:inline-flex;gap:.4rem;flex-wrap:wrap">
     <a class="btn btn-secondary btn-sm" href="/admin/listados/${clave}/imprimir${q}" target="_blank" rel="noopener"><i class="ti ti-printer"></i> Imprimir</a>
-    <button type="button" class="btn btn-secondary btn-sm" onclick="descargarListado('${clave}','${escHtml(qs)}')"><i class="ti ti-download"></i> Descargar PDF</button>
-    <button type="button" class="btn btn-secondary btn-sm" onclick="enviarListado('${clave}','${escHtml(qs)}')"><i class="ti ti-mail"></i> Enviar por correo</button>
+    <button type="button" class="btn btn-secondary btn-sm" data-lst="descargar" data-clave="${clave}" data-qs="${escHtml(qs)}"><i class="ti ti-download"></i> Descargar PDF</button>
+    <button type="button" class="btn btn-secondary btn-sm" data-lst="enviar" data-clave="${clave}" data-qs="${escHtml(qs)}"><i class="ti ti-mail"></i> Enviar por correo</button>
   </div>`;
 }
 
@@ -254,5 +254,20 @@ async function enviarListado(clave, qs){
     var d = await api('POST','/api/erp/listados/'+clave+'/enviar'+(qs?('?'+qs):''), { to: to });
     toast('Enviado a '+d.to+' ('+d.lineas+(d.lineas===1?' línea':' líneas')+') ✓');
   } catch(e) { toast(e.message,'err'); }
+}
+
+// ── 5 SEP 2026 (csp-erp-migrar-handlers) — ENGANCHE DE LOS BOTONES DE LISTADO ──────────────────
+// Los pinta el SERVIDOR (botonesListado), asi que ya estan en el HTML; pero este mismo bloque lo
+// incluyen ocho pantallas, y algunas repintan su cabecera, asi que se despacha por delegacion: un
+// oyente que no hay que volver a poner. El pestillo evita duplicarlo si una pantalla mete el bloque
+// mas de una vez (contabilidad lo hace en dos vistas distintas).
+if (!window.__listadoDeleg) {
+  window.__listadoDeleg = true;
+  document.addEventListener('click', function(e){
+    var b = e.target.closest('[data-lst]'); if (!b) return;
+    var clave = b.getAttribute('data-clave'), qs = b.getAttribute('data-qs') || '';
+    if (b.getAttribute('data-lst') === 'descargar') descargarListado(clave, qs);
+    else enviarListado(clave, qs);
+  });
 }
 `;
