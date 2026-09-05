@@ -241,10 +241,13 @@ try {
   const r8 = await p8.goto(ERP_BASE + '/admin', { waitUntil: 'networkidle0' });
   ok(/script-src[^;]*'nonce-/.test(cabecera(r8)) && !/script-src[^;]*'unsafe-inline'/.test(cabecera(r8)),
      '/admin — nonce sí, unsafe-inline no');
-  // Y LA REGLA NO ARRASTRA A LAS DEMÁS: eso es la mitad del valor de esta ficha.
-  const r8b = await p8.goto(ERP_BASE + '/admin/clients', { waitUntil: 'networkidle0' });
-  ok(/script-src[^;]*'unsafe-inline'/.test(cabecera(r8b)),
-     '  y /admin/clients SIGUE con la política de siempre: la regla es exacta, no un prefijo');
+  // Y LA REGLA `/^\/admin$/` NO ARRASTRA A LO QUE CUELGA DE ELLA: eso es la mitad del valor de
+  // esta ficha. ⚙️ 5 SEP 2026 — antes se probaba con `/admin/clients`, y caducó el día que esa
+  // pantalla se endureció (la TERCERA vez que una comprobación de anclaje se apoya en una vecina
+  // «aún sin migrar»). Se usa un papel que se descarga: nunca será una pantalla endurecida.
+  const r8b = await fetch(ERP_BASE + '/admin/listados/clientes/pdf', { headers: { cookie: 'asess=' + erpTok } });
+  ok(/script-src[^;]*'unsafe-inline'/.test(r8b.headers.get('content-security-policy') || ''),
+     '  y lo que cuelga de /admin NO se arrastra: la regla es exacta, no un prefijo', 'HTTP ' + r8b.status);
   await p8.goto(ERP_BASE + '/admin', { waitUntil: 'networkidle0' });
   ok((await violaciones(p8)).length === 0, 'ninguna violación de CSP al cargar /admin');
   // SE PULSA EL ARMAZÓN: es lo que se quedó mudo si la migración fallara.
@@ -1164,8 +1167,94 @@ try {
   }
   ok((await violaciones(p19)).length === 0, '  las cinco, sin una violación de CSP');
 
+
+  // ── 20 · CLIENTES Y PRODUCTOS: las dos que el parte daba por gordas ──
+  console.log('\n[20] Clientes, grupos y productos');
+  const p20 = await nuevaPagina();
+  await p20.setCookie({ name: 'asess', value: erpTok, domain: 'desarrollo-bamburu.localhost', path: '/' });
+
+  const r20 = await p20.goto(ERP_BASE + '/admin/clients', { waitUntil: 'networkidle0' });
+  ok(r20.status() === 200, '/admin/clients abre', 'HTTP ' + r20.status());
+  ok(/script-src[^;]*'nonce-/.test(cabecera(r20)), '  y va con la política estricta');
+  await new Promise(x => setTimeout(x, 700));
+  const cli = await p20.evaluate(async () => {
+    const out = {};
+    const trig = document.querySelector('tbody [data-act="rowmenu"]');
+    out.hayMenu = !!trig;
+    if (trig) {
+      trig.click(); await new Promise(r => setTimeout(r, 300));
+      const items = [...document.querySelectorAll('tbody .rmenu-item')];
+      out.conAtributo = items.filter(i => i.getAttribute('onclick')).length;
+      const ed = items.find(i => i.getAttribute('data-rm') === 'cli-editar');
+      if (ed) { ed.click(); await new Promise(r => setTimeout(r, 700));
+                out.abreEditar = !!document.getElementById('clientModal')?.classList.contains('open');
+                // el botón de datos fiscales, que está dentro de esa ventana
+                document.getElementById('btnFiscal')?.click();
+                await new Promise(r => setTimeout(r, 300));
+                out.fiscalReacciona = !!document.getElementById('btnFiscal');
+                document.querySelector('[data-cl="cerrar"]')?.click(); }
+    }
+    // `viewDetail` no abre un modal cualquiera: llama a window.BFWin.abrir(id), que despliega la
+    // ficha del cliente y cambia la dirección a /admin/clients/<id>. Se mide ESO, no un selector
+    // supuesto: la lección de hoy con el botón de jornada partida.
+    const ver = document.querySelector('[data-cl="ver"]');
+    if (ver) {
+      const antes = location.pathname;
+      ver.click(); await new Promise(r => setTimeout(r, 1200));
+      out.abreDetalle = location.pathname !== antes
+        || !!document.querySelector('.modal-overlay.open, .bf-win, #bfWin, [class*="bf-"]');
+    }
+    return out;
+  });
+  ok(cli.hayMenu, '  hay una fila con menú «···»');
+  ok(cli.conAtributo === 0, '  y sus items no llevan código en un atributo');
+  ok(cli.abreEditar, '  PULSAR «Editar» en el menú abre la ficha del cliente');
+  ok(cli.abreDetalle, '  y «Ver» abre su detalle');
+
+  const r20b = await p20.goto(ERP_BASE + '/admin/products', { waitUntil: 'networkidle0' });
+  ok(/script-src[^;]*'nonce-/.test(cabecera(r20b)), '/admin/products — endurecida');
+  await new Promise(x => setTimeout(x, 800));
+  const pr = await p20.evaluate(async () => {
+    const out = {};
+    const ed = document.querySelector('[data-pd="editar"]');
+    out.hayEditar = !!ed;
+    if (!ed) return out;
+    ed.click(); await new Promise(r => setTimeout(r, 1200));
+    out.abreFicha = !!document.getElementById('productModal')?.classList.contains('open');
+    // Las PESTAÑAS de la ficha, que eran cuatro handlers de atributo.
+    const tab = document.querySelector('[data-pd="tab"][data-k="variants"]');
+    if (tab) { tab.click(); await new Promise(r => setTimeout(r, 400));
+               out.cambiaPestana = tab.classList.contains('active'); }
+    // Una etiqueta, que se pinta al vuelo dentro de la ficha.
+    const tg = document.querySelector('[data-pd="toggle-tag"]');
+    if (tg) { const antes = tg.getAttribute('style');
+              tg.click(); await new Promise(r => setTimeout(r, 400));
+              out.etiquetaReacciona = document.querySelector('[data-pd="toggle-tag"]')?.getAttribute('style') !== antes; }
+    document.querySelector('[data-pd="cerrar"]')?.click();
+    return out;
+  });
+  ok(pr.hayEditar, '  hay un producto con botón de Editar');
+  ok(pr.abreFicha, '  PULSAR «Editar» abre la ficha del producto');
+  ok(pr.cambiaPestana, '  y sus PESTAÑAS cambian al pulsarlas (eran cuatro handlers)');
+  ok(pr.etiquetaReacciona !== false, '  y una etiqueta pintada al vuelo responde',
+     pr.etiquetaReacciona === undefined ? 'sin etiquetas hoy' : 'ok');
+
+  const r20c = await p20.goto(ERP_BASE + '/admin/clients/groups', { waitUntil: 'networkidle0' });
+  ok(/script-src[^;]*'nonce-/.test(cabecera(r20c)), '/admin/clients/groups — endurecida');
+  await new Promise(x => setTimeout(x, 800));
+  const gr = await p20.evaluate(async () => {
+    const b = document.querySelector('[data-gr="nuevo"]') || document.querySelector('[data-rm="grupo-nuevo"]');
+    if (!b) return 'sin botón de nuevo grupo';
+    b.click(); await new Promise(r => setTimeout(r, 500));
+    if (!document.getElementById('groupModal')?.classList.contains('open')) return 'no abre';
+    document.querySelector('[data-gr="cerrar"]')?.click();
+    return 'ok';
+  });
+  ok(gr === 'ok', '  y su botón de nuevo grupo abre la ventana', gr);
+  ok((await violaciones(p20)).length === 0, '  las tres, sin una violación de CSP');
+
   const todas = [...(await violaciones(p3)), ...(await violaciones(p4)),
-                 ...(await violaciones(p11)), ...(await violaciones(p12)), ...(await violaciones(p13)), ...(await violaciones(p14)), ...(await violaciones(p15)), ...(await violaciones(p16)), ...(await violaciones(p17)), ...(await violaciones(p18)), ...(await violaciones(p19)),
+                 ...(await violaciones(p11)), ...(await violaciones(p12)), ...(await violaciones(p13)), ...(await violaciones(p14)), ...(await violaciones(p15)), ...(await violaciones(p16)), ...(await violaciones(p17)), ...(await violaciones(p18)), ...(await violaciones(p19)), ...(await violaciones(p20)),
                  ...(await violaciones(p9)),
                  ...(await violaciones(p8)),
                  ...(await violaciones(p5)), ...(await violaciones(p6)), ...(await violaciones(p7))];

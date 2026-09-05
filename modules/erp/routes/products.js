@@ -378,7 +378,7 @@ export function createProductRoutes(db, cfg = {}) {
       '<td>'+(p.type==='service'?'<span style="color:var(--muted)">—</span>':(p.stock<5?'<span style="color:var(--danger);font-weight:500">'+p.stock+'</span>':p.stock))+'</td>'+
       '<td>'+(statusB[p.status]||escHtml(p.status))+'</td>'+
       '<td><span class="badge b-gray">'+(p.type==='digital'?'Digital':p.type==='service'?'Servicio':'Físico')+'</span></td>'+
-      '<td style="white-space:nowrap">'+(can(c,'products.edit')?'<button class="btn btn-secondary btn-sm" onclick="editProd('+p.id+')">Editar</button> ':'')+(can(c,'products.delete')?rowMenu([{label:'Eliminar',danger:true,onclick:'delProd('+p.id+')'}]):'')+'</td>'+
+      '<td style="white-space:nowrap">'+(can(c,'products.edit')?'<button class="btn btn-secondary btn-sm" data-pd="editar" data-id="'+p.id+'">Editar</button> ':'')+(can(c,'products.delete')?rowMenu([{label:'Eliminar',danger:true,act:'prod-borrar',arg:p.id}]):'')+'</td>'+
       '</tr>').join('');
 
     const content = `
@@ -423,17 +423,17 @@ export function createProductRoutes(db, cfg = {}) {
       <!-- Modal Producto -->
       <div class="modal-overlay" id="productModal">
         <div class="modal" style="max-width:680px">
-          <div class="modal-head"><h3 id="modalTitle">Nuevo Producto</h3><button class="modal-close" onclick="closeModal('productModal')">✕</button></div>
+          <div class="modal-head"><h3 id="modalTitle">Nuevo Producto</h3><button class="modal-close" data-pd="cerrar">✕</button></div>
           <div class="modal-body">
             <input type="hidden" id="prodId">
             <div class="form-group" id="pCodeWrap" style="display:none"><label class="form-label">Código interno</label><div id="pCode" style="font-family:monospace;color:var(--muted)"></div></div>
             <div class="tabs">
-              <div class="tab active" data-tab-group="prod" data-tab-key="basic" onclick="switchTab('prod','basic')">General</div>
+              <div class="tab active" data-tab-group="prod" data-tab-key="basic" data-pd="tab" data-k="basic">General</div>
               <!-- Imágenes OCULTA de la vista (e-commerce); botón con display:none, panel sigue en el DOM para no romper el JS de editar. Variantes SÍ se mantiene (necesaria). -->
-              <div class="tab" data-tab-group="prod" data-tab-key="images" onclick="switchTab('prod','images')" style="display:none">Imágenes</div>
-              <div class="tab" data-tab-group="prod" data-tab-key="variants" onclick="switchTab('prod','variants')">Variantes</div>
+              <div class="tab" data-tab-group="prod" data-tab-key="images" data-pd="tab" data-k="images" style="display:none">Imágenes</div>
+              <div class="tab" data-tab-group="prod" data-tab-key="variants" data-pd="tab" data-k="variants">Variantes</div>
               <!-- OCULTO de la vista (e-commerce SEO, no aplica a gestión/facturación). Código conservado:
-              <div class="tab" data-tab-group="prod" data-tab-key="seo" onclick="switchTab('prod','seo')">Avanzado</div>
+              <div class="tab" data-tab-group="prod" data-tab-key="seo" data-pd="tab" data-k="seo">Avanzado</div>
               -->
             </div>
             <div class="tab-pane active" data-pane-group="prod" data-pane-key="basic">
@@ -441,7 +441,7 @@ export function createProductRoutes(db, cfg = {}) {
                 <div class="form-group"><label class="form-label">Tipo *</label><select class="form-control" id="pType"><option value="physical">Físico</option><option value="digital">Digital</option><option value="service">Servicio</option></select></div>
                 <div class="form-group" id="pTrackingWrap" style="display:none">
                   <label class="form-label">Trazabilidad</label>
-                  <select class="form-control" id="pTracking" onchange="applyTypeUI(document.getElementById('pType').value)">
+                  <select class="form-control" id="pTracking">
                     <option value="none">Sin traza</option>
                     <option value="lot">Por lote (con caducidad)</option>
                     <option value="serial">Por nº de serie</option>
@@ -454,7 +454,7 @@ export function createProductRoutes(db, cfg = {}) {
               <div class="form-group" style="display:none"><!-- OCULTO: pensada para la tienda online --><label class="form-label">Descripción</label><textarea class="form-control" id="pDesc" rows="3"></textarea></div>
               <div class="form-row">
                 <div class="form-group"><label class="form-label">Precio *</label><input class="form-control" type="number" id="pPrice" step="0.01"></div>
-                <div class="form-group"><label class="form-label">Tratamiento fiscal *</label><select class="form-control" id="pFiscal" onchange="fiscalUI()"><option value="taxable">Sujeta y no exenta</option><option value="exempt">Exenta</option><option value="non_subject">No sujeta</option><option value="pending">Pendiente de confirmar</option></select></div>
+                <div class="form-group"><label class="form-label">Tratamiento fiscal *</label><select class="form-control" id="pFiscal"><option value="taxable">Sujeta y no exenta</option><option value="exempt">Exenta</option><option value="non_subject">No sujeta</option><option value="pending">Pendiente de confirmar</option></select></div>
                 <div class="form-group"><label class="form-label">Tipo de IVA *</label><select class="form-control" id="pTaxBand"></select><small>El 0 % sigue siendo una operación sujeta: no equivale a exenta.</small></div>
                 <div class="form-group" id="pExemptWrap" style="display:none"><label class="form-label">Causa de exención *</label><select class="form-control" id="pExempt"><option value="">— Selecciona —</option>${['E1 · art. 20','E2 · art. 21','E3 · art. 22','E4 · arts. 23 y 24','E5 · art. 25','E6 · otras causas'].map((x,i)=>`<option value="E${i+1}">${x}</option>`).join('')}</select><label style="display:block;margin-top:.5rem"><input type="checkbox" id="pFiscalConfirm"> Confirmo como responsable la causa y que se cumplen sus condiciones.</label><small>En servicios sanitarios confirma titulación habilitante y finalidad real de diagnóstico, prevención o tratamiento. El oficio o el nombre no bastan; Bamburu no sustituye el criterio fiscal del responsable.</small></div>
                 <div class="form-group" id="pNonSubjectWrap" style="display:none"><label class="form-label">Causa de no sujeción *</label><select class="form-control" id="pNonSubject"><option value="">— Selecciona —</option><option value="N1">N1 · arts. 7/14 u otras causas</option><option value="N2">N2 · reglas de localización</option></select></div>
@@ -462,12 +462,12 @@ export function createProductRoutes(db, cfg = {}) {
                 <div class="form-group" style="display:none"><label class="form-label">Precio antes (tachado)</label><input class="form-control" type="number" id="pCompare" step="0.01"></div><!-- OCULTO: promoción de tienda online -->
                 <div class="form-group" id="pStockWrap"><label class="form-label">Stock inicial</label><input class="form-control" type="number" id="pStock" value="0"></div>
                 <div class="form-group" id="pWarehouseWrap"><label class="form-label">Almacén del stock inicial</label><select class="form-control" id="pWarehouse">${whInitOptions}</select></div>
-                <div class="form-group" id="pStockManage" style="display:none"><label class="form-label">Stock</label><div><button type="button" class="btn btn-secondary btn-sm" onclick="openStockKardex(currentProdId, document.getElementById('pName').value)">Gestionar stock (kardex · ajustar)</button></div></div>
+                <div class="form-group" id="pStockManage" style="display:none"><label class="form-label">Stock</label><div><button type="button" class="btn btn-secondary btn-sm" data-pd="kardex">Gestionar stock (kardex · ajustar)</button></div></div>
                 <div class="form-group" id="pNivelesWrap" style="display:none">
                   <label class="form-label">Niveles de reposición por almacén</label>
                   <p style="font-size:.75rem;color:var(--muted);margin:-.2rem 0 .5rem">Cuando el <strong>disponible</strong> de un almacén baja de su <strong>mínimo</strong>, DISA te avisa y —si el producto tiene proveedor habitual— te prepara un borrador de compra hasta el <strong>objetivo</strong>. Mínimo en 0 = no se vigila ese almacén.</p>
                   <div id="pNivelesBody" style="font-size:.85rem"></div>
-                  <button type="button" class="btn btn-secondary btn-sm" style="margin-top:.5rem" onclick="guardarNiveles()">Guardar niveles</button>
+                  <button type="button" class="btn btn-secondary btn-sm" style="margin-top:.5rem" data-pd="niveles">Guardar niveles</button>
                 </div>
                 <div class="form-group" id="pLotesWrap" style="display:none">
                   <label class="form-label">Lotes / nº de serie</label>
@@ -497,7 +497,7 @@ export function createProductRoutes(db, cfg = {}) {
                 <div id="tagSelector" style="display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:.5rem"></div>
                 <div style="display:flex;gap:.5rem">
                   <input class="form-control" id="newTagInput" placeholder="Nueva etiqueta...">
-                  <button class="btn btn-secondary btn-sm" onclick="addTag()">Agregar</button>
+                  <button class="btn btn-secondary btn-sm" data-pd="add-tag">Agregar</button>
                 </div>
               </div>
             </div>
@@ -506,7 +506,7 @@ export function createProductRoutes(db, cfg = {}) {
               <div style="display:flex;gap:.5rem;margin-bottom:1rem">
                 <input class="form-control" id="imgUrl" placeholder="URL de imagen...">
                 <input class="form-control" id="imgAlt" placeholder="Texto alternativo..." style="flex:.6">
-                <button class="btn btn-primary btn-sm" onclick="addImage()">Agregar</button>
+                <button class="btn btn-primary btn-sm" data-pd="add-img">Agregar</button>
               </div>
               <div id="imageGallery" style="display:flex;flex-wrap:wrap;gap:.5rem"></div>
             </div>
@@ -532,7 +532,7 @@ export function createProductRoutes(db, cfg = {}) {
                   <label class="form-label" style="font-size:.75rem">SKU</label>
                   <input class="form-control" id="vSku" placeholder="Opcional">
                 </div>
-                <button class="btn btn-primary btn-sm" style="margin-top:1.4rem" onclick="addVariant()">+</button>
+                <button class="btn btn-primary btn-sm" style="margin-top:1.4rem" data-pd="add-var">+</button>
               </div>
               <div id="variantList"></div>
             </div>
@@ -544,14 +544,14 @@ export function createProductRoutes(db, cfg = {}) {
             -->
           </div>
           <div class="modal-foot">
-            <button class="btn btn-secondary" onclick="closeModal('productModal')">Cancelar</button>
-            <button class="btn btn-primary" onclick="saveProduct()">Guardar</button>
+            <button class="btn btn-secondary" data-pd="cerrar">Cancelar</button>
+            <button class="btn btn-primary" data-pd="guardar">Guardar</button>
           </div>
         </div>
       </div>
 
       ${stockModalHtml()}
-      <script>
+      <script nonce="${c.get('cspNonce')}">
       ${JS_LISTADO_ENVIAR}
       ${stockModalScript(sym, warehouses)}
       const A='/api/erp';
@@ -785,7 +785,7 @@ export function createProductRoutes(db, cfg = {}) {
         const el=document.getElementById('tagSelector');
         el.innerHTML=allTags.map(t=>{
           const sel=selTags.includes(t.id);
-          return '<span style="cursor:pointer;padding:.2rem .6rem;border-radius:99px;font-size:.75rem;font-weight:500;background:'+(sel?'var(--ok-s)':'var(--bg3)')+';color:'+(sel?'var(--ok)':'var(--text2)')+';border:1px solid '+(sel?'var(--ok-s)':'var(--border)')+'" onclick="toggleTag('+t.id+')">'+escHtml(t.name)+'</span>';
+          return '<span style="cursor:pointer;padding:.2rem .6rem;border-radius:99px;font-size:.75rem;font-weight:500;background:'+(sel?'var(--ok-s)':'var(--bg3)')+';color:'+(sel?'var(--ok)':'var(--text2)')+';border:1px solid '+(sel?'var(--ok-s)':'var(--border)')+'" data-pd="toggle-tag" data-id="'+t.id+'">'+escHtml(t.name)+'</span>';
         }).join('')+(allTags.length===0?'<span style="color:var(--muted);font-size:.8rem">Sin etiquetas aún</span>':'');
       }
       function toggleTag(id){if(selTags.includes(id))selTags=selTags.filter(x=>x!==id);else selTags.push(id);renderTagSelector();}
@@ -801,7 +801,7 @@ export function createProductRoutes(db, cfg = {}) {
       // Images
       function renderGallery(imgs){
         document.getElementById('imageGallery').innerHTML=imgs.map(img=>
-          '<div style="position:relative"><img src="'+img.url+'" style="width:80px;height:80px;object-fit:cover;border-radius:6px;border:1px solid var(--border)"><button onclick="delImage('+img.id+')" style="position:absolute;top:-6px;right:-6px;background:var(--danger-s);color:var(--danger);border:none;border-radius:50%;width:18px;height:18px;font-size:.65rem;cursor:pointer;display:flex;align-items:center;justify-content:center">✕</button></div>'
+          '<div style="position:relative"><img src="'+img.url+'" style="width:80px;height:80px;object-fit:cover;border-radius:6px;border:1px solid var(--border)"><button data-pd="del-img" data-id="'+img.id+'" style="position:absolute;top:-6px;right:-6px;background:var(--danger-s);color:var(--danger);border:none;border-radius:50%;width:18px;height:18px;font-size:.65rem;cursor:pointer;display:flex;align-items:center;justify-content:center">✕</button></div>'
         ).join('');
       }
       async function addImage(){
@@ -825,7 +825,7 @@ export function createProductRoutes(db, cfg = {}) {
       function renderVariantList(variants){
         document.getElementById('variantList').innerHTML=variants.length?
           '<div class="table-wrap"><table><thead><tr><th>Nombre</th><th>Atributos</th><th>Precio</th><th>Stock</th><th></th></tr></thead><tbody>'+
-          variants.map(v=>{const attrs=[v.option1_name&&v.option1_value?v.option1_name+': '+v.option1_value:'',v.option2_name&&v.option2_value?v.option2_name+': '+v.option2_value:''].filter(Boolean).join(' · ');return '<tr><td>'+escHtml(v.name)+'</td><td>'+(attrs||'—')+'</td><td>'+(v.price!=null?sym+v.price:'Base')+'</td><td>'+v.stock+'</td><td><button class="btn btn-danger btn-sm" onclick="delVariant('+v.id+')">Eliminar</button></td></tr>';}).join('')+
+          variants.map(v=>{const attrs=[v.option1_name&&v.option1_value?v.option1_name+': '+v.option1_value:'',v.option2_name&&v.option2_value?v.option2_name+': '+v.option2_value:''].filter(Boolean).join(' · ');return '<tr><td>'+escHtml(v.name)+'</td><td>'+(attrs||'—')+'</td><td>'+(v.price!=null?sym+v.price:'Base')+'</td><td>'+v.stock+'</td><td><button class="btn btn-danger btn-sm" data-pd="del-var" data-id="'+v.id+'">Eliminar</button></td></tr>';}).join('')+
           '</tbody></table></div>':'<p style="color:var(--muted);font-size:.85rem">Sin variantes</p>';
       }
       async function addVariant(){
@@ -853,7 +853,34 @@ export function createProductRoutes(db, cfg = {}) {
       }
 
       loadAll();
-      </script>`;
+      
+      // ── 5 SEP 2026 (csp-erp-migrar-handlers) — ENGANCHE DE PRODUCTOS ──────────────────────────
+      // La ficha del producto pinta al vuelo sus etiquetas, sus imagenes y sus variantes; la tabla
+      // pinta su menu «···» al abrirlo. Todo por delegacion, y los ids de vuelta a numero.
+      document.addEventListener('click', function(e){
+        var t = e.target.closest('[data-pd]'); if (!t) return;
+        var a = t.getAttribute('data-pd'), id = Number(t.getAttribute('data-id'));
+        if (a === 'editar') editProd(id);
+        else if (a === 'cerrar') closeModal('productModal');
+        else if (a === 'guardar') saveProduct();
+        else if (a === 'tab') switchTab('prod', t.getAttribute('data-k'));
+        else if (a === 'kardex') openStockKardex(currentProdId, document.getElementById('pName').value);
+        else if (a === 'niveles') guardarNiveles();
+        else if (a === 'add-tag') addTag();
+        else if (a === 'add-img') addImage();
+        else if (a === 'add-var') addVariant();
+        else if (a === 'toggle-tag') toggleTag(id);
+        else if (a === 'del-img') delImage(id);
+        else if (a === 'del-var') delVariant(id);
+      });
+      document.getElementById('pTracking')?.addEventListener('change', function(){
+        applyTypeUI(document.getElementById('pType').value);
+      });
+      document.getElementById('pFiscal')?.addEventListener('change', function(){ fiscalUI(); });
+      document.addEventListener('rowmenu:act', function(e){
+        if (e.detail.act === 'prod-borrar') delProd(Number(e.detail.arg));
+      });
+</script>`;
 
     return c.html(adminLayout('Productos', content, 'products', c.get('session')?.csrfToken || '', c));
   });
@@ -878,7 +905,7 @@ export function createProductRoutes(db, cfg = {}) {
       <script nonce="${c.get('cspNonce')}">
       async function loadTags(){
         const tags=await api('GET','/api/erp/products/tags/all').catch(()=>[]);
-        document.getElementById('tagBody').innerHTML=tags.length?tags.map(t=>'<tr><td><span class="badge b-gray">'+escHtml(t.name)+'</span></td><td style="color:var(--muted);font-size:.8rem">'+(t.created_at?.split(' ')[0]||'-')+'</td><td>'+(window.canDo('products.delete')?'<button class="btn btn-danger btn-sm" onclick="delTag('+t.id+')">Eliminar</button>':'')+'</td></tr>').join(''):window.emptyRow(3,'Aún no tienes etiquetas. Crea la primera para clasificar tus productos.',window.canDo('products.create')?{cta:'Nueva etiqueta',act:'foco-etiqueta'}:{});
+        document.getElementById('tagBody').innerHTML=tags.length?tags.map(t=>'<tr><td><span class="badge b-gray">'+escHtml(t.name)+'</span></td><td style="color:var(--muted);font-size:.8rem">'+(t.created_at?.split(' ')[0]||'-')+'</td><td>'+(window.canDo('products.delete')?'<button class="btn btn-danger btn-sm" data-tag="borrar" data-id="'+t.id+'">Eliminar</button>':'')+'</td></tr>').join(''):window.emptyRow(3,'Aún no tienes etiquetas. Crea la primera para clasificar tus productos.',window.canDo('products.create')?{cta:'Nueva etiqueta',act:'foco-etiqueta'}:{});
       }
       async function addTag(){
         const n=document.getElementById('tagName').value.trim();if(!n)return;
@@ -896,6 +923,11 @@ export function createProductRoutes(db, cfg = {}) {
       document.addEventListener('rowmenu:act', function(e){
         if (e.detail.act !== 'foco-etiqueta') return;
         var i = document.getElementById('tagName'); if (i) i.focus();
+      });
+
+      document.addEventListener('click', function(e){
+        var t = e.target.closest('[data-tag="borrar"]');
+        if (t) delTag(Number(t.getAttribute('data-id')));
       });
 </script>`;
     return c.html(adminLayout('Etiquetas', content, 'tags', c.get('session')?.csrfToken || '', c));

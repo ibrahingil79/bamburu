@@ -178,6 +178,12 @@ const SUPERFICIES_ESTRICTAS = [
   /^\/admin\/warehouses$/,
   /^\/admin\/users$/,
   /^\/admin\/tiempo$/,
+  // ⚙️ 5 SEP 2026, 12ª tanda — LAS DOS GORDAS DEL PARTE, que resultaron no serlo: el censo contaba
+  // apariciones (una por fila), no sitios de código. `/admin/clients` eran 8 sitios y
+  // `/admin/products` 12, no 83 y 70.
+  /^\/admin\/clients$/,
+  /^\/admin\/clients\/groups$/,
+  /^\/admin\/products$/,
 ];
 
 export function securityHeaders() {

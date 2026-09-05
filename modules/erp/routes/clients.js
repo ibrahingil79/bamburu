@@ -583,13 +583,13 @@ export function createClientRoutes(db, cfg = {}) {
       '<td style="color:var(--muted);font-size:.8rem">'+(fechaEs((cl.created_at||'').split(' ')[0])||'-')+'</td>'+
       '<td style="white-space:nowrap">'+
         // Patrón §6: UNA acción clara ("Ver") + el resto en un menú "···".
-        '<button class="btn btn-secondary btn-sm" onclick="viewDetail('+cl.id+')">Ver</button> '+
+        '<button class="btn btn-secondary btn-sm" data-cl="ver" data-id="'+cl.id+'">Ver</button> '+
         (verArchivados
-          ? (can(c,'clients.edit')?'<button class="btn btn-secondary btn-sm" onclick="restoreClient('+cl.id+')">Restaurar</button>':'')
+          ? (can(c,'clients.edit')?'<button class="btn btn-secondary btn-sm" data-cl="restaurar" data-id="'+cl.id+'">Restaurar</button>':'')
           : ((can(c,'clients.edit')||can(c,'clients.delete'))
               ? rowMenu([
-                  can(c,'clients.edit') ? {label:'Editar', onclick:'editClient('+cl.id+')'} : null,
-                  can(c,'clients.delete') ? {label:'Archivar', danger:true, onclick:'delClient('+cl.id+')'} : null,
+                  can(c,'clients.edit') ? {label:'Editar', act:'cli-editar', arg:cl.id} : null,
+                  can(c,'clients.delete') ? {label:'Archivar', danger:true, act:'cli-archivar', arg:cl.id} : null,
                 ].filter(Boolean))
               : ''))+
       '</td>'+
@@ -600,12 +600,12 @@ export function createClientRoutes(db, cfg = {}) {
         <h2>Clientes</h2>
         <form method="get" style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
           <input class="search" type="text" name="q" value="${escHtml(q)}" placeholder="Buscar por nombre o NIF...">
-          <select class="form-control" name="archivados" style="width:auto;min-width:150px" onchange="this.form.submit()">
+          <select class="form-control" name="archivados" style="width:auto;min-width:150px" data-cl="filtro">
             <option value=""${verArchivados ? '' : ' selected'}>Activos</option>
             <option value="1"${verArchivados ? ' selected' : ''}>Archivados</option>
           </select>
           <button class="btn btn-secondary" type="submit">Buscar</button>
-          ${can(c, 'clients.create') ? '<button type="button" class="btn btn-primary" onclick="openNewClient()">Nuevo cliente</button>' : ''}
+          ${can(c, 'clients.create') ? '<button type="button" class="btn btn-primary" data-cl="nuevo">Nuevo cliente</button>' : ''}
         </form>
       </div>
       <!-- C9 · LOS TRES VERBOS. Salen del mismo sitio y LLEVAN LOS FILTROS QUE HAY PUESTOS AHORA
@@ -629,7 +629,7 @@ export function createClientRoutes(db, cfg = {}) {
 
       <div class="modal-overlay" id="clientModal">
         <div class="modal" style="max-width:640px">
-          <div class="modal-head"><h3 id="clientModalTitle">Nuevo Cliente</h3><button class="modal-close" onclick="closeModal('clientModal')">✕</button></div>
+          <div class="modal-head"><h3 id="clientModalTitle">Nuevo Cliente</h3><button class="modal-close" data-cl="cerrar">✕</button></div>
           <div class="modal-body">
             <input type="hidden" id="clientId">
             <div class="form-row">
@@ -663,7 +663,7 @@ export function createClientRoutes(db, cfg = {}) {
             <!-- Dirección fiscal completa: OPCIONAL y PLEGADA. Solo hace falta para exportar la
                  factura a Facturae (FACe). Quien nunca factura a la Administración no la ve. -->
             <div style="margin:.25rem 0 .75rem">
-              <button type="button" class="btn btn-secondary btn-sm" id="btnFiscal" onclick="toggleFiscal()">
+              <button type="button" class="btn btn-secondary btn-sm" id="btnFiscal">
                 + Añadir dirección fiscal completa
               </button>
               <div style="font-size:11px;color:var(--text2);margin-top:.35rem">
@@ -723,7 +723,7 @@ export function createClientRoutes(db, cfg = {}) {
               <div style="font-size:.72rem;color:var(--muted);margin-top:.2rem">El que lleva siempre. Se te propone al facturarle; nunca se aplica solo.</div></div>
             <div class="form-group"><label class="form-label">Notas internas</label><textarea class="form-control" id="cNotes" rows="2"></textarea></div>
           </div>
-          <div class="modal-foot"><button class="btn btn-secondary" onclick="closeModal('clientModal')">Cancelar</button><button class="btn btn-primary" onclick="saveClient()">Guardar</button></div>
+          <div class="modal-foot"><button class="btn btn-secondary" data-cl="cerrar">Cancelar</button><button class="btn btn-primary" data-cl="guardar">Guardar</button></div>
         </div>
       </div>
 
@@ -749,7 +749,7 @@ export function createClientRoutes(db, cfg = {}) {
         .dir-pista{font-size:11px;color:var(--text2);margin-top:.3rem;min-height:1em}
         .dir-pista.ok{color:var(--ok)}
       </style>
-      <script>
+      <script nonce="${c.get('cspNonce')}">
       ${JS_LISTADO_ENVIAR}
       ${fichaClienteJS({ sym })}
       ${fichaVentanaJS({ montaje: 'ventana' })}
@@ -977,7 +977,29 @@ export function createClientRoutes(db, cfg = {}) {
         try { history.replaceState(null, '', '/admin/clients'); } catch(e){}
         editClient(parseInt(_ed));
       }
-      </script>`;
+      
+      // ── 5 SEP 2026 (csp-erp-migrar-handlers) — ENGANCHE DE CLIENTES ──────────────────────────
+      // La tabla la pinta el servidor, pero el menu «···» pinta SUS botones al abrirlo: Editar y
+      // Archivar usan la clave act del armazon y llegan por 'rowmenu:act'.
+      document.addEventListener('click', function(e){
+        var t = e.target.closest('[data-cl]'); if (!t) return;
+        var a = t.getAttribute('data-cl'), id = Number(t.getAttribute('data-id'));
+        if (a === 'ver') viewDetail(id);
+        else if (a === 'restaurar') restoreClient(id);
+        else if (a === 'nuevo') openNewClient();
+        else if (a === 'cerrar') closeModal('clientModal');
+        else if (a === 'guardar') saveClient();
+      });
+      document.addEventListener('change', function(e){
+        var t = e.target.closest('[data-cl="filtro"]'); if (t) t.form.submit();
+      });
+      document.getElementById('btnFiscal')?.addEventListener('click', function(){ toggleFiscal(); });
+      document.addEventListener('rowmenu:act', function(e){
+        var id = Number(e.detail.arg);
+        if (e.detail.act === 'cli-editar') editClient(id);
+        else if (e.detail.act === 'cli-archivar') delClient(id);
+      });
+</script>`;
     return c.html(adminLayout('Clientes', content, 'clients', c.get('session')?.csrfToken || '', c));
   });
 
@@ -1079,9 +1101,9 @@ export function createClientRoutes(db, cfg = {}) {
   views.get('/groups', requirePerm('clients.read'), c => {
     const sym = db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get()?.currency_symbol || '€';
     const content = `
-      <div class="ph"><h2>Grupos de Clientes</h2><button class="btn btn-primary" onclick="openModal('groupModal')">Nuevo grupo</button></div>
+      <div class="ph"><h2>Grupos de Clientes</h2><button class="btn btn-primary" data-gr="nuevo">Nuevo grupo</button></div>
       <div class="card">
-        <div class="card-head"><h3>Lista de grupos</h3><input class="search" id="searchBox" placeholder="Buscar..." oninput="renderGroups()"></div>
+        <div class="card-head"><h3>Lista de grupos</h3><input class="search" id="searchBox" placeholder="Buscar..."></div>
         <div class="table-wrap"><table>
           <thead><tr><th>Nombre</th><th>Descripción</th><th>Miembros</th><th></th></tr></thead>
           <tbody id="groupBody">${skeletonRows(4)}</tbody>
@@ -1089,16 +1111,16 @@ export function createClientRoutes(db, cfg = {}) {
       </div>
       <div class="modal-overlay" id="groupModal">
         <div class="modal">
-          <div class="modal-head"><h3 id="groupModalTitle">Nuevo Grupo</h3><button class="modal-close" onclick="closeModal('groupModal')">✕</button></div>
+          <div class="modal-head"><h3 id="groupModalTitle">Nuevo Grupo</h3><button class="modal-close" data-gr="cerrar">✕</button></div>
           <div class="modal-body">
             <input type="hidden" id="groupId">
             <div class="form-group"><label class="form-label">Nombre *</label><input class="form-control" id="gName"></div>
             <div class="form-group"><label class="form-label">Descripción</label><input class="form-control" id="gDesc"></div>
           </div>
-          <div class="modal-foot"><button class="btn btn-secondary" onclick="closeModal('groupModal')">Cancelar</button><button class="btn btn-primary" onclick="saveGroup()">Guardar</button></div>
+          <div class="modal-foot"><button class="btn btn-secondary" data-gr="cerrar">Cancelar</button><button class="btn btn-primary" data-gr="guardar">Guardar</button></div>
         </div>
       </div>
-      <script>
+      <script nonce="${c.get('cspNonce')}">
       let groups=[];
       async function load(){
         groups=await api('GET','/api/erp/clients/groups/all').catch(()=>[]);
@@ -1107,7 +1129,7 @@ export function createClientRoutes(db, cfg = {}) {
       function renderGroups(){
         const q=(document.getElementById('searchBox').value||'').toLowerCase();
         const f=q?groups.filter(g=>(g.name||'').toLowerCase().includes(q)||(g.description||'').toLowerCase().includes(q)):groups;
-        document.getElementById('groupBody').innerHTML=f.length?f.map(g=>'<tr><td><strong>'+escHtml(g.name)+'</strong></td><td style="color:var(--muted)">'+escHtml(g.description||'-')+'</td><td><span class="badge b-blue">'+g.member_count+'</span></td><td><button class="btn btn-secondary btn-sm" onclick="editGroup('+g.id+')">Editar</button> <button class="btn btn-danger btn-sm" onclick="delGroup('+g.id+')">Eliminar</button></td></tr>').join(''):(q?window.emptyRow(4,'No se encontraron grupos con ese filtro.',{icon:'ti-search'}):window.emptyRow(4,'Aún no has creado grupos. Agrupa clientes para tratarlos juntos.',{cta:'Nuevo grupo',onclick:"openModal('groupModal')"}));
+        document.getElementById('groupBody').innerHTML=f.length?f.map(g=>'<tr><td><strong>'+escHtml(g.name)+'</strong></td><td style="color:var(--muted)">'+escHtml(g.description||'-')+'</td><td><span class="badge b-blue">'+g.member_count+'</span></td><td><button class="btn btn-secondary btn-sm" data-gr="editar" data-id="'+g.id+'">Editar</button> <button class="btn btn-danger btn-sm" data-gr="borrar" data-id="'+g.id+'">Eliminar</button></td></tr>').join(''):(q?window.emptyRow(4,'No se encontraron grupos con ese filtro.',{icon:'ti-search'}):window.emptyRow(4,'Aún no has creado grupos. Agrupa clientes para tratarlos juntos.',{cta:'Nuevo grupo',act:'grupo-nuevo'}));
       }
       function editGroup(id){const g=groups.find(x=>x.id===id);if(!g)return;document.getElementById('groupModalTitle').textContent='Editar Grupo';document.getElementById('groupId').value=id;document.getElementById('gName').value=g.name;document.getElementById('gDesc').value=g.description||'';openModal('groupModal');}
       async function saveGroup(){
@@ -1117,7 +1139,23 @@ export function createClientRoutes(db, cfg = {}) {
       }
       async function delGroup(id){if(!await window.confirmarEnPagina({titulo:'Eliminar el grupo',texto:'Los clientes que estén en él se quedan sin grupo. No se borra ningún cliente.',aceptar:'Sí, eliminarlo'}))return;await api('DELETE','/api/erp/clients/groups/'+id);toast('Eliminado');load();}
       load();
-      </script>`;
+      
+      // 5 SEP 2026 — la tabla de grupos se pinta despues de pedirla: delegacion.
+      document.getElementById('searchBox')?.addEventListener('input', function(){ renderGroups(); });
+      document.addEventListener('click', function(e){
+        var t = e.target.closest('[data-gr]'); if (!t) return;
+        var a = t.getAttribute('data-gr'), id = Number(t.getAttribute('data-id'));
+        if (a === 'nuevo') openModal('groupModal');
+      });
+      document.addEventListener('rowmenu:act', function(e){
+        // El boton del estado vacio, que solo sale cuando no hay ni un grupo.
+        if (e.detail.act === 'grupo-nuevo') openModal('groupModal');
+        else if (a === 'cerrar') closeModal('groupModal');
+        else if (a === 'guardar') saveGroup();
+        else if (a === 'editar') editGroup(id);
+        else if (a === 'borrar') delGroup(id);
+      });
+</script>`;
     return c.html(adminLayout('Grupos de Clientes', content, 'client-groups', c.get('session')?.csrfToken || '', c));
   });
 
