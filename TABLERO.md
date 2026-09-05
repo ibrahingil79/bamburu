@@ -13450,7 +13450,7 @@ Y su propia limpieza no lo recogió: `cleanup(slug)` empieza con `if (!slug) ret
 ## TAREA — Migrar el ERP para quitarle el `unsafe-inline`
 
 - **id:** csp-erp-migrar-handlers
-- **estado:** pendiente · **EN CURSO — 6 sesiones: 4 sep (`fca9551`), 5 sep (`552bccc`, `ee1453e`, `904ceae`, `fffdbfc`) y 4 sep (`e85e076`, `0052e98`, `4b70ece`, `223c51b`)**
+- **estado:** pendiente · **EN CURSO — 7ª sesión, 5 sep 2026: el panel entero MIGRADO (336/336). Queda UN paso: quitar `unsafe-inline`.**
 - **origen:** Desgajada de `csp-unsafe-inline` el 4 sep 2026, al medir el tamaño real. Es la pieza que el código llama **C4b-4**.
 
 **Medido el 4 sep 2026, no estimado:** `modules/erp` tiene **546 handlers de atributo** y **88
@@ -13890,3 +13890,76 @@ documentos.
 
 - [ ] Se cuenta cuántos clientes con carga hay y **qué documentos cuelgan de cada uno**, antes de proponer nada.
 - [ ] Con el visto bueno de Ibrahin: simulacro primero, copia previa, y **archivar** en vez de borrar si tienen documentos.
+
+---
+
+### 📋 7ª SESIÓN — 5 sep 2026 · EL PANEL ENTERO, DE 50 PANTALLAS A CERO
+
+**El censo del panel da CERO.** 336 pantallas alcanzadas, **336 limpias**, 0 handlers de atributo y
+0 bloques sin nonce. **97 reglas ancladas**, y **ninguna pantalla limpia se queda sin endurecer**.
+
+**⚠️ Y EL PARTE ANTERIOR ESTABA MAL, medido hoy sobre el DOM montado:** el censo contaba
+**apariciones**, no **sitios de código**. `/admin/cobros` no eran 283 handlers sino **3 sitios**;
+`/admin/clients` no eran 83 sino **8**; `/admin/products` no eran 70 sino **12**. Las «tres gordas»
+del plan no lo eran. Por eso cupo el resto de la cola entera en una sesión.
+
+**Lo cerrado, por orden:** `routes/listados.js` (el componente compartido de los tres verbos, que
+desbloqueó nueve pantallas de golpe), las siete de contabilidad, la lista de compras, `tags`,
+`recurrentes`, `conciliacion`, `activity`, `perfil`, `facturar-horas`, las fichas de cliente, los
+albaranes de recepción y los traslados, **`routes/citas.js` entero** —incluida la página que abre el
+CLIENTE con el enlace de su cita, que es anónima—, `cobros`, `pagos`, `inventory`, `propuestas`,
+`proyectos`, `suppliers`, `categories`, `warehouses`, `users`, `tiempo`, `clients`, `products`,
+`invoices`, `supplier-invoices`, `purchases/capture` y `settings`.
+
+**El armazón ganó dos cosas** (además de la clave `act` de la 6ª): `emptyState` **del servidor**
+también la tiene —faltaba, y por eso el botón de la pantalla de bienes no salía—, y los items del
+menú pueden llevar **un segundo dato** (`arg2`), porque Anular una factura necesita también su
+NÚMERO para preguntar antes.
+
+### ⚠️ TRES FALLOS MÍOS DE ESTA SESIÓN, Y LO QUE SE HIZO CON CADA UNO
+
+**1. Tumbé producción un minuto.** Desplegué un fichero con un acento grave dentro de un comentario
+que vive en una plantilla de texto —el error que ya ha mordido **siete veces**— y silencié la salida
+de `desplegar.mjs`, que es justo lo que avisa. **Guardia nuevo, probado en rojo:** `desplegar.mjs`
+comprueba la sintaxis de `core/`, `modules/`, `scripts/` e `index.js` **antes** de reiniciar; si algo
+no compila, **no reinicia**, dice qué fichero es y sale con código 1.
+
+**2. Descarté 18 propuestas reales.** La comprobación de `/admin/propuestas` pulsaba «Descartar» de
+verdad, dando por hecho que preguntaba antes. **No pregunta: publica directo.** Las 18 están
+repuestas a pendiente (copia previa de la base, `foreign_key_check` limpio), y el gate sustituye
+ahora la función por un espía antes de pulsar. **Regla que sale de aquí: antes de PULSAR un botón en
+un gate hay que leer qué hace su función. «Abre una confirmación» es una suposición, no una medida.**
+
+**3. Rompí la página del cliente con 500** metiendo el nonce en una plantilla sin contexto de Hono
+(`paginaCita`, y al día siguiente `capturePage`). Lo grave es que **el gate dio verde encima**: se
+saltaba toda respuesta que no fuera 200. **Dos guardias, probados en rojo:** un 5xx en el panel es
+FALLO, y el gate **enumera desde las propias reglas**, así que una regla nueva no puede olvidarse de
+vigilarse.
+
+| | handlers | bloques | limpias | endurecidas |
+|---|---|---|---|---|
+| tras la 6ª | 332 | 43 | 289 | 289 |
+| **tras la 7ª** | **0** | **0** | **336** | **336** |
+
+`gate-csp-estricta` **254 OK / 0 fallos** · `gate-csp-superficies-limpias` **3 ✓ / 0 ✗** con **291
+pantallas vigiladas** · `gate-armazon-sin-handlers` **11 ✓ / 0 ✗**.
+
+### ▶️ QUÉ QUEDA — UN SOLO PASO, Y NO SE DA A CIEGAS
+
+Quitar `script-src 'unsafe-inline'` de `core/security-headers.js`. **Es un cambio GLOBAL**: hoy la
+lista dice qué se endurece; sin `LEGADO`, se endurece **todo lo que responda el servidor**, incluidas
+las superficies que no son el panel.
+
+**Lo que hace falta antes, y por qué no se hizo hoy:**
+
+- **Medir la TIENDA pública** (`/store`, carrito, pago). En el negocio de desarrollo **no está
+  activa** —devuelve 404—, así que aquí no se puede medir. Hace falta un negocio con tienda
+  encendida, o encenderla en el de desarrollo.
+- **Medir las páginas de ERROR y las respuestas que no son HTML** (PDF, CSV, JSON): pasan por el
+  mismo middleware y también recibirían la política estricta.
+- **Y una decisión de Ibrahin**, porque el modo de fallo es el de siempre: lo que se rompa **no
+  fallará al cargar, fallará al pulsar**.
+
+**Aparte, sin tocar:** el **constructor de tienda** de `settings.js` tiene 27 handlers, pero **su
+ruta está comentada** en `routes/index.js` y no se sirve. Si algún día se monta, hay que migrarlo
+antes de endurecer su pantalla.
