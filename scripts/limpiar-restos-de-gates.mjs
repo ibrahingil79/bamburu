@@ -34,7 +34,23 @@ const DIR = path.join(RAIZ, 'data', 'tenants');
 // Cómo se reconoce lo que dejó un gate. Son los prefijos y marcas que usan los gates de este repo.
 // Deliberadamente NO incluye «prueba» a secas: hay datos sembrados legítimos que lo llevan.
 const MARCA_SQL = (col) => `(${col} LIKE 'GATE%' OR ${col} LIKE '%(gate %' OR ${col} LIKE '%(gate)%'
-  OR ${col} LIKE 'ZZ %' OR ${col} LIKE 'ZZ-%' OR ${col} LIKE 'GD2-%' OR ${col} LIKE '%gate %')`;
+  OR ${col} LIKE 'ZZ %' OR ${col} LIKE 'ZZ-%' OR ${col} LIKE 'GD2-%' OR ${col} LIKE '%gate %'
+  OR ${MARCA_CARGA(col)})`;
+
+// ⚙️ 5 SEP 2026 (autorizado por Ibrahin) — LOS NOMBRES CON CARGA, que no llevaban ninguna marca.
+// Salieron mirando el DOM de `/admin/quotes/new` durante `csp-erp-migrar-handlers`: en el
+// desplegable de cliente había un `<img src=x onerror=…>` y dos `<script>alert(1)</script>`, restos
+// de gates viejos de XSS. **Salen ESCAPADOS**, o sea que la defensa funciona y nunca ejecutaron
+// nada: son texto. Pero ensucian los desplegables del dueño y hacen que cualquier medida por
+// expresión regular sobre el HTML dé un falso positivo — pasó justo eso al medir esa pantalla.
+//
+// No llevan «GATE» ni «ZZ» delante, así que el limpiador NO los veía. Se reconocen por lo que son:
+// un nombre que trae marcado o un `javascript:` dentro. La regla de siempre sigue mandando encima:
+// si algo cuelga de ellos, se ARCHIVAN, no se borran.
+function MARCA_CARGA(col) {
+  return `(${col} LIKE '%<script%' OR ${col} LIKE '%onerror=%' OR ${col} LIKE '%onload=%'
+    OR ${col} LIKE '%<img %' OR ${col} LIKE '%<svg%' OR ${col} LIKE '%javascript:%')`;
+}
 
 // De qué tablas puede colgar un cliente. Si tiene algo en alguna, NO se borra: se archiva.
 const DE_UN_CLIENTE = [
