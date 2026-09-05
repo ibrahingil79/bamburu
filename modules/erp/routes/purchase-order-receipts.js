@@ -276,7 +276,7 @@ export function createPurchaseOrderReceiptRoutes(db) {
         <div class="dp-row"><span class="k">Proveedor</span><span class="v">${esc(r.supplier_name)}</span></div>
         <div class="dp-row"><span class="k">Total</span><span class="v">${dineroEs(total)}{sym}</span></div>
         <div class="dp-actions" style="margin-top:14px">
-          ${r.status === 'confirmada' && canEdit ? '<button class="btn btn-danger" onclick="anularRecepcion()">Anular</button>' : ''}
+          ${r.status === 'confirmada' && canEdit ? '<button class="btn btn-danger" id="btn-anular-recepcion">Anular</button>' : ''}
           <a href="/admin/purchase-orders/${r.order_id}" class="btn btn-secondary">Ver orden</a>
         </div>
       </div></div>
@@ -293,7 +293,9 @@ export function createPurchaseOrderReceiptRoutes(db) {
           toast(d.message || 'Recepción anulada'); location.reload();
         } catch(e){ toast(e.message || 'Error anulando','err'); }
       }
-      </script>`;
+      
+      document.getElementById('btn-anular-recepcion')?.addEventListener('click', () => anularRecepcion());
+</script>`;
     return c.html(adminLayout('Recepción ' + (r.receipt_number || ''), docShell(paper, panel), 'purchase-orders', csrfToken, c));
   });
 

@@ -142,7 +142,7 @@ export function createConciliacionRoutes(db) {
         <td>${badge(m.estado)}</td>
         <td>${acciones}</td></tr>`;
     }).join('') || (puedeGestionar
-      ? emptyRow(6, 'Aún no has subido ningún extracto. Súbelo (Norma 43) y cruzo tus cobros por ti.', { cta: 'Subir extracto', onclick: "var f=document.querySelector('input[name=file]');if(f){f.scrollIntoView({block:'center'});f.click()}" })
+      ? emptyRow(6, 'Aún no has subido ningún extracto. Súbelo (Norma 43) y cruzo tus cobros por ti.', { cta: 'Subir extracto', act: 'subir-extracto' })
       : emptyRow(6, 'Aún no hay movimientos bancarios que conciliar.'));
 
     const content = `<div class="ph"><h2>Conciliación bancaria</h2></div>
@@ -151,11 +151,17 @@ export function createConciliacionRoutes(db) {
       <div class="card"><table>
         <thead><tr><th>Fecha</th><th>Concepto</th><th style="text-align:right">Importe</th><th style="text-align:right">Saldo</th><th>Estado</th><th>Acción / sugerencia</th></tr></thead>
         <tbody>${filas}</tbody></table></div>
-      <script>
+      <script nonce="${c.get('cspNonce')}">
         // Deshacer una conciliación que CREÓ un cobro o un pago borra también ese apunte, así que se
         // pregunta antes. La pregunta va en un panel de la propia página (window.confirmarEnPagina,
         // en layout.js): un confirm() del navegador se puede apagar y deja el botón muerto sin decir
         // nada. Se engancha por delegación para que valga también con la tabla recién repintada.
+        // 5 SEP 2026 — y el botón del estado vacío, que solo sale cuando no hay ni un extracto.
+        document.addEventListener('rowmenu:act', function (e) {
+          if (e.detail.act !== 'subir-extracto') return;
+          var f = document.querySelector('input[name=file]');
+          if (f) { f.scrollIntoView({ block: 'center' }); f.click(); }
+        });
         document.addEventListener('click', async function (ev) {
           const b = ev.target.closest('button[data-aviso]');
           if (!b) return;

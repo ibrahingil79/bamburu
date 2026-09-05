@@ -1025,7 +1025,7 @@ export function createClientRoutes(db, cfg = {}) {
       <div id="f360full"></div>
     </div>
     ${cobroModalHtml()}
-    <script>
+    <script nonce="${c.get('cspNonce')}">
     ${fichaClienteJS({ sym })}
     ${fichaVentanaJS({ montaje: 'pagina' })}
     ${fichaCompletaJS()}

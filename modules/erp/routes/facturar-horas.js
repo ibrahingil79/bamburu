@@ -208,11 +208,11 @@ export function createFacturarHorasRoutes(db) {
       <div class="card" style="margin-bottom:1rem"><div class="card-body">
         <div style="display:flex;gap:.6rem;align-items:flex-end;flex-wrap:wrap">
           <div class="form-group" style="flex:2;min-width:240px;margin:0"><label class="form-label">Proyecto *</label>
-            <select class="form-control" id="fhProyecto" onchange="fhCargar()">
+            <select class="form-control" id="fhProyecto">
               <option value="">— Elige un proyecto —</option>${proyOptions || ''}
             </select></div>
-          <div class="form-group" style="margin:0"><label class="form-label">Desde</label><input class="form-control" id="fhDesde" type="date" onchange="fhCargar()"></div>
-          <div class="form-group" style="margin:0"><label class="form-label">Hasta</label><input class="form-control" id="fhHasta" type="date" onchange="fhCargar()"></div>
+          <div class="form-group" style="margin:0"><label class="form-label">Desde</label><input class="form-control" id="fhDesde" type="date"></div>
+          <div class="form-group" style="margin:0"><label class="form-label">Hasta</label><input class="form-control" id="fhHasta" type="date"></div>
         </div>
         <div id="fhAvisoCliente" class="alert" style="display:none;margin:.75rem 0 0;background:var(--danger-soft,rgba(220,50,50,.12));color:var(--danger,#b23)">
           Este proyecto no tiene cliente asignado. <a href="/admin/proyectos" style="color:inherit;font-weight:600;text-decoration:underline">Asígnalo en Proyectos</a> antes de facturar sus horas.
@@ -221,7 +221,7 @@ export function createFacturarHorasRoutes(db) {
 
       <div id="fhBody"><div class="card"><div class="card-body" style="color:var(--muted)">Elige un proyecto para ver sus horas facturables.</div></div></div>
 
-      <script>
+      <script nonce="${c.get('cspNonce')}">
       const FH_SYM=${JSON.stringify(sym)}, FH_IVA=${JSON.stringify(iva)};
       // El dinero, escrito como en España. window.eur vive en layout.js.
       const eur=v=>window.eur(v||0, FH_SYM);
@@ -315,7 +315,12 @@ export function createFacturarHorasRoutes(db) {
         try{ const d=await api('POST','/api/erp/facturar-horas',body); toast(d.message||'Factura creada'); location.href='/admin/invoices/'+d.invoice_id; }
         catch(e){ toast(e.message,'err'); if(btn) btn.disabled=false; }
       }
-      </script>`;
+      
+      // 5 SEP 2026 (csp-erp-migrar-handlers) — los tres filtros son fijos: oyente directo.
+      ['fhProyecto','fhDesde','fhHasta'].forEach(function(id){
+        document.getElementById(id)?.addEventListener('change', function(){ fhCargar(); });
+      });
+</script>`;
     return c.html(adminLayout('Facturar horas', content, 'facturar-horas', c.get('session')?.csrfToken || '', c));
   });
 

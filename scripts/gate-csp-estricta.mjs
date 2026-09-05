@@ -792,8 +792,87 @@ try {
   ok(bienes === 'ok', '  PULSAR el botón del estado vacío despliega el alta de bien', bienes);
   ok((await violaciones(p14)).length === 0, '  y las tres pantallas, sin una violación de CSP');
 
+
+  // ── 15 · LA TANDA DE LAS PEQUEÑAS: un control de cada una, pulsado ──
+  console.log('\n[15] Las pantallas pequeñas: se pulsa el control que tienen');
+  const p15 = await nuevaPagina();
+  await p15.setCookie({ name: 'asess', value: erpTok, domain: 'desarrollo-bamburu.localhost', path: '/' });
+  await p15.evaluateOnNewDocument(m => { window.__marcaCSP = m; }, MARCA);
+  // Cada entrada: [ruta, qué se pulsa o cambia, qué tiene que pasar]. Ninguna guarda nada: son
+  // filtros que repintan, un botón que despliega un formulario y un aspa que cierra una ventana.
+  const PEQUENAS = [
+    ['/admin/facturar-horas', async () => {
+      const sel = document.getElementById('fhProyecto'); if (!sel) return 'sin filtro';
+      const antes = document.body.innerHTML.length;
+      sel.dispatchEvent(new Event('change', { bubbles: true }));
+      await new Promise(r => setTimeout(r, 700));
+      return document.body.innerHTML.length !== antes || document.querySelector('#fhBody, #fhTabla') ? 'ok' : 'no reacciona';
+    }],
+    ['/admin/activity', async () => {
+      const q = document.getElementById('actQ'); if (!q) return 'sin buscador';
+      q.value = 'zzzz'; q.dispatchEvent(new Event('input', { bubbles: true }));
+      await new Promise(r => setTimeout(r, 900));
+      return document.getElementById('actBody')?.innerHTML.length >= 0 ? 'ok' : 'no reacciona';
+    }],
+    ['/admin/perfil', async () => {
+      const b = document.getElementById('pfCambiarFoto'); if (!b) return 'sin botón de foto';
+      let abrio = false;
+      const inp = document.getElementById('pfFoto');
+      if (inp) inp.addEventListener('click', e => { abrio = true; e.preventDefault(); }, { once: true });
+      b.click(); await new Promise(r => setTimeout(r, 300));
+      return abrio ? 'ok' : 'no abre el selector de fichero';
+    }],
+    // ⚠️ ESTE CREA UNA ETIQUETA DE VERDAD, y es a propósito: comprobar que `addTag` EXISTE no
+    // prueba que el botón esté enganchado — es justo la trampa de «la aserción promete más de lo
+    // que mide». Se crea con la MARCA y se borra en el `finally`, por la marca.
+    ['/admin/tags', async () => {
+      const b = document.querySelector('[data-tag="crear"]'); if (!b) return 'sin botón de crear';
+      const inp = document.getElementById('tagName'); if (!inp) return 'sin campo';
+      inp.value = window.__marcaCSP;
+      b.click(); await new Promise(r => setTimeout(r, 1200));
+      if (inp.value !== '') return 'el botón no hizo nada';
+      return document.getElementById('tagBody')?.textContent.includes(window.__marcaCSP) ? 'ok' : 'creada pero no aparece';
+    }],
+    // ⚠️ Si algún día el negocio de desarrollo tiene plantillas, el estado vacío deja de pintarse y
+    // esto se pone ROJO diciéndolo, en vez de pasar en silencio sin haber probado nada.
+    ['/admin/recurrentes', async () => {
+      const b = document.querySelector('[data-rm="abrir-nueva-plantilla"]');
+      if (!b) return 'no hay estado vacío que pulsar (¿ya hay plantillas?)';
+      b.click(); await new Promise(r => setTimeout(r, 300));
+      return document.getElementById('nuevaPlantilla')?.open ? 'ok' : 'MUDO';
+    }],
+    ['/admin/stock-transfers/new', async () => {
+      const b = document.querySelector('[data-act="add-row"]'); if (!b) return 'sin botón';
+      const antes = document.querySelectorAll('[data-act="quitar-fila"]').length;
+      b.click(); await new Promise(r => setTimeout(r, 400));
+      const despues = document.querySelectorAll('[data-act="quitar-fila"]').length;
+      if (despues <= antes) return 'no añade línea';
+      document.querySelector('[data-act="quitar-fila"]').click();
+      await new Promise(r => setTimeout(r, 200));
+      return document.querySelectorAll('[data-act="quitar-fila"]').length < despues ? 'ok' : 'el aspa no quita';
+    }],
+  ];
+  for (const [ruta, prueba] of PEQUENAS) {
+    const r = await p15.goto(ERP_BASE + ruta, { waitUntil: 'networkidle0' });
+    ok(/script-src[^;]*'nonce-/.test(cabecera(r)), ruta + ' — endurecida');
+    await new Promise(x => setTimeout(x, 600));
+    const res = await p15.evaluate(prueba);
+    ok(res === 'ok', '  y su control responde al pulsarlo', res);
+  }
+  // Y las fichas, que entran POR FORMA: se comprueba que la plantilla no pinta ni un handler en
+  // NINGUNO de los documentos que hay, no solo en el primero.
+  for (const ruta of ['/admin/clients/1', '/admin/purchase-order-receipts/1', '/admin/stock-transfers/1',
+                      '/admin/stock-transfers/2', '/admin/stock-transfers/3']) {
+    const r = await p15.goto(ERP_BASE + ruta, { waitUntil: 'networkidle0' });
+    ok(/script-src[^;]*'nonce-/.test(cabecera(r)), ruta + ' — endurecida');
+    ok(await p15.evaluate(() => ![...document.querySelectorAll('*')].some(el =>
+         [...el.attributes].some(a => /^on[a-z]+$/i.test(a.name)))),
+       '  y su DOM montado no trae ni un handler de atributo');
+  }
+  ok((await violaciones(p15)).length === 0, 'la tanda de las pequeñas, sin una violación de CSP');
+
   const todas = [...(await violaciones(p3)), ...(await violaciones(p4)),
-                 ...(await violaciones(p11)), ...(await violaciones(p12)), ...(await violaciones(p13)), ...(await violaciones(p14)),
+                 ...(await violaciones(p11)), ...(await violaciones(p12)), ...(await violaciones(p13)), ...(await violaciones(p14)), ...(await violaciones(p15)),
                  ...(await violaciones(p9)),
                  ...(await violaciones(p8)),
                  ...(await violaciones(p5)), ...(await violaciones(p6)), ...(await violaciones(p7))];
@@ -807,6 +886,8 @@ try {
     pdb.prepare('DELETE FROM portal_mensajes WHERE texto LIKE ?').run('ZZ mensaje de comprobacion CSP %');
     pdb.prepare('DELETE FROM portal_sesiones WHERE client_id IN (SELECT id FROM clients WHERE name LIKE ?)').run('ZZ CSP %');
     pdb.prepare('DELETE FROM portal_tokens   WHERE client_id IN (SELECT id FROM clients WHERE name LIKE ?)').run('ZZ CSP %');
+    pdb.prepare('DELETE FROM product_tags WHERE tag_id IN (SELECT id FROM tags WHERE name LIKE ?)').run('ZZ CSP %');
+    pdb.prepare('DELETE FROM tags WHERE name LIKE ?').run('ZZ CSP %');
     pdb.prepare('DELETE FROM opportunities WHERE title LIKE ?').run('ZZ CSP %');
     pdb.prepare('DELETE FROM clients WHERE name LIKE ?').run('ZZ CSP %');
     pdb.prepare("DELETE FROM admin_sessions WHERE token LIKE 'gate-csp-erp-%'").run();

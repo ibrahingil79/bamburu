@@ -141,6 +141,19 @@ const SUPERFICIES_ESTRICTAS = [
   /^\/admin\/contabilidad\/mayor$/,
   /^\/admin\/contabilidad\/pyg$/,
   /^\/admin\/contabilidad\/bienes$/,
+  // ⚙️ 5 SEP 2026, 8ª tanda — LAS PEQUEÑAS. Casi todas eran un botón fijo y un bloque sin nonce.
+  // Dos entran POR FORMA porque su plantilla entera está a cero: los albaranes de recepción y los
+  // traslados (para éstos hubo que migrar además su pantalla de alta, que era lo que faltaba).
+  /^\/admin\/tags$/,
+  /^\/admin\/recurrentes$/,
+  /^\/admin\/conciliacion$/,
+  /^\/admin\/activity$/,
+  /^\/admin\/perfil$/,
+  /^\/admin\/facturar-horas$/,
+  /^\/admin\/clients\/\d+$/,
+  /^\/admin\/purchase-order-receipts\/\d+$/,
+  /^\/admin\/stock-transfers\/\d+$/,
+  /^\/admin\/stock-transfers\/new$/,
 ];
 
 export function securityHeaders() {

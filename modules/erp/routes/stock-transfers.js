@@ -322,8 +322,8 @@ export function createStockTransferRoutes(db) {
         <div class="card-head"><h3>Almacenes</h3></div>
         <div class="card-body">
           <div class="form-row">
-            <div class="form-group"><label class="form-label">Origen *</label><select class="form-control" id="fFrom" onchange="onWh()">${whOpt('from')}</select></div>
-            <div class="form-group"><label class="form-label">Destino *</label><select class="form-control" id="fTo" onchange="onWh()">${whOpt('to')}</select></div>
+            <div class="form-group"><label class="form-label">Origen *</label><select class="form-control" id="fFrom">${whOpt('from')}</select></div>
+            <div class="form-group"><label class="form-label">Destino *</label><select class="form-control" id="fTo">${whOpt('to')}</select></div>
             <div class="form-group"><label class="form-label">Fecha *</label><input class="form-control" type="date" id="fDate" value="${today}"></div>
           </div>
           <div id="whWarn" class="alert alert-err" style="display:none;margin-bottom:0">El origen y el destino deben ser distintos.</div>
@@ -340,11 +340,11 @@ export function createStockTransferRoutes(db) {
           <thead><tr><th style="min-width:220px">Producto</th><th style="text-align:right">Disponible en origen</th><th>Trasladar</th><th></th></tr></thead>
           <tbody id="rLines"></tbody>
         </table></div>
-        <div class="card-body"><button type="button" class="btn btn-secondary btn-sm" onclick="addRow()">+ Añadir línea</button></div>
+        <div class="card-body"><button type="button" class="btn btn-secondary btn-sm" data-act="add-row">+ Añadir línea</button></div>
       </div>
       <div style="display:flex;justify-content:flex-end;gap:.5rem">
         <a href="/admin/stock-transfers" class="btn btn-secondary">Cancelar</a>
-        <button class="btn btn-primary" id="btn-confirm" onclick="confirmTransfer()">Confirmar traslado</button>
+        <button class="btn btn-primary" id="btn-confirm">Confirmar traslado</button>
       </div>
       <script nonce="${c.get('cspNonce')}">
       const SYM = '${sym}';
@@ -379,8 +379,8 @@ export function createStockTransferRoutes(db) {
       function rowHtml(){
         return '<tr>' + LINE_CELL
           + '<td style="text-align:right" class="r-avail">—</td>'
-          + '<td><input class="form-control r-qty" type="number" min="0" value="0" style="width:100px" oninput="onQty(this)"></td>'
-          + '<td style="text-align:right"><button type="button" class="btn btn-secondary btn-sm" onclick="this.closest(\\'tr\\').remove()">✕</button></td>'
+          + '<td><input class="form-control r-qty" type="number" min="0" value="0" style="width:100px"></td>'
+          + '<td style="text-align:right"><button type="button" class="btn btn-secondary btn-sm" data-act="quitar-fila">✕</button></td>'
           + '</tr>';
       }
       function addRow(){
@@ -459,7 +459,21 @@ export function createStockTransferRoutes(db) {
 
       addRow();
       onWh();
-      </script>`;
+      
+      // ── 5 SEP 2026 (csp-erp-migrar-handlers) — ENGANCHE DEL ALTA DE TRASLADO ──────────────────
+      // Los dos almacenes y el boton de confirmar son fijos; las LINEAS se pintan despues, asi que
+      // su casilla de cantidad y su aspa van por delegacion.
+      document.getElementById('fFrom')?.addEventListener('change', function(){ onWh(); });
+      document.getElementById('fTo')?.addEventListener('change', function(){ onWh(); });
+      document.getElementById('btn-confirm')?.addEventListener('click', function(){ confirmTransfer(); });
+      document.querySelector('[data-act="add-row"]')?.addEventListener('click', function(){ addRow(); });
+      document.addEventListener('input', function(e){
+        var q = e.target.closest('.r-qty'); if (q) onQty(q);
+      });
+      document.addEventListener('click', function(e){
+        var x = e.target.closest('[data-act="quitar-fila"]'); if (x) x.closest('tr').remove();
+      });
+</script>`;
     return c.html(adminLayout('Nuevo traslado entre almacenes', content, 'stock-transfers', csrfToken, c));
   });
 
@@ -487,7 +501,7 @@ export function createStockTransferRoutes(db) {
     const content = `
       <div class="ph"><h2>Traslado ${esc(t.transfer_number || ('#' + t.id))}</h2>
         <div style="display:flex;gap:.5rem">
-          ${t.status === 'confirmada' && canEdit ? '<button class="btn btn-danger" onclick="anularTraslado()">Anular</button>' : ''}
+          ${t.status === 'confirmada' && canEdit ? '<button class="btn btn-danger" id="btn-anular-traslado">Anular</button>' : ''}
           <a href="/admin/stock-transfers" class="btn btn-secondary">Volver</a>
         </div>
       </div>
@@ -525,7 +539,9 @@ export function createStockTransferRoutes(db) {
           toast(d.message || 'Traslado anulado'); location.reload();
         } catch(e){ toast(e.message || 'Error anulando','err'); }
       }
-      </script>`;
+      
+      document.getElementById('btn-anular-traslado')?.addEventListener('click', () => anularTraslado());
+</script>`;
     return c.html(adminLayout('Traslado ' + (t.transfer_number || ''), content, 'stock-transfers', csrfToken, c));
   });
 

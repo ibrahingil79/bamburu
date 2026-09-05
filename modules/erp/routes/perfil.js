@@ -217,8 +217,8 @@ export function createPerfilRoutes(db) {
           <div class="pf-foto-actions">
             <input type="file" id="pfFoto" accept="image/jpeg,image/png,image/webp" style="display:none">
             <div style="display:flex;gap:.5rem">
-              <button class="btn btn-secondary btn-sm" onclick="document.getElementById('pfFoto').click()">Cambiar foto</button>
-              <button class="btn btn-secondary btn-sm" id="pfQuitarFoto" onclick="quitarFoto()" ${u.foto_url ? '' : 'style="display:none"'}>Quitar</button>
+              <button class="btn btn-secondary btn-sm" id="pfCambiarFoto">Cambiar foto</button>
+              <button class="btn btn-secondary btn-sm" id="pfQuitarFoto" ${u.foto_url ? '' : 'style="display:none"'}>Quitar</button>
             </div>
             <span class="pf-foto-hint">JPG, PNG o WebP. Máximo 12 MB.</span>
           </div>
@@ -267,7 +267,7 @@ export function createPerfilRoutes(db) {
           </div>
         </div>
 
-        <button class="btn btn-primary" onclick="guardarPerfil()">Guardar cambios</button>
+        <button class="btn btn-primary" id="pfGuardar">Guardar cambios</button>
       </div>
     </div>
 
@@ -381,9 +381,11 @@ export function createPerfilRoutes(db) {
       </div>
     </div>
 
-    <script>
-      async function guardarPerfil(){
-        var btn = event.target;
+    <script nonce="${c.get('cspNonce')}">
+      // 5 SEP 2026 (csp-erp-migrar-handlers) — el boton llega COMO ARGUMENTO. Antes salia del
+      // event implicito del navegador, que existe mientras se despacha pero es una global heredada:
+      // moverlo al oyente era el momento de dejar de depender de ella.
+      async function guardarPerfil(btn){
         btn.disabled = true;
         try{
           await api('PUT','/api/erp/perfil',{
@@ -425,7 +427,13 @@ export function createPerfilRoutes(db) {
           toast('Foto quitada ✓');
         }catch(e){ toast(e.message,'err'); }
       }
-    </script>`;
+    
+      // 5 SEP 2026 — los tres botones del perfil son fijos. El de quitar la foto es CONDICIONAL: solo
+      // se ve si hay foto puesta, asi que el enganche tolera que no exista.
+      document.getElementById('pfCambiarFoto')?.addEventListener('click', function(){ document.getElementById('pfFoto').click(); });
+      document.getElementById('pfQuitarFoto')?.addEventListener('click', function(){ quitarFoto(); });
+      document.getElementById('pfGuardar')?.addEventListener('click', function(){ guardarPerfil(this); });
+</script>`;
 
     return c.html(adminLayout('Perfil', content, 'perfil', csrfToken, c));
   });

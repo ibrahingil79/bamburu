@@ -865,7 +865,7 @@ export function createProductRoutes(db, cfg = {}) {
         <div class="card-head"><h3>Etiquetas de producto</h3>
           <div style="display:flex;gap:.5rem">
             <input class="form-control" id="tagName" placeholder="Nueva etiqueta..." style="width:200px">
-            ${can(c,'products.create')?'<button class="btn btn-primary btn-sm" onclick="addTag()">Crear</button>':''}
+            ${can(c,'products.create')?'<button class="btn btn-primary btn-sm" data-tag="crear">Crear</button>':''}
           </div>
         </div>
         <div class="table-wrap">
@@ -875,10 +875,10 @@ export function createProductRoutes(db, cfg = {}) {
           </table>
         </div>
       </div>
-      <script>
+      <script nonce="${c.get('cspNonce')}">
       async function loadTags(){
         const tags=await api('GET','/api/erp/products/tags/all').catch(()=>[]);
-        document.getElementById('tagBody').innerHTML=tags.length?tags.map(t=>'<tr><td><span class="badge b-gray">'+escHtml(t.name)+'</span></td><td style="color:var(--muted);font-size:.8rem">'+(t.created_at?.split(' ')[0]||'-')+'</td><td>'+(window.canDo('products.delete')?'<button class="btn btn-danger btn-sm" onclick="delTag('+t.id+')">Eliminar</button>':'')+'</td></tr>').join(''):window.emptyRow(3,'Aún no tienes etiquetas. Crea la primera para clasificar tus productos.',window.canDo('products.create')?{cta:'Nueva etiqueta',onclick:"var i=document.getElementById('tagName');if(i)i.focus()"}:{});
+        document.getElementById('tagBody').innerHTML=tags.length?tags.map(t=>'<tr><td><span class="badge b-gray">'+escHtml(t.name)+'</span></td><td style="color:var(--muted);font-size:.8rem">'+(t.created_at?.split(' ')[0]||'-')+'</td><td>'+(window.canDo('products.delete')?'<button class="btn btn-danger btn-sm" onclick="delTag('+t.id+')">Eliminar</button>':'')+'</td></tr>').join(''):window.emptyRow(3,'Aún no tienes etiquetas. Crea la primera para clasificar tus productos.',window.canDo('products.create')?{cta:'Nueva etiqueta',act:'foco-etiqueta'}:{});
       }
       async function addTag(){
         const n=document.getElementById('tagName').value.trim();if(!n)return;
@@ -886,7 +886,18 @@ export function createProductRoutes(db, cfg = {}) {
       }
       async function delTag(id){if(!await window.confirmarEnPagina({titulo:'Eliminar la etiqueta',texto:'Se quita de los productos que la lleven. No se borra ningún producto.',aceptar:'Sí, eliminarla'}))return;await api('DELETE','/api/erp/products/tags/'+id);toast('Eliminada');loadTags();}
       loadTags();
-      </script>`;
+      
+      // 5 SEP 2026 (csp-erp-migrar-handlers) — el boton del estado vacio de las etiquetas. Lo pinta
+      // window.emptyRow DESPUES de pedir la lista, asi que va por delegacion; y ya no lleva codigo
+      // dentro: dice su NOMBRE y el armazon avisa por 'rowmenu:act'.
+      // El boton de Crear es CONDICIONAL (solo con permiso de crear productos) y esta en el HTML
+      // desde el principio: oyente directo, tolerando que no exista.
+      document.querySelector('[data-tag="crear"]')?.addEventListener('click', function(){ addTag(); });
+      document.addEventListener('rowmenu:act', function(e){
+        if (e.detail.act !== 'foco-etiqueta') return;
+        var i = document.getElementById('tagName'); if (i) i.focus();
+      });
+</script>`;
     return c.html(adminLayout('Etiquetas', content, 'tags', c.get('session')?.csrfToken || '', c));
   });
 

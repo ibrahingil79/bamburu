@@ -50,7 +50,7 @@ export function createRecurrentesRoutes(db) {
         <td style="text-align:right">${money(sym, est.total)}</td><td>${t.status === 'activa' ? '<span style="color:var(--ok)">Activa</span>' : '<span style="color:var(--warn)">Pausada</span>'}</td>
         <td style="font-size:12px;color:var(--text2)">${escHtml(prox)}</td><td>${toggle}</td></tr>`;
     }).join('') || (puedeGestionar
-      ? emptyRow(7, 'Aún no tienes facturas recurrentes. ¿Programamos la primera?', { cta: 'Nueva plantilla', onclick: "var d=document.getElementById('nuevaPlantilla');if(d)d.open=true" })
+      ? emptyRow(7, 'Aún no tienes facturas recurrentes. ¿Programamos la primera?', { cta: 'Nueva plantilla', act: 'abrir-nueva-plantilla' })
       : emptyRow(7, 'Aún no tienes facturas recurrentes.'));
 
     // U4: el formulario llega con lo esencial y ya decidido donde el sistema lo sabe. La FECHA DE
@@ -85,7 +85,16 @@ export function createRecurrentesRoutes(db) {
         <table><thead><tr><th>Fecha</th><th>Concepto</th><th style="text-align:right">Importe</th><th>Acción</th></tr></thead><tbody>${borrHtml}</tbody></table></div>
       <div class="card" style="margin-top:1rem"><div class="card-body"><h3>Plantillas</h3><div style="margin-top:.5rem">${nueva}</div></div>
         <table><thead><tr><th>Cliente</th><th>Cadencia</th><th>Vigencia</th><th style="text-align:right">Importe</th><th>Estado</th><th>Próximas</th><th></th></tr></thead><tbody>${tplHtml}</tbody></table></div>`;
-    return c.html(adminLayout('Recurrentes', content, 'recurrentes', csrf, c));
+    const enganche = `<script nonce="${c.get('cspNonce')}">
+      // 5 SEP 2026 (csp-erp-migrar-handlers) — el botón del estado vacío ya no lleva código dentro:
+      // dice su NOMBRE y el armazón avisa por 'rowmenu:act'. Solo aparece cuando no hay ni una
+      // plantilla, así que va por delegación y no da por hecho que exista.
+      document.addEventListener('rowmenu:act', function (e) {
+        if (e.detail.act !== 'abrir-nueva-plantilla') return;
+        var d = document.getElementById('nuevaPlantilla'); if (d) d.open = true;
+      });
+    <\/script>`;
+    return c.html(adminLayout('Recurrentes', content + enganche, 'recurrentes', csrf, c));
   });
 
   const back = c => c.redirect('/admin/recurrentes');

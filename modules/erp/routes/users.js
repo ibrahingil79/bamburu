@@ -507,18 +507,18 @@ export function createUserRoutes(db) {
       <div class="ph"><h2>Registro de Actividad</h2></div>
       <div class="card">
         <div class="card-head">
-          <select class="form-control" id="actEntity" style="max-width:260px" onchange="cargarActividad()">
+          <select class="form-control" id="actEntity" style="max-width:260px">
             <option value="">Todas las entidades</option>
             ${opciones}
           </select>
-          <input class="search" id="actQ" placeholder="Buscar usuario, acción o detalle..." oninput="buscarPronto()">
+          <input class="search" id="actQ" placeholder="Buscar usuario, acción o detalle...">
         </div>
         <div class="table-wrap"><table>
           <thead><tr><th>Fecha</th><th>Usuario</th><th>Acción</th><th>Entidad</th><th>Detalle</th></tr></thead>
           <tbody id="actBody">${skeletonRows(5)}</tbody>
         </table></div>
       </div>
-      <script>
+      <script nonce="${c.get('cspNonce')}">
       // Todo lo que viene de la BD se escapa al pintarlo. Antes solo se escapaba \`details\`: un nombre
       // de usuario, una acción o una entidad con HTML dentro se ejecutaban en esta pantalla.
       function pintarActividad(logs){
@@ -541,7 +541,11 @@ export function createUserRoutes(db) {
       var _actT=null;
       function buscarPronto(){ clearTimeout(_actT); _actT=setTimeout(window.cargarActividad, 250); }
       cargarActividad();
-      </script>`;
+      
+      // 5 SEP 2026 — el filtro y el buscador del registro de actividad: fijos, oyente directo.
+      document.getElementById('actEntity')?.addEventListener('change', function(){ cargarActividad(); });
+      document.getElementById('actQ')?.addEventListener('input', function(){ buscarPronto(); });
+</script>`;
     return c.html(adminLayout('Actividad', content, 'activity', c.get('session')?.csrfToken || '', c));
   });
 
