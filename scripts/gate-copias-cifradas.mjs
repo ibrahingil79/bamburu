@@ -16,6 +16,7 @@
 //   [4] Un fallo AVISA   -> se fuerza un fallo y se exige que llame al aviso de Telegram.
 //
 //   node scripts/gate-copias-cifradas.mjs
+import Database from 'better-sqlite3';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, rmSync, existsSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -45,9 +46,20 @@ function montarMundo(nombre) {
   mkdirSync(path.join(dir, 'destino'), { recursive: true });
   mkdirSync(path.join(dir, 'home'), { recursive: true });
   mkdirSync(path.join(dir, 'certs'), { recursive: true });
-  // Dos bases de verdad, con sqlite3 del sistema: el guion hace snapshot e integrity_check.
+  // Dos bases de verdad: el guion hace snapshot y las revisa.
+  //
+  // ⚙️ 6 SEP 2026 — CIFRADO EN REPOSO. Se sembraban con el `sqlite3` DEL SISTEMA, así que nacían EN
+  // CLARO — y desde que las bases van cifradas, **este banco medía un mundo que ya no existe**: el
+  // guion de copia haría aquí un snapshot en claro y daría verde sobre algo que en producción no
+  // pasa. Es el mismo arreglo que ya se le hizo a `gate-restauracion-completa`, que es su hermano.
+  //
+  // Nacen cifradas SIN tocar la llave ni nombrarla: se crean por el PUNTO ÚNICO y en rutas con la
+  // forma de las de verdad (`…/data/control.db`, `…/data/tenants/<slug>.db`), que es lo que hace que
+  // el punto único les ponga la llave del servidor al crearlas.
   for (const [f, t] of [['data/control.db', 'tenants'], ['data/tenants/zz-prueba.db', 'cosas']]) {
-    execFileSync('sqlite3', [path.join(dir, f), `CREATE TABLE ${t}(id INTEGER PRIMARY KEY, x TEXT); INSERT INTO ${t}(x) VALUES('zz');`]);
+    const d = new Database(path.join(dir, f));
+    try { d.exec(`CREATE TABLE ${t}(id INTEGER PRIMARY KEY, x TEXT); INSERT INTO ${t}(x) VALUES('zz');`); }
+    finally { d.close(); }
   }
   writeFileSync(path.join(dir, 'data/uploads/algo.txt'), 'un fichero subido\n');
   writeFileSync(path.join(dir, 'env'), 'STRIPE_SECRET_KEY=' + CANARIO + '\nOTRA=1\n');
@@ -149,7 +161,29 @@ try {
      'el entorno y los certificados NO se incluyen — y lo DICE, no lo calla');
   const crudo2 = bytesDelDestino(path.join(m2, 'destino'));
   ok(!crudo2.includes(CANARIO), 'y el secreto NO está en el destino en claro', crudo2.length + ' bytes revisados');
-  ok(crudo2.includes('SQLite format'), '  (los datos sí están: la copia no se ha quedado vacía)');
+  // ⚙️ 6 SEP 2026 — CIFRADO EN REPOSO. Esto decía `crudo2.includes('SQLite format')`, o sea que
+  // medía «la copia trae datos» buscando la firma de SQLite EN CLARO en los bytes del destino. Desde
+  // que las bases van cifradas esa firma ya no aparece — y **que no aparezca es exactamente lo que
+  // queremos**, así que la aserción se había quedado midiendo lo contrario de lo que pretendía.
+  //
+  // NO SE REBAJA: se sustituye por algo MÁS FUERTE. En vez de buscar una firma en los bytes, se
+  // ABRE la base copiada con la llave y se cuentan sus filas. Eso demuestra las tres cosas de una
+  // vez: que la copia trae datos, que están cifrados, y que se pueden recuperar.
+  {
+    const enDestino = readdirSync(path.join(m2, 'destino')).filter(f => f.endsWith('.db'));
+    ok(enDestino.length >= 2, '  la copia trae las DOS bases', enDestino.join(', '));
+    let filas = 0, cifradas = 0;
+    for (const f of enDestino) {
+      const p = path.join(m2, 'destino', f);
+      if (readFileSync(p, { length: 16 }).subarray(0, 15).toString('latin1') !== 'SQLite format 3') cifradas++;
+      const d = new Database(p, { readonly: true, fileMustExist: true, bamburuLlave: true });
+      try { for (const t of d.prepare("SELECT name FROM sqlite_master WHERE type='table'").all())
+              filas += d.prepare('SELECT count(*) c FROM "' + t.name.replace(/"/g, '""') + '"').get().c; }
+      finally { d.close(); }
+    }
+    ok(cifradas === enDestino.length, '  y las dos van CIFRADAS en el destino', cifradas + ' de ' + enDestino.length);
+    ok(filas > 0, '  (los datos sí están: se abren con la llave y traen filas)', filas + ' filas recuperadas');
+  }
 
   // ═══════════════════════════════════════════════════════════════════════════════════════════════
   console.log('\n[4] CON LA LLAVE EQUIVOCADA NO SE PUEDE LEER');

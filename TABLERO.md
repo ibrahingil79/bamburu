@@ -460,7 +460,7 @@ familia entera en verde: `test-contabilidad` 38 · `verify-contabilidad-diario-m
 > cuándo no se corre— y se espera un sí. Si dice que no, queda pendiente aquí y se vuelve a
 > proponer al abrir la siguiente sesión.
 
-- **Último barrido completo:** 2026-09-03 · `e4b8f08` · **168/210** · 1195 s
+- **Último barrido completo:** 2026-09-06 · `181795e` · **179/230** · 1402 s
 - **Estado:** ✅ al día
 
 <!-- BARRIDO:FIN -->
@@ -10858,6 +10858,79 @@ pantalla. *Si hay un botón, se pulsa ESE botón.*
 **LO QUE ESTO NO HACE, dicho para que nadie se confíe:** no protege del proceso vivo —Bamburu tiene
 la llave en memoria para poder trabajar—, no sustituye a las copias, y no sustituye a la llave de
 `rclone`. Detalle completo en `docs/seguridad/cifrado-en-reposo.md`, incluido cómo volver atrás.
+
+---
+
+### ⚙️ 6 SEP 2026 (tarde) — EL BARRIDO COMPLETO DESTAPÓ QUE MI REGLA ESTABA MAL, Y POR LOS DOS LADOS
+
+**El barrido completo (autorizado por Ibrahin) dio `179/230` · 1402 s.** De los 51 que no pasaron,
+**41 ya estaban catalogados** el 1 sep en `docs/barridos/2026-09-01-los-113-rojos.md` y **7 no eran de
+esta tarea** (la migración de CSP del 4-5 sep, los adjuntos por contenido del 4 sep, conversaciones
+de DISA en el negocio compartido, y 2 asientos huérfanos nuevos). **Tres eran míos**, y el importante
+no es un fallo de gate: es un **fallo de diseño del punto único**.
+
+**LA REGLA MALA: «una base es de Bamburu si su ruta tiene esta forma».** Falla por los DOS lados, y
+las dos caras salieron el mismo día:
+
+- **Una base REAL copiada fuera de su sitio se volvía imposible de abrir.** `verify-wal-acotado` hace
+  `copyFileSync('data/control.db', '/tmp/wal-….db')` —**a propósito y bien razonado**: necesita el
+  fichero en crudo, porque llevárselo con `.backup` haría checkpoint y borraría justo el WAL que
+  quiere medir—. Con la regla vieja no había forma de darle la llave: `SqliteError: file is not a
+  database`.
+- **Y un fichero CUALQUIERA colocado en la carpeta buena se trataba como base cifrada.**
+  `gate-copias-cifradas` siembra su banco con dos bases **en claro** hechas con el `sqlite3` del
+  sistema, en `<banco>/data/control.db` y `<banco>/data/tenants/zz-prueba.db`. La forma coincidía, se
+  les aplicaba una llave que no tenían, y el gate entero se caía.
+
+**Y lo peor no es el fallo: es que ya me había tropezado con él y solo lo arreglé en un sitio.** Al
+construir sembré cifradas las bases falsas de `gate-restauracion-completa` —por eso ese pasa— y no
+hice lo mismo en su hermano `gate-copias-cifradas`. Ver el fallo en un caso y no buscar los demás es
+exactamente cómo esta regla llegó al barrido.
+
+**LO QUE SE MIDIÓ ANTES DE ELEGIR, porque Ibrahin pidió mirar cómo lo resuelven las herramientas
+serias.** Su encargo nombraba dos caminos: **marca en el propio fichero**, o **apertura explícita con
+llave a petición**. El primero **no existe aquí, y está medido**: dos bases cifradas con la MISMA
+llave empiezan por 16 bytes **distintos y aleatorios** (`b6da6921…` / `93e1b226…`), porque eso es la
+**sal** de cada fichero. **No hay nada que reconocer — y no es un olvido del cifrado, es su diseño:**
+un fichero cifrado debe parecer ruido, porque una cabecera mágica le dice a quien lo roba qué tiene
+entre manos. LUKS sí se marca, pero es un contenedor con sitio para una cabecera propia; una base
+SQLite no lo tiene y prepender bytes la rompería. SQLCipher y VeraCrypt tampoco marcan, por lo mismo.
+
+**LA REGLA BUENA: el sitio propone y el FICHERO dispone.** Tres puertas, y solo tres:
+1. **Fuera del sitio del programa** → nunca se cifra ni se descifra solo. Es el better-sqlite3 de siempre.
+2. **En su sitio** → decide lo que HAY: no existe → nace cifrada · no es SQLite en claro → se abre con
+   la llave · **es SQLite en claro → se abre en claro y se AVISA a gritos** por el journal. No se le
+   pone una llave que no tiene: eso convertía un fichero suelto en un error incomprensible. Que ahí
+   no debería haber una base en claro **lo vigila el gate**, que es su trabajo y no el del motor.
+3. **`{ bamburuLlave: true }`** → «soy una herramienta o un técnico y quiero abrir una base de Bamburu
+   que está fuera de su sitio, con la llave del servidor». En cualquier ruta, y **explícito**: nadie
+   lo escribe sin querer.
+
+**Con rojo provocado por los DOS lados, dentro del gate:** una base real copiada a otra carpeta **no
+se abre sola** y **sí con la llave pedida a propósito** (y trae el NIF de dentro, o sea que descifra
+de verdad); y un fichero en claro colocado en la carpeta buena **se abre tal cual**, el aviso sale, y
+**el ojo del gate lo sigue cazando**.
+
+**Y un tercer arreglo, pequeño y con su lección:** `gate-cifrado-en-reposo` salió **SOSPECHOSO** en el
+barrido —no roto: pasaba 24 ✓ · 0 ✗— por imprimir el recuento sin la palabra `RESULTADO:` delante,
+que es uno de los formatos que `run-gates.mjs` sabe leer. **Un gate que no dice cuántas aserciones
+corrió cuenta como fallo a propósito:** *un aprobado tiene que demostrarse, no presumirse del
+silencio*. Mi gate pasaba y no sabía decirlo.
+
+**Y una aserción que se había quedado midiendo lo contrario de lo que pretendía.** Al sembrar
+cifradas las bases del banco de `gate-copias-cifradas`, su comprobación de «la copia no se ha quedado
+vacía» —que buscaba la firma `SQLite format` en los bytes del destino— dejó de encontrarla… **porque
+ahora esa firma no debe aparecer.** No se rebajó: se sustituyó por algo **más fuerte** — se ABRE la
+base copiada con la llave y se cuentan sus filas, que demuestra a la vez que hay datos, que van
+cifrados y que se pueden recuperar.
+
+**Los tres, en verde y comprobados uno a uno:** `gate-cifrado-en-reposo` 30 ✓ · 0 ✗ ·
+`gate-copias-cifradas` 31 ✓ · 0 ✗ · `verify-wal-acotado` 9 OK · y su hermano
+`gate-restauracion-completa` sigue en 21 ✓ · 0 ✗.
+
+**Los 41 catalogados y los otros 7 NO se han tocado** — no son de esta tarea, y siguen donde estaban.
+
+---
 
 **UN HALLAZGO DE PASO, apuntado y NO arreglado aquí:** `bamburu.service` **no atiende a `SIGTERM`** —
 systemd esperó 90 s y tuvo que matarlo con `SIGKILL` (`Result: timeout`). Es de antes de esta ficha y

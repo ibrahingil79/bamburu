@@ -121,10 +121,34 @@ escriba el 346, y falla de la peor manera: `new Database('data/tenants/loquesea.
 un fichero que no existe **no da error, crea una base nueva en claro**. Eso ya pasó aquí sin cifrado
 ninguno — es `null.db`, la base fantasma del 3 sep 2026.
 
-Se cifra, por la **forma** de la ruta y sin excepciones: `…/data/control.db` y `…/data/tenants/*.db`.
-Todo lo demás (`:memory:`, ficheros de prueba, bancos de los gates) se comporta exactamente como
-antes. Una base de alta de negocio cae dentro por su ruta, así que **nace cifrada desde el primer
-byte** sin que `tenant-provisioning.js` tenga que acordarse de nada.
+### Cuándo se pone la llave: el sitio propone, el fichero dispone
+
+> ⚙️ **Rehecho el 6 sep 2026, el mismo día.** La primera versión decidía **solo por la forma de la
+> ruta**, y el barrido completo demostró que eso falla **por los dos lados**: una base real copiada
+> fuera de su sitio se volvía imposible de abrir (`verify-wal-acotado`), y un fichero cualquiera
+> colocado en la carpeta buena se trataba como cifrado (`gate-copias-cifradas`).
+>
+> **Una base es de Bamburu por lo que ES, no por su carpeta.** Lo incómodo es que «lo que es» **no se
+> puede leer del fichero**, y está medido: dos bases cifradas con la MISMA llave empiezan por 16 bytes
+> distintos y aleatorios, porque eso es la **sal** de cada una. No hay marca que reconocer — y no es
+> un olvido: un fichero cifrado debe parecer ruido, porque una cabecera mágica le dice a quien lo roba
+> qué tiene. LUKS se marca porque es un contenedor con sitio para su cabecera; una base SQLite no lo
+> tiene. SQLCipher y VeraCrypt tampoco marcan, por lo mismo. Así que la respuesta es la otra que usan
+> esas herramientas: **la llave se da a propósito.**
+
+**Tres puertas, y solo tres:**
+
+| Situación | Qué pasa |
+|---|---|
+| Fichero **fuera** de `…/data/control.db` o `…/data/tenants/*.db` | Nunca se cifra ni se descifra solo. Es el `better-sqlite3` de siempre. |
+| **En su sitio** y **no existe** todavía | Nace cifrada. Un alta de negocio no depende de que nadie se acuerde. |
+| **En su sitio** y **no** es SQLite en claro | Se abre con la llave. Es nuestra, o es basura y se dirá. |
+| **En su sitio** y **sí** es SQLite en claro | **Se abre en claro, y se avisa a gritos** por el journal. No se le pone una llave que no tiene. Que ahí no debería haber una base en claro **lo vigila el gate**. |
+| `new Database(ruta, { bamburuLlave: true })` | **A propósito, y en cualquier ruta.** Es la puerta para una herramienta o un técnico que quiera abrir una base copiada fuera de su sitio. |
+
+Esa última es la que usa `verify-wal-acotado`, que copia `control.db` en crudo a `/tmp` —a propósito:
+llevársela con `.backup` haría checkpoint y borraría justo el WAL que quiere medir— y luego la abre
+diciendo explícitamente que quiere la llave del servidor.
 
 ### El cifrado elegido
 
@@ -190,6 +214,11 @@ código si cree que cifra— y después **se pone rojo a sí mismo tres veces**,
 1. sin llave → el programa se para, y lo dice sin enseñar la llave
 2. llave incorrecta → el programa se para, y no lo disfraza de base corrupta
 3. una base devuelta a claro → el gate la caza y la nombra
+4. una base real **fuera de su sitio** → sola no se abre, y **con la llave pedida a propósito** sí
+5. un fichero cualquiera **en la carpeta buena** → se abre tal cual, avisa, y el gate lo sigue cazando
+
+(los dos últimos se añadieron el 6 sep 2026, cuando el barrido completo demostró que decidir por la
+carpeta fallaba por los dos lados)
 
 Va en el rápido por dónde puede romperse: **no hace falta tocar el cifrado para descifrar una base**
 —basta con restaurar una copia vieja, mover una ruta, o abrir una base con una herramienta que no

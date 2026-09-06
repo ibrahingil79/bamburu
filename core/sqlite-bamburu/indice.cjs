@@ -15,14 +15,17 @@
 // fantasma que un gate creó el 3 sep 2026 y que estuvo semanas en `data/tenants/` sin que nadie la
 // echara de menos. Con la llave en el motor, olvidarla deja de ser posible: no hay segunda puerta.
 //
-// QUÉ SE CIFRA Y QUÉ NO — la lista es CERRADA y se decide por la RUTA, no por adivinación:
-//   · `data/control.db`     → cifrada
-//   · `data/tenants/*.db`   → cifradas
-//   · todo lo demás         → exactamente como antes (`:memory:`, ficheros de prueba en /tmp, los
-//                             bancos de los gates, las copias de trabajo). No se toca nada.
-// Es la lista de las bases VIVAS del censo del 6 sep 2026: `control.db` + 11 negocios. Una base
-// nueva de alta de negocio cae dentro POR SU RUTA, así que **nace cifrada desde el primer byte** sin
-// que `core/tenant-provisioning.js` tenga que decir nada — ni acordarse.
+// QUÉ SE CIFRA Y QUÉ NO. ~~La lista es CERRADA y se decide por la RUTA.~~ **⚙️ CORREGIDO EL 6 SEP
+// 2026, EL MISMO DÍA: decidirlo por la ruta estaba mal y falló por los dos lados** — una base real
+// copiada fuera de su sitio no había forma de abrirla, y un fichero cualquiera colocado en la carpeta
+// buena se trataba como cifrado. Lo destapó el barrido completo. **Una base es de Bamburu por lo que
+// ES, no por su carpeta**; el detalle entero, con lo que se midió y por qué no hay marca posible
+// dentro del fichero, está más abajo en «DÓNDE guarda el programa sus bases, y QUÉ es cada fichero».
+// Se tacha en vez de borrarse, que es lo que manda este repositorio.
+//
+// En corto: **el sitio propone y el fichero dispone**, y hay una tercera puerta EXPLÍCITA
+// (`{ bamburuLlave: true }`) para abrir una base que esté fuera de su sitio. Una base nueva de alta
+// de negocio nace cifrada sin que `core/tenant-provisioning.js` tenga que acordarse de nada.
 //
 // LA LLAVE. Vive en un fichero de entorno del servidor, 0600, FUERA del repositorio y FUERA de
 // `/etc/bamburu.env`. Ese segundo detalle es deliberado, y es el mismo criterio que ya se aplicó a la
@@ -61,21 +64,59 @@ const VARIABLE = 'BAMBURU_LLAVE_BASES';
 // por el que SQLCipher tiene «raw key mode».
 const CIFRADO = Object.freeze({ cipher: 'chacha20', kdf_iter: 1 });
 
-// ── Qué es una base VIVA de Bamburu ──────────────────────────────────────────────────────────────
+// ── DÓNDE guarda el programa sus bases, y QUÉ es cada fichero ────────────────────────────────────
+//
+// ⚙️ REHECHO EL 6 SEP 2026, y el motivo está medido. La primera versión decidía si aplicar la llave
+// **solo por la forma de la ruta**, y eso fallaba por los DOS lados a la vez — las dos caras salieron
+// en el barrido completo de ese día:
+//
+//   · Una base REAL copiada fuera de su sitio se volvía **imposible de abrir**. `verify-wal-acotado`
+//     hace `copyFileSync('data/control.db', '/tmp/wal-….db')` —a propósito y bien razonado: necesita
+//     el fichero en crudo para poder medir el WAL— y ahí ya no había forma de darle la llave:
+//     `SqliteError: file is not a database`.
+//   · Y un fichero CUALQUIERA colocado en la carpeta buena se trataba como base cifrada.
+//     `gate-copias-cifradas` siembra su banco con dos bases EN CLARO hechas con el `sqlite3` del
+//     sistema, en `<banco>/data/control.db` y `<banco>/data/tenants/zz-prueba.db`; la forma de la
+//     ruta coincidía, se les aplicaba una llave que no tenían, y el gate entero se caía.
+//
+// **UNA BASE ES DE BAMBURU POR LO QUE ES, NO POR SU CARPETA.** Lo malo es que «lo que es» no se
+// puede leer del fichero: **MEDIDO el 6 sep 2026** — dos bases cifradas con la MISMA llave empiezan
+// por 16 bytes distintos y aleatorios (`b6da6921…` y `93e1b226…`), porque eso es la SAL de cada
+// fichero. **No hay marca que reconocer, y no es un olvido del cifrado: es su diseño.** Un fichero
+// cifrado debe parecer ruido; una cabecera mágica le diría a quien lo robe qué tiene entre manos.
+// LUKS sí se marca, pero es un contenedor con sitio para una cabecera propia; una base SQLite no lo
+// tiene, y prepender bytes la rompería. SQLCipher y VeraCrypt tampoco marcan, por lo mismo.
+//
+// Así que la respuesta es la otra que usan esas herramientas: **la llave se da A PROPÓSITO.**
+// Quedan TRES puertas, y solo tres:
+//
+//   1. `new Database(ruta)` sobre un fichero que NO está donde el programa guarda lo suyo
+//      → jamás se cifra ni se descifra solo. Se comporta exactamente como el better-sqlite3 de
+//        siempre.
+//   2. `new Database(ruta)` sobre un fichero que SÍ está en ese sitio → se decide por lo que HAY:
+//        · no existe todavía  → nace cifrada (así un alta de negocio no depende de que nadie se acuerde)
+//        · existe y NO es SQLite en claro → se abre con la llave (es nuestra, o es basura y se dirá)
+//        · existe y ES SQLite en claro → **se abre en claro, y se dice a gritos**. No se le aplica
+//          una llave que no tiene: eso convertía un fichero suelto en un error incomprensible.
+//          Que ahí no debería haber una base en claro **lo vigila el gate**, que es su trabajo.
+//   3. `new Database(ruta, { bamburuLlave: true })` → «soy una herramienta o un técnico y quiero
+//      abrir una base de Bamburu que está fuera de su sitio, con la llave del servidor». Funciona en
+//      cualquier ruta, y es EXPLÍCITO: nadie lo escribe sin querer.
+
 /**
- * ¿Es una de las bases vivas del sistema? Se decide por la FORMA de la ruta —`…/data/control.db` y
- * `…/data/tenants/*.db`— y no por una raíz fija, porque Bamburu no siempre corre desde el repo.
+ * ¿Está este fichero donde el programa guarda SUS bases? — `…/data/control.db` y
+ * `…/data/tenants/*.db`.
  *
- * NO ES UN DETALLE. `core/control-db.js` abre `path.join(process.cwd(), 'data', 'control.db')`, y
- * `restauracion-sistema-completo.mjs` levanta el `index.js` REAL con `cwd` en un árbol restaurado de
- * /tmp. Si esto se atara a `/home/ubuntu/bamburu`, el ensayo de restauración —que es la prueba de
- * que se puede volver— abriría las bases restauradas SIN llave, y una base cifrada de verdad no
- * abriría. La regla que se aplica aquí es la misma que usa el programa para encontrar sus datos.
+ * Ojo: esto ya NO decide si se cifra. Solo dice «aquí es donde vive lo mío», que es la mitad de la
+ * pregunta; la otra mitad la contesta el fichero.
  *
- * Las rutas relativas se resuelven contra `process.cwd()`, otra vez porque es lo que hace el
- * programa: `data/tenants/<slug>.db` es como está escrito en `control.db`.
+ * Se mira la FORMA de la ruta y no una raíz fija, porque Bamburu no siempre corre desde el repo:
+ * `core/control-db.js` abre `path.join(process.cwd(), 'data', 'control.db')`, y
+ * `restauracion-sistema-completo.mjs` levanta el `index.js` REAL con el `cwd` en un árbol restaurado
+ * de /tmp. Atarlo a `/home/ubuntu/bamburu` dejaría el ensayo de restauración —la prueba de que se
+ * puede volver— abriendo sin llave unas bases que sí la tienen.
  */
-function esBaseViva(ruta) {
+function enSuSitio(ruta) {
   if (typeof ruta !== 'string' || !ruta) return false;
   if (ruta === ':memory:' || ruta.startsWith('file:')) return false;
   const abs = path.resolve(ruta);
@@ -84,6 +125,12 @@ function esBaseViva(ruta) {
   return abs.endsWith('.db')
     && path.basename(dir) === 'tenants'
     && path.basename(path.dirname(dir)) === 'data';
+}
+
+/** ¿Es un fichero SQLite SIN cifrar? Se mira el fichero, no su nombre. */
+function esSQLiteEnClaro(ruta) {
+  try { return fs.readFileSync(ruta, { length: 16 }).subarray(0, 15).toString('latin1') === 'SQLite format 3'; }
+  catch { return false; }   // no existe, o no se puede leer: no es «en claro»
 }
 
 // ── Leer la llave: una vez por proceso, y nunca al entorno ───────────────────────────────────────
@@ -148,6 +195,52 @@ function textoLlaveMala() {
     + '   No se toca nada y no se arranca a medias. Ver docs/seguridad/cifrado-en-reposo.md';
 }
 
+/**
+ * LAS TRES PUERTAS, EN UN SOLO SITIO. Devuelve `{ hex, aviso }`:
+ *   · `hex` = la llave que hay que aplicar, o `null` para abrir tal cual.
+ *   · `aviso` = lo que hay que gritar por el journal, si algo huele mal.
+ *
+ * Se llama ANTES de abrir el fichero, porque abrirlo lo crea y borra la pregunta.
+ */
+function decidirLlave(ruta, sinLlave, pedida) {
+  // PUERTA 0 · «no me pongas llave». Dos usos, ninguno de producción: la migración, que necesita
+  // leer una base todavía EN CLARO, y el gate, que necesita demostrar que sin llave NO se abre.
+  if (sinLlave) return { hex: null, aviso: null };
+
+  // PUERTA 3 · a propósito, y en cualquier ruta. `true` = «con la llave del servidor»; una cadena =
+  // «con ESTA llave» (lo usa la migración, que trabaja sobre copias antes de ponerlas en su sitio).
+  if (pedida !== undefined) {
+    if (pedida === true) {
+      const h = llave();
+      if (!h) throw new Error('se pidió abrir con la llave del servidor y no hay llave (' + motivoSinLlave + ')');
+      return { hex: h, aviso: null };
+    }
+    const h = normalizar(pedida);
+    if (!h) throw new Error('la llave pasada a mano no son 64 caracteres hexadecimales (32 bytes)');
+    return { hex: h, aviso: null };
+  }
+
+  // PUERTA 1 · fuera del sitio del programa: no se toca. Es el better-sqlite3 de siempre.
+  if (!enSuSitio(ruta)) return { hex: null, aviso: null };
+
+  // PUERTA 2 · en su sitio: manda lo que HAY en el fichero.
+  if (esSQLiteEnClaro(ruta)) {
+    // No se le pone una llave que no tiene. Pero tampoco se calla: una base en claro en la carpeta
+    // de las bases vivas es una anomalía —una copia vieja restaurada a mano, un `cp` de más— y quien
+    // mire el journal tiene que verla. Que además sea un ROJO lo decide el gate, no esta función.
+    return {
+      hex: null,
+      aviso: '⚠️  BASE EN CLARO donde deberían estar las cifradas: ' + path.basename(ruta)
+           + '\n   Se abre tal cual (es lo que hay), pero NO está protegida en reposo.'
+           + '\n   Compruébalo con: node scripts/gate-cifrado-en-reposo.mjs',
+    };
+  }
+
+  const h = llave();
+  if (!h) throw new Error(textoSinLlave());
+  return { hex: h, aviso: null };
+}
+
 // ── La clase ─────────────────────────────────────────────────────────────────────────────────────
 // Extiende el motor real. Todo lo demás —`prepare`, `transaction`, `pragma`, `exec`, `backup`,
 // `function`, `aggregate`, `close`…— se hereda tal cual: para el resto del árbol esto ES
@@ -161,21 +254,16 @@ class Database extends Motor {
     delete op.bamburuSinLlave;
     delete op.bamburuLlave;
 
+    // ⚠️ LA DECISIÓN SE TOMA **ANTES** DE ABRIR, y eso es obligatorio: abrir CREA el fichero si no
+    // existe, así que después ya no hay forma de saber qué había ahí. En JavaScript se puede
+    // ejecutar código antes de `super()` mientras no se toque `this`, y esto no lo toca.
+    const decision = decidirLlave(ruta, sinLlave, pedida);
+
     super(ruta, op);
 
-    // `bamburuSinLlave` tiene DOS usos y ninguno es de producción: la migración, que necesita leer
-    // una base todavía EN CLARO; y el gate, que necesita demostrar que sin llave NO se abre.
-    if (sinLlave) return;
-
-    let hex = null;
-    if (pedida !== undefined) {
-      hex = normalizar(pedida);
-      if (!hex) { this.cerrarCallando(); throw new Error('la llave pasada a mano no son 64 caracteres hexadecimales (32 bytes)'); }
-    } else {
-      if (!esBaseViva(ruta)) return;      // no es una base de Bamburu: se comporta como siempre
-      hex = llave();
-      if (!hex) { this.cerrarCallando(); throw new Error(textoSinLlave()); }
-    }
+    if (decision.aviso) console.error(decision.aviso);
+    if (!decision.hex) return;
+    const hex = decision.hex;
 
     try {
       Database.aplicarLlave(this, hex);
@@ -255,7 +343,8 @@ Database.abrirCopia = function abrirCopia(ruta, opciones) {
   return db;
 };
 
-Database.esBaseViva = esBaseViva;
+Database.enSuSitio = enSuSitio;
+Database.esSQLiteEnClaro = esSQLiteEnClaro;
 Database.CIFRADO = CIFRADO;
 Database.FICHERO_LLAVE = FICHERO_LLAVE;
 Database.VARIABLE_LLAVE = VARIABLE;

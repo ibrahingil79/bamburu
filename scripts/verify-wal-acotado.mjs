@@ -39,7 +39,12 @@ function ensayo(etiqueta, limite) {
   // borraría justo lo que se quiere medir. Las demás comprobaciones sí usan lib/copia-consistente.mjs.
   copyFileSync('data/control.db', p);
   copias.push(p);
-  const db = new Database(p);
+  // ⚙️ 6 SEP 2026 — CIFRADO EN REPOSO. `control.db` va cifrada, así que su copia en crudo también lo
+  // está. `bamburuLlave: true` es la puerta explícita del punto único: «soy una herramienta y quiero
+  // abrir una base de Bamburu que está fuera de su sitio, con la llave del servidor». Se escribe a
+  // propósito, que es justo lo que se quiere — nadie la pone sin querer, y sin ella este fichero es
+  // ruido para cualquiera.
+  const db = new Database(p, { bamburuLlave: true });
   db.pragma('journal_mode = WAL');
   if (limite !== null) db.pragma(`journal_size_limit = ${limite}`);
   db.pragma('wal_autocheckpoint = 0');   // simula "los checkpoints están bloqueados"

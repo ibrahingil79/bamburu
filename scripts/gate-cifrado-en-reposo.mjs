@@ -255,6 +255,51 @@ try {
     ok(!/[0-9a-f]{64}/.test(r.salida), 'sin volcar ninguna llave');
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════════════════════════
+  console.log('\n  ── (d) UNA BASE DE VERDAD, FUERA DE SU SITIO: se abre DANDO LA LLAVE A PROPÓSITO');
+  // ═══════════════════════════════════════════════════════════════════════════════════════════════
+  // La mitad que faltaba, y que costó un rojo en el barrido del 6 sep: decidir por la carpeta dejaba
+  // una base copiada a /tmp IMPOSIBLE de abrir. Aquí se comprueban las dos cosas a la vez: que sola
+  // NO se abre (la carpeta no manda) y que CON la llave pedida a propósito sí.
+  {
+    const fuera = path.join(BANCO, 'copiada-fuera-de-sitio.db');
+    fs.copyFileSync(baseBanco, fuera);          // copia EN CRUDO, como hace verify-wal-acotado
+    const r = enElBanco(path.join(BANCO, 'llave.env'), `
+      let sola = 'abrió';
+      try { const d = new Database(${JSON.stringify(fuera)}, { fileMustExist: true });
+            d.prepare('SELECT count(*) FROM clientes').get(); d.close(); }
+      catch (e) { sola = 'NO abre'; }
+      console.log('SOLA:' + sola);
+      const d = new Database(${JSON.stringify(fuera)}, { fileMustExist: true, bamburuLlave: true });
+      console.log('CON_LLAVE:' + d.prepare('SELECT count(*) c FROM clientes').get().c);
+      console.log('NIF:' + d.prepare('SELECT nif FROM clientes').get().nif);
+      d.close();`);
+    ok(/SOLA:NO abre/.test(r.salida), 'fuera de su sitio, sola NO se abre — la carpeta no manda');
+    ok(/CON_LLAVE:1/.test(r.salida), 'y CON la llave pedida a propósito, sí', r.salida.match(/CON_LLAVE:\d+/)?.[0]);
+    ok(/NIF:B99999999/.test(r.salida), 'y trae el dato de dentro, o sea que descifra de verdad');
+    fs.rmSync(fuera, { force: true });
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════════════════════════
+  console.log('\n  ── (e) UN FICHERO CUALQUIERA EN LA CARPETA BUENA: no se trata como base cifrada');
+  // ═══════════════════════════════════════════════════════════════════════════════════════════════
+  // La otra mitad del mismo fallo: `gate-copias-cifradas` siembra bases EN CLARO en rutas con la
+  // forma de las buenas, y se les aplicaba una llave que no tenían. Un fichero es lo que es.
+  {
+    const suelto = path.join(BANCO, 'data', 'tenants', 'suelto-en-claro.db');
+    execFileSync('sqlite3', [suelto, "CREATE TABLE cosas(x TEXT); INSERT INTO cosas VALUES('zz');"]);
+    const r = enElBanco(path.join(BANCO, 'llave.env'), `
+      const d = new Database(${JSON.stringify(suelto)}, { fileMustExist: true });
+      console.log('LEYO:' + d.prepare('SELECT count(*) c FROM cosas').get().c);
+      d.close();`);
+    ok(/LEYO:1/.test(r.salida), 'se abre tal cual, sin intentar descifrar lo que no está cifrado',
+       r.salida.split('\n').find(l => l.startsWith('LEYO:')));
+    ok(/BASE EN CLARO donde deberían estar las cifradas/.test(r.salida),
+       'y NO se calla: avisa de que ahí hay una base sin proteger');
+    ok(basesEnClaro([suelto]).length === 1, 'y el ojo del gate la sigue cazando como base en claro');
+    fs.rmSync(suelto, { force: true });
+  }
+
   console.log('\n  ── avería (c): UNA BASE DEVUELTA A CLARO');
   {
     const r = enElBanco(path.join(BANCO, 'llave.env'), `
@@ -276,5 +321,10 @@ try {
   try { fs.rmSync(BANCO, { recursive: true, force: true }); } catch (_) {}
 }
 
-console.log(`\n${pass} ✓ · ${fail} ✗`);
+// ⚠️ EL PREFIJO «RESULTADO:» NO ES ADORNO. `run-gates.mjs` exige que un gate DIGA cuántas aserciones
+// corrió, en uno de los formatos que sabe leer (`scripts/run-gates.mjs` · const RESUMEN); si no lo
+// dice, lo marca SOSPECHOSO y **cuenta como fallo**, aunque haya salido con código 0. Es a propósito:
+// «un aprobado tiene que demostrarse, no presumirse del silencio». Este gate salió SOSPECHOSO en el
+// barrido del 6 sep 2026 pasando 24 ✓ · 0 ✗, por imprimir el recuento sin esa palabra delante.
+console.log(`\nRESULTADO: ${pass} ✓ · ${fail} ✗`);
 process.exit(fail ? 1 : 0);
