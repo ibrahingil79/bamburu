@@ -83,13 +83,13 @@ echo "Descargando y abriendo: $NOMBRE"
 "$RCLONE" copy "ensayo_cif:$SUBDIR/$NOMBRE" "$TRABAJO/" >/dev/null 2>&1 \
   || { echo "no se pudo descargar $NOMBRE"; exit 1; }
 
-IC="$(sqlite3 "$TRABAJO/$NOMBRE" 'PRAGMA integrity_check;' 2>&1 | head -1)"
-[ "$IC" = "ok" ] || { echo "integrity_check => $IC"; exit 1; }
-
-# integrity_check responde `ok` tambien a una base VACIA. Que abra no es que sirva.
-OBJ="$(sqlite3 "$TRABAJO/$NOMBRE" 'SELECT count(*) FROM sqlite_master;' 2>&1 | head -1)"
-case "$OBJ" in (''|*[!0-9]*) echo "no pude contar los objetos: $OBJ"; exit 1 ;; esac
-[ "$OBJ" -gt 0 ] || { echo "la base abre pero está VACÍA (0 objetos): eso no es una copia útil"; exit 1; }
+# ⚙️ 6 SEP 2026 — CIFRADO EN REPOSO. Esto eran dos llamadas al `sqlite3` DEL SISTEMA, que no puede
+# abrir una base cifrada. `db-revisar.mjs` hace las MISMAS dos preguntas —integrity_check ok, y
+# esquema dentro, porque `ok` tambien lo dice una base VACIA— abriendo por el punto unico, y dice si
+# la copia venia en claro o cifrada.
+REV="$(/usr/bin/node "$(dirname "$0")/db-revisar.mjs" "$TRABAJO/$NOMBRE" 2>&1)"
+case "$REV" in (ok*) : ;; (*) echo "la copia no sirve: $REV"; exit 1 ;; esac
+OBJ="$(printf '%s' "$REV" | sed -n 's/.* \([0-9][0-9]*\) objetos.*/\1/p')"
 
 echo
 echo "✅ ENSAYO SUPERADO"

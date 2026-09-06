@@ -174,9 +174,25 @@ no un bug.
 - **Base de datos:** SQLite con better-sqlite3 (SÍNCRONO — no uses await en queries)
 - **Arquitectura:** multi-tenant por subdominio. BD central de routing (`data/control.db`)
   + una BD por negocio (`data/tenants/<slug>.db`). Aislamiento a nivel de archivo.
+- 🔒 **LAS BASES VAN CIFRADAS EN REPOSO desde el 6 sep 2026** (ficha `cifrado-en-reposo-bases`).
+  **Sigues escribiendo `import Database from 'better-sqlite3'` y `new Database(ruta)` igual que
+  siempre**: ese paquete es ahora `core/sqlite-bamburu/`, el PUNTO ÚNICO, que por dentro es
+  `better-sqlite3-multiple-ciphers` y pone la llave solo. Se cifra por la FORMA de la ruta
+  (`…/data/control.db` y `…/data/tenants/*.db`); todo lo demás —`:memory:`, ficheros de prueba,
+  bancos de gates— se comporta como antes. **Una base de negocio nueva nace cifrada sin que tengas
+  que hacer nada.** La llave está en `/etc/bamburu-bases.env` (0600) y **nunca se imprime**: si falta
+  o es la que no es, Bamburu **no arranca a medias**, se para y lo dice. Detalle completo en
+  `docs/seguridad/cifrado-en-reposo.md`.
+  **Dos cosas que muerden si las olvidas:** (1) el `sqlite3` DEL SISTEMA ya no puede abrir una base
+  —usa `node scripts/db-revisar.mjs <fichero>`—; y (2) la API de copia (`db.backup()`) escribe el
+  destino SIN llave, así que **de una base cifrada saca una copia EN CLARO**: para snapshots va
+  `VACUUM INTO`, que hereda el cifrado (ver `scripts/db-snapshot.mjs`).
 - **Auth:** `admin_users` está en cada BD de tenant, NO en control.db. bcrypt + 2FA TOTP.
 - **Emails:** Resend SDK → devuelve `{ data, error }`, NO lanza excepciones (hay que checkear `error`).
 - **Secretos:** en `/etc/bamburu.env` (fuera del repo). NUNCA hardcodear claves ni subirlas.
+  **La llave de las bases NO va ahí, y es a propósito:** `/etc/bamburu.env` entra ENTERO en el
+  `process.env` del proceso expuesto a Internet. Vive aparte, en `/etc/bamburu-bases.env`, y el punto
+  único la lee del disco sin pasarla nunca por `process.env` (mismo criterio que la llave de rclone).
 - **Frontend:** HTML/JS inline servido desde rutas (sin SPA, sin framework de front).
 
 ## Estructura del proyecto

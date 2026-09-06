@@ -14,7 +14,8 @@
   "dependencies": {
     "@hono/node-server": "^1.11.0",
     "bcrypt": "^6.0.0",
-    "better-sqlite3": "^9.4.3",
+    "better-sqlite3": "file:core/sqlite-bamburu",
+    "better-sqlite3-multiple-ciphers": "9.5.0",
     "hono": "^4.12.30",
     "otplib": "^13.4.0",
     "qrcode": "^1.5.4",

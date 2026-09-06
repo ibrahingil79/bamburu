@@ -1,0 +1,8 @@
+{
+  "name": "better-sqlite3",
+  "version": "9.6.0-bamburu-cifrado",
+  "description": "EL PUNTO ÚNICO DE APERTURA de las bases de Bamburu. Suplanta al paquete del mismo nombre: por dentro es better-sqlite3-multiple-ciphers y aplica la llave de cifrado. Ver indice.cjs.",
+  "main": "indice.cjs",
+  "license": "UNLICENSED",
+  "private": true
+}
