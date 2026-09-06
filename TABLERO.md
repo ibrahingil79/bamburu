@@ -6082,6 +6082,21 @@ El pilar queda completo: multi-almacén + stock mínimo/punto de pedido + trazab
 - **D6 · [a verificar] XSS en páginas públicas de la tienda** (HTML guardado por admin sin escapar). La tienda está apagada de forma reversible (D1); revisar antes de reabrir en Capa 2. *(El bug de fuga de stock de `cancel_order` ya quedó resuelto al archivar `sales_orders`, D4.)*
 
 ### Deuda técnica
+- ⚠️ **`bamburu.service` NO ATIENDE A `SIGTERM`: cada parada es un corte en seco (medido el 6 sep 2026).**
+  Al parar el servicio para migrar las bases, systemd esperó su plazo de **90 segundos** y tuvo que
+  matarlo con `SIGKILL`: `Result: timeout`, `code=killed, signal=KILL`. El proceso llevaba 21 h 25 min
+  arriba. **Es anterior a esta ficha y no lo causa el cifrado** — `index.js` no registra un manejador
+  que cierre el servidor HTTP y las conexiones de SQLite.
+  **Qué significa en la práctica, y por qué no es cosmético:** cada `systemctl restart` —el de
+  `scripts/desplegar.mjs` incluido, o sea **cada despliegue**— cuesta 90 segundos de espera y termina
+  con un corte en seco a mitad de lo que hubiera en vuelo. Una petición que estuviera escribiendo se
+  queda sin respuesta, y el WAL se recupera al abrir en vez de cerrarse limpio.
+  **Lo que NO es:** corrupción. Se comprobó `integrity_check` en las **12 bases** justo después del
+  SIGKILL y **las 12 dieron `ok`** — que es exactamente lo que WAL promete y por eso el modo está puesto.
+  **Lo que haría falta:** un manejador de `SIGTERM`/`SIGINT` que deje de aceptar peticiones, espere a
+  las que estén en vuelo con un plazo corto, cierre las conexiones y salga con 0. Es pequeño, pero
+  **toca el arranque**, que es la pieza que ya se cayó cinco veces en 30 días (AUD-007): no se
+  improvisa dentro de otra tarea.
 - ~~⚠️ **`limpiar-restos-de-gates.mjs` no cubre la tabla `categories` (5 sep 2026).**~~
   **⚙️ CERRADO el mismo día:** el limpiador ya cubre `categories` (borra las que no tienen productos,
   deja y avisa de las que sí) y las 9 con carga se limpiaron con autorización de Ibrahin. Texto
