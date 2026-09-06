@@ -33,6 +33,7 @@
 //   node scripts/restauracion-sistema-completo.mjs --backend gdrive_cif:daily
 //   node scripts/restauracion-sistema-completo.mjs --backend zzcif:daily --sin-aviso
 // ─────────────────────────────────────────────────────────────────────────────────────────────────
+import Database from 'better-sqlite3';
 import { execFileSync, spawn } from 'node:child_process';
 import { mkdtempSync, mkdirSync, readdirSync, readFileSync, writeFileSync, rmSync, existsSync, symlinkSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -151,17 +152,23 @@ try {
     return existsSync(destino) ? null : 'el fichero no llegó';
   };
 
-  /** Que abra NO basta: una base vacía también responde `ok`. Se exige esquema dentro. */
+  /**
+   * Que abra NO basta: una base vacía también responde `ok`. Se exige esquema dentro.
+   *
+   * ⚙️ 6 SEP 2026 — CIFRADO EN REPOSO. Esto llamaba al `sqlite3` DEL SISTEMA, que no puede abrir una
+   * base cifrada porque no sabe nada de nuestra llave: habría dicho «file is not a database» de una
+   * copia perfectamente buena. Ahora pasa por `db-revisar.mjs`, que abre por el punto único y hace
+   * las MISMAS dos preguntas —integrity_check ok y esquema dentro— tanto si la copia va cifrada como
+   * si es una de las viejas en claro.
+   */
   const baseSana = (ruta) => {
-    let ic = '';
-    try { ic = execFileSync('sqlite3', [ruta, 'PRAGMA integrity_check;'], { encoding: 'utf8' }).trim(); }
-    catch (e) { return 'no se puede abrir (' + (e?.stderr || e?.message || '').slice(0, 120) + ')'; }
-    if (ic !== 'ok') return 'integrity_check => ' + ic;
-    let objetos = '0';
-    try { objetos = execFileSync('sqlite3', [ruta, 'SELECT count(*) FROM sqlite_master;'], { encoding: 'utf8' }).trim(); }
-    catch (e) { return 'no se puede contar el esquema (' + (e?.message || '').slice(0, 80) + ')'; }
-    if (!Number(objetos)) return 'abre pero está VACÍA (0 objetos): eso no es una copia útil';
-    return null;
+    try {
+      const r = execFileSync(process.execPath, [path.join(RAIZ, 'scripts', 'db-revisar.mjs'), ruta],
+        { encoding: 'utf8', timeout: 120_000 }).trim();
+      return r.startsWith('ok') ? null : r;
+    } catch (e) {
+      return String(e?.stderr || e?.message || 'no se puede revisar').trim().slice(0, 160);
+    }
   };
 
   const rutaControl = path.join(DATOS, 'control.db');
@@ -270,10 +277,17 @@ try {
 
   // Y ahora contra un negocio DE VERDAD de la copia: que el servicio conteste no basta si el
   // negocio restaurado no se puede ni abrir.
+  // ⚙️ 6 SEP 2026 — CIFRADO EN REPOSO. Esto lo leía el `sqlite3` DEL SISTEMA, que no sabe nada de
+  // nuestra llave: contra una copia cifrada se habría quedado sin slug y la restauración habría
+  // muerto diciendo «control.db no lista ni un negocio», que es mentira y manda a buscar al sitio
+  // equivocado. `abrirCopia` mira la cabecera del fichero y abre como toque, en claro o cifrada.
   let slugPrueba = null;
   try {
-    slugPrueba = execFileSync('sqlite3', [rutaControl,
-      "SELECT slug FROM tenants WHERE slug IS NOT NULL AND slug <> '' ORDER BY id LIMIT 1;"], { encoding: 'utf8' }).trim();
+    const c = Database.abrirCopia(rutaControl, { readonly: true, fileMustExist: true });
+    try {
+      const f = c.prepare("SELECT slug FROM tenants WHERE slug IS NOT NULL AND slug <> '' ORDER BY id LIMIT 1").get();
+      slugPrueba = f ? f.slug : null;
+    } finally { c.close(); }
   } catch { /* se queda en null y se dice abajo */ }
   if (!slugPrueba) await morir('control.db no lista ni un negocio', 'no se puede comprobar ninguna pantalla real');
 

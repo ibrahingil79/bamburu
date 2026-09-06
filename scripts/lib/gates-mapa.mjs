@@ -118,6 +118,12 @@ export const RAPIDO = new Map([
   // Y que el propio barrido no le infle las ventas al dueño. Va en el RÁPIDO porque el daño se hace
   // el mismo día: una factura emitida cuenta como venta en cuanto existe.
   ['verify-barrido-no-infla-ventas', 'ninguna comprobación deja una factura emitida en el negocio del dueño'],
+  // Y que las bases sigan CIFRADAS en el disco. Va en el rápido por dónde puede romperse: no hace
+  // falta tocar el cifrado para descifrar una base — basta con restaurar una copia vieja, mover una
+  // ruta, o abrir una base con una herramienta que no pase por el punto único. Y una base devuelta a
+  // claro NO se nota usando el producto: funciona igual de bien. Solo lo ve quien mire el fichero.
+  // Mira los 12 ficheros de verdad y se pone rojo a sí mismo tres veces. ~4 s medidos.
+  ['gate-cifrado-en-reposo', 'las bases: ¿siguen cifradas en el disco, y sin llave no se abren? (cifrado-en-reposo-bases)'],
 ]);
 
 // La velocidad de UNA comprobación. No hay tercer estado: o está declarada arriba o es del completo.
@@ -349,7 +355,7 @@ export const GRUPOS = {
   // 25 ago 2026 · Las dos del correo. `verify-correo-freno` prueba que el freno para de verdad al
   // llegar al tope; `verify-comprobaciones-sin-correo-real` vigila la norma del dueño: ninguna
   // comprobación vuelve a escribir a una bandeja real. Ver docs/censo-correos.md.
-  infra: ['gate-arranque-modulos', 'gate-copias-cifradas', 'gate-restauracion-completa', 'gate-portal-sin-llave-en-url', 'gate-adjuntos-por-contenido', 'gate-aviso-copias', 'gate-csp-superficies-limpias', 'censo-bot-de-bamburu', 'censo-avisos-sin-fabrica', 'verify-correo-freno', 'verify-comprobaciones-sin-correo-real', 'verify-disco-perfiles', 'test-c6-secretos', 'gate-conciliacion-deshacer', 'verify-superadmin-escrituras', 'verify-tenant-lookup-readonly', 'verify-wal-acotado', 'verify-safe-error',
+  infra: ['gate-arranque-modulos', 'gate-cifrado-en-reposo', 'gate-copias-cifradas', 'gate-restauracion-completa', 'gate-portal-sin-llave-en-url', 'gate-adjuntos-por-contenido', 'gate-aviso-copias', 'gate-csp-superficies-limpias', 'censo-bot-de-bamburu', 'censo-avisos-sin-fabrica', 'verify-correo-freno', 'verify-comprobaciones-sin-correo-real', 'verify-disco-perfiles', 'test-c6-secretos', 'gate-conciliacion-deshacer', 'verify-superadmin-escrituras', 'verify-tenant-lookup-readonly', 'verify-wal-acotado', 'verify-safe-error',
           'verify-xss-escape', 'gate-xss-escape', 'gate-csp-estricta',
           // PUNTO 2 (24 ago 2026) — dar de baja a alguien del equipo: borrar si no dejó rastro,
           // archivar si lo dejó, y decirlo ANTES de pulsar. Antes daba un 500 seco.
@@ -710,6 +716,11 @@ export const AFECTA = [
   // `gate-aviso-copias`. Sin esta regla casaría la genérica de `scripts/` (grupos: []) y tocar el
   // vigilante no habría corrido nada: el gate existiría y no se ejecutaría nunca.
   { re: /^scripts\/bamburu-backup(-heartbeat|-secondary)?\.sh$|^scripts\/avisar-telegram\.mjs$/, grupos: ['infra'] },
+  // 6 sep 2026 — igual que la de arriba y por el mismo motivo. Estos tres son las piezas por las que
+  // pasan las bases cifradas fuera del servidor web: el snapshot de cada noche, la revisión de una
+  // copia descargada y la propia migración. Sin esta regla casaría la genérica de `scripts/`
+  // (grupos: []) y tocarlos no habría corrido `gate-cifrado-en-reposo` ni `gate-restauracion-completa`.
+  { re: /^scripts\/(db-snapshot|db-revisar|cifrar-bases-en-reposo)\.mjs$|^scripts\/ensayo-restauracion-cifrada\.sh$/, grupos: ['infra'] },
   { re: /^scripts\//, grupos: [] },                                              // los gates cambiados se añaden aparte
   { re: /^(modules\/erp\/models\.js|modules\/erp\/schemas\.js|index\.js)$/, grupos: null },   // el tronco: todo
   { re: /^core\//, grupos: null },                                               // auth, CSRF, escapes, cabeceras: todo

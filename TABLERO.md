@@ -9679,15 +9679,29 @@ escenarios y los dos casos incómodos, con relojes de prueba de Stripe) ·
 > de sección, no de memoria ni con números de línea. ~~**La siguiente es
 > `restauracion-prueba-el-sistema-entero`**, que sigue siendo del BLOQUE 2.~~
 >
-> **⚙️ AL DÍA EL 5 SEP 2026, contado otra vez sobre el documento:** el BLOQUE 2 tiene **18 fichas**,
+> ~~**⚙️ AL DÍA EL 5 SEP 2026, contado otra vez sobre el documento:** el BLOQUE 2 tiene **18 fichas**,
 > de las que van **16 hechas**. Hoy se cerraron dos: `csp-erp-migrar-handlers` y, con ella,
 > `csp-unsafe-inline`, que llevaba pendiente a propósito esperándola.
 > **La siguiente es `cifrado-en-reposo-bases`** — el cifrado en reposo de las bases de cada negocio.
 > Lleva **`firma: Ibrahin`**: construir el cifrado es técnico, **custodiar la llave no**, y esa parte
-> es suya. Detrás quedan `permisos-paso-1-censo-rutas` y `retencion-backup-fallo-parcial`.
+> es suya. Detrás quedan `permisos-paso-1-censo-rutas` y `retencion-backup-fallo-parcial`.~~
 > Se tacha en vez de borrarse, que es lo que manda este
 > documento — y porque un puntero rancio manda al siguiente chat al sitio equivocado con toda la
 > confianza del mundo.
+>
+> **⚙️ AL DÍA EL 6 SEP 2026, contado otra vez sobre el documento:** el BLOQUE 2 tiene **18 fichas**,
+> de las que van **17 hechas**. Hoy se cerró **`cifrado-en-reposo-bases`**: las 12 bases vivas
+> (`control.db` + 11 negocios) están cifradas en el disco, con la llave generada y custodiada por
+> Ibrahin. **La siguiente es `permisos-paso-1-censo-rutas`**, y detrás
+> `retencion-backup-fallo-parcial` — con la que se cerraría el bloque.
+>
+> **Y una nota sobre la FIRMA, porque la regla y el encargo se cruzaron.** La ficha llevaba
+> `firma: Ibrahin`, que manda construir en `tarea/<id>` y esperar **fuera de producción**; el encargo
+> del 6 sep mandaba migrar las bases reales, comprobar el Bamburu real y lanzar la copia real. **No
+> caben a la vez, y no se eligió por cuenta propia: se paró y se preguntó.** Decisión de Ibrahin ese
+> mismo día: adelante en producción, su encargo ES la firma. Se deja escrito porque destapa algo del
+> mecanismo: **el árbol de trabajo ES producción** —los timers ejecutan `/home/ubuntu/bamburu/scripts/…`
+> de cero cada noche—, así que en una tarea que toca los datos vivos **la rama sola no protege nada**.
 
 
 ---
@@ -10703,10 +10717,10 @@ Endurecer una pantalla sin migrar sus botones **deja botones muertos EN SILENCIO
 mide pulsando, no cargando.
 
 
-## TAREA — Cifrado en reposo de las bases de cada negocio
+## ✅ HECHA (2026-09-06) — Cifrado en reposo de las bases de cada negocio
 
 - **id:** cifrado-en-reposo-bases
-- **estado:** pendiente
+- **estado:** hecha
 - **firma:** Ibrahin
   > **Decisión de Ibrahin (1 sep 2026), con sus palabras:** **si se pierde la llave se pierde el negocio vivo, no solo las copias. Eso es mío.**
   > Construir el cifrado es técnico. **Custodiar la llave no**: aquí no se pierde una copia, se pierde el negocio en marcha. Es la misma decisión que Ibrahin tomó para las copias el 1 sep —llave en el servidor **y** una copia para él, por pantalla, una sola vez— pero con una consecuencia peor, así que la toma él otra vez y no se hereda por parecido.
@@ -10722,6 +10736,119 @@ otro, pero no de quien tenga el disco.
 
 **Va DESPUÉS del cifrado de las copias a propósito:** las copias salen de la máquina y acaban en dos
 Drive personales; las bases no se mueven de aquí. El mismo esfuerzo protege más arriba.
+
+---
+
+### ✅ HECHO EL 6 SEP 2026 — las 12 bases están cifradas en el disco
+
+**LA LLAVE LA GENERÓ IBRAHIN EN SU TERMINAL**, la máquina se paró y se la pidió. Vive en
+`/etc/bamburu-bases.env` (0600, `ubuntu:ubuntu`), **fuera del repositorio y fuera de
+`/etc/bamburu.env`** — ese entra entero en el `process.env` del proceso expuesto a Internet, que es
+el mismo criterio con el que se dejó fuera la llave de las copias. Custodiada por él en dos sitios
+fuera del servidor. No aparece en ningún registro, ni en un mensaje de error, ni en este documento.
+
+**LO QUE HABÍA, medido antes de tocar nada:** 12 bases vivas (`control.db` + 11 negocios), **las 12
+en claro**, todas en WAL. Y la pila **no admitía cifrado**: `better-sqlite3` 9.6.0 trae SQLite 3.45.3
+vainilla, sin códec. Lo peligroso es que **`PRAGMA key` se acepta sin dar error y no cifra nada** —
+un cifrado escrito a ciegas habría *parecido* funcionar.
+
+**QUÉ SE ELIGIÓ Y POR QUÉ.** `better-sqlite3-multiple-ciphers` (SQLite3 Multiple Ciphers), cifrado
+transparente a nivel de página: es el único camino que cifra los ficheros de verdad **sin cambiar la
+API síncrona ni una sola de las 345 aperturas**, mientras que SQLCipher por `@journeyapps/sqlcipher`
+obligaría a reescribir el árbol entero a asíncrono, y el cifrado de disco exigiría repartir el
+volumen de un servidor vivo y meter la llave en el arranque.
+
+**EL PUNTO ÚNICO, Y POR QUÉ ES UN PAQUETE Y NO UNA FUNCIÓN.** `core/sqlite-bamburu/` **se llama
+`better-sqlite3`**: en `package.json` la dependencia apunta a esa carpeta. Medido sobre el árbol:
+**345 `new Database(` en 255 ficheros**. Un diseño en el que cada sitio tenga que ACORDARSE de poner
+la llave falla el primer día que alguien escriba el 346 — y falla de la peor manera:
+`new Database('data/tenants/loquesea.db')` sin llave sobre un fichero que no existe **no da error,
+crea una base nueva EN CLARO**. Eso ya pasó aquí sin cifrado ninguno: es `null.db`, la base fantasma
+del 3 sep. Con la llave en el motor, olvidarla deja de ser posible. Se cifra por la FORMA de la ruta
+—`…/data/control.db` y `…/data/tenants/*.db`—, así que **una base de alta de negocio nace cifrada
+desde el primer byte** sin que `tenant-provisioning.js` diga nada.
+
+**`kdf_iter = 1`, con su motivo escrito en el código:** las iteraciones de PBKDF2 encarecen la fuerza
+bruta contra una *contraseña*; la nuestra son 32 bytes del generador del sistema, 256 bits reales.
+Derivarla 64.007 veces no la hace más fuerte y **cuesta 30 ms en cada apertura**. Medido:
+**0,29 ms en claro · 29,9 ms con el KDF por defecto · 0,41 ms con `kdf_iter = 1`**. El resto del
+rendimiento, medido: inserción en tanda +0,7 %, lecturas indexadas −6,6 %, tamaño idéntico; lo único
+que se nota es el commit suelto (0,02 → 0,05 ms), y una petición hace una transacción, no trescientas.
+
+**LA MIGRACIÓN, base a base y nunca en bloque** (`scripts/cifrar-bases-en-reposo.mjs`): censo de la
+original → copia consistente previa VERIFICADA → cifrar **sobre la copia** → abrirla con llave y
+comparar → y solo entonces sustituir → y volver a comprobarla ya colocada. **Las 12, una a una, en
+2,4 s**, con el contenido comparado **tabla a tabla y fila a fila** (23.704 filas en
+`desarrollo-bamburu`), no solo `integrity_check` — que responde `ok` a cualquier base sana **aunque
+sea otra**, lección que ya estaba escrita en `bamburu-backup.sh`.
+
+**LAS ORIGINALES NO SE HAN BORRADO.** Apartadas como las bases fantasma, en
+`~/bases-retiradas/2026-09-06-en-claro-antes-de-cifrar/`, con `LEEME.txt` y la huella SHA-256 de cada
+fichero. **Y con ellas las 14 copias viejas de `data/copias-limpieza/` (49 MB)** — decisión de
+Ibrahin el 6 sep: no son bases vivas, así que el cifrado no las tocaba y se habrían quedado 49 MB de
+los mismos clientes y las mismas facturas legibles en el mismo disco. **Su borrado definitivo es una
+segunda decisión, y es de Ibrahin.**
+
+**SI FALTA LA LLAVE O ES OTRA, NO ARRANCA A MEDIAS** — mismo patrón que el arranque sin módulo
+esencial. Y lo dice sin volcar la llave, ni un trozo, ni la ruta de ninguna base. El segundo mensaje
+existe por un motivo: sin él, una llave equivocada saldría mucho más tarde disfrazada de
+`file is not a database`, y quien lo lea se irá a buscar una base corrupta, que es el sitio
+equivocado.
+
+**LO QUE HABRÍA SALIDO MAL Y SE CAZÓ CONSTRUYENDO:** `db-snapshot.mjs` usaba la *Online Backup API*,
+que escribe en un destino abierto SIN llave y por tanto **sacaba de una base cifrada una copia EN
+CLARO** (medido: cabecera `SQLite format 3` y los NIF legibles). Habría dejado cada madrugada a las
+03:33 una copia entera y legible de los once negocios en el disco del servidor — justo lo que esta
+ficha existe para impedir. Ahora usa `VACUUM INTO`, que hereda el cifrado del origen. Y **tres
+piezas llamaban al `sqlite3` DEL SISTEMA** para preguntar si una base abre (la copia de cada noche,
+la restauración completa y el ensayo): ese binario no sabe nada de nuestra llave y habría dicho
+«file is not a database» de copias perfectamente buenas. Se unifican en `scripts/db-revisar.mjs`,
+que hace las mismas dos preguntas de siempre —`integrity_check` ok **y** esquema dentro— y dice si
+la copia venía en claro o cifrada.
+
+**CONSECUENCIA QUE HAY QUE TENER PRESENTE:** las copias nuevas necesitan **esta** llave para
+restaurarse, además de la de `rclone`. Decisión de Ibrahin el 6 sep, y no añade un punto de fallo
+nuevo: si se pierde esta llave ya se ha perdido el negocio vivo.
+
+**LA COMPROBACIÓN:** `scripts/gate-cifrado-en-reposo.mjs`, en **RAPIDO** y en `infra`. Mira los
+ficheros de verdad —no le pregunta al código si cree que cifra— y **se pone rojo a sí mismo tres
+veces** en un banco de /tmp: sin llave, con llave equivocada, y con una base devuelta a claro. Va en
+el rápido por dónde puede romperse: **no hace falta tocar el cifrado para descifrar una base**
+—basta restaurar una copia vieja, mover una ruta, o abrir una con una herramienta que no pase por el
+punto único— y **una base en claro no se nota usando el producto**: funciona igual de bien.
+
+**Y el gate se cazó a sí mismo en la primera pasada:** comprobaba que nadie importara el motor
+cifrado buscando su NOMBRE como texto suelto, y **esa misma línea lo menciona**, así que se
+encontraba a sí mismo. Ahora busca la importación, no el nombre.
+
+**VERIFICADO, y no de oídas:**
+- `gate-cifrado-en-reposo` **24 ✓ · 0 ✗** (0,5 s), con los tres rojos provocados.
+- `gate-restauracion-completa` **21 ✓ · 0 ✗** — y esta vez la copia de mentira va **cifrada**, así
+  que la restauración la descifra y levanta un Bamburu real contra ella.
+- **Dos tareas de reloj ejecutadas DE VERDAD por su unit de systemd**: `bamburu-caducar-reservas`
+  (recorre los 11 negocios) y `bamburu-propuestas`, las dos `success` / salida 0.
+- **La copia de seguridad real completa**, con descarga y comparación byte a byte como siempre; los
+  `restore-test` dicen ahora `ok · cifrada · N objetos`, o sea que **descifran de verdad** lo que
+  bajan de Drive.
+- **Pulsando en el Bamburu real, 23 ✓ · 0 ✗ y mirando las capturas:** panel (3.000,00 € del mes,
+  141 facturas vivas), ficha de cliente, agenda (avanza de día y pinta los cuatro empleados),
+  mostrador (**se pulsa una ficha y el producto CAE EN EL TICKET**: 36,00 € + IVA = 43,56 €) y
+  portal del cliente por enlace de un solo uso.
+
+**Y esa comprobación también se corrigió dos veces, por la misma regla del repo:** la primera versión
+pulsó **el buscador del MENÚ** creyendo que era el del mostrador, y la segunda pulsó un contenedor de
+media pantalla. La buena apunta al mando de verdad, `[data-act="add-prod"]`, sacado del código de la
+pantalla. *Si hay un botón, se pulsa ESE botón.*
+
+**LO QUE ESTO NO HACE, dicho para que nadie se confíe:** no protege del proceso vivo —Bamburu tiene
+la llave en memoria para poder trabajar—, no sustituye a las copias, y no sustituye a la llave de
+`rclone`. Detalle completo en `docs/seguridad/cifrado-en-reposo.md`, incluido cómo volver atrás.
+
+**UN HALLAZGO DE PASO, apuntado y NO arreglado aquí:** `bamburu.service` **no atiende a `SIGTERM`** —
+systemd esperó 90 s y tuvo que matarlo con `SIGKILL` (`Result: timeout`). Es de antes de esta ficha y
+no lo causa el cifrado, pero significa que **cada reinicio corta en seco**. Las 12 bases quedaron
+sanas (`integrity_check` ok en las 12, comprobado tras el SIGKILL), que es lo que WAL promete. Va a
+§Deuda técnica.
 
 
 ## TAREA — Permisos · Paso 1 — dejar escrito qué permiso exige cada ruta

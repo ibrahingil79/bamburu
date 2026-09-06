@@ -21,6 +21,7 @@
 // la prueba de verdad contra la copia de verdad, no de un ensayo con datos inventados.
 //
 //   node scripts/gate-restauracion-completa.mjs
+import Database from 'better-sqlite3';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -62,20 +63,35 @@ function sembrarCopia(dirOrigen, { conEntorno = true, conControl = true, conNego
   rmSync(tmp, { recursive: true, force: true });
   mkdirSync(path.join(tmp, 'uploads'), { recursive: true });
 
+  // ⚙️ 6 SEP 2026 — CIFRADO EN REPOSO. Las dos bases de mentira se sembraban con el `sqlite3` DEL
+  // SISTEMA, así que nacían EN CLARO — y una copia de verdad ya no lo está. Con bases en claro este
+  // gate seguiría en verde midiendo un mundo que ya no existe, que es la peor clase de verde.
+  //
+  // Ahora se crean por el PUNTO ÚNICO y en rutas con la forma de las de verdad
+  // (`…/data/control.db`, `…/data/tenants/<slug>.db`), que es lo que hace que nazcan cifradas con la
+  // llave del servidor — sin que este gate tenga que tocar la llave ni nombrarla.
+  mkdirSync(path.join(tmp, 'data', 'tenants'), { recursive: true });
   if (conControl) {
     // El esquema REAL de `tenants`, no uno inventado: si el de producción cambia, esto se entera.
-    const c = path.join(tmp, 'control.db');
-    execFileSync('sqlite3', [c, `CREATE TABLE tenants (id INTEGER PRIMARY KEY, name TEXT, slug TEXT,
-      db_filename TEXT, plan TEXT, status TEXT, created_at TEXT, updated_at TEXT, country TEXT,
-      suspended_at TEXT, suspend_note TEXT);
-      INSERT INTO tenants (id,name,slug,db_filename,status) VALUES
-        (1,'ZZ Gate Restauracion','zz-gate-restaura','data/tenants/zz-gate-restaura.db','active');`]);
+    const c = path.join(tmp, 'data', 'control.db');
+    const d = new Database(c);
+    try {
+      d.exec(`CREATE TABLE tenants (id INTEGER PRIMARY KEY, name TEXT, slug TEXT,
+        db_filename TEXT, plan TEXT, status TEXT, created_at TEXT, updated_at TEXT, country TEXT,
+        suspended_at TEXT, suspend_note TEXT);
+        INSERT INTO tenants (id,name,slug,db_filename,status) VALUES
+          (1,'ZZ Gate Restauracion','zz-gate-restaura','data/tenants/zz-gate-restaura.db','active');`);
+    } finally { d.close(); }
     rc('copyto', c, dirOrigen + '/control-' + FECHA + '.db');
   }
   if (conNegocio) {
-    const n = path.join(tmp, 'negocio.db');
+    const n = path.join(tmp, 'data', 'tenants', 'zz-gate-restaura.db');
     if (negocioRoto) writeFileSync(n, 'esto no es una base de datos, es basura a propósito\n');
-    else execFileSync('sqlite3', [n, 'CREATE TABLE zz_semilla (x TEXT); INSERT INTO zz_semilla VALUES (\'zz\');']);
+    else {
+      const d = new Database(n);
+      try { d.exec("CREATE TABLE zz_semilla (x TEXT); INSERT INTO zz_semilla VALUES ('zz');"); }
+      finally { d.close(); }
+    }
     rc('copyto', n, dirOrigen + '/zz-gate-restaura-' + FECHA + '.db');
   }
   if (conEntorno) {

@@ -92,6 +92,7 @@ MODO="(sin determinar)"
 RCLONE="/usr/bin/rclone"
 NODE="/usr/bin/node"
 SNAPSHOT="$APP_DIR/scripts/db-snapshot.mjs"
+REVISAR="$APP_DIR/scripts/db-revisar.mjs"
 STATE_DIR="$HOME/.local/state/bamburu-backup"
 LAST_OK="$STATE_DIR/last-success$SUFFIX"
 MANIFIESTO="$STATE_DIR/manifiesto$SUFFIX.jsonl"
@@ -278,11 +279,17 @@ for db in "${DBS[@]}"; do
   "$RCLONE" copy "$snap" "$REMOTE/" 2>&1 | sed 's/^/    /' || true
   verify_uploaded "$snap" "$name" || fail_exit "verificación de subida de $name (tamaño/huella)"
 
-  log "restore-test: descarga + comparación byte a byte + integrity_check de $name"
+  log "restore-test: descarga + comparación byte a byte + revisión de $name"
   "$RCLONE" copy "$REMOTE/$name" "$RDIR/" 2>/dev/null || fail_exit "descarga de restore de $name"
   verify_restored "$snap" "$RDIR/$name" || fail_exit "el restore de $name no es idéntico al original"
-  ic="$(sqlite3 "$RDIR/$name" 'PRAGMA integrity_check;' 2>&1)"
-  [ "$ic" = "ok" ] || fail_exit "integrity_check de $name => $ic"
+  # ⚙️ 6 SEP 2026 — CIFRADO EN REPOSO. Esto era `sqlite3 … 'PRAGMA integrity_check;'`, y el sqlite3
+  # del sistema NO puede abrir una base cifrada: no sabe nada de nuestra llave. Habría dicho «file is
+  # not a database» cada noche, que suena a copia corrupta y no lo es. `db-revisar.mjs` abre por el
+  # punto único, mira la cabecera para saber si la copia va en claro o cifrada, y exige lo MISMO que
+  # se exigía aquí: integrity_check ok Y esquema dentro.
+  ic="$("$NODE" "$REVISAR" "$RDIR/$name" 2>&1)"
+  case "$ic" in (ok*) : ;; (*) fail_exit "revisión de $name => $ic" ;; esac
+  log "  restore-test: $name => $ic"
   rm -f "$RDIR/$name"
 
   sha="$(sha256sum "$snap" | awk '{print $1}')"

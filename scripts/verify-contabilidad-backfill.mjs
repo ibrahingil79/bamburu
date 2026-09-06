@@ -7,9 +7,9 @@
 import Database from 'better-sqlite3';
 import { copyFileSync, unlinkSync } from 'fs';
 import { tmpdir } from 'os';
-import { execFileSync } from 'child_process';
 import { join } from 'path';
 import { randomBytes } from 'crypto';
+import { copiarBase } from './lib/copia-consistente.mjs';
 import { backfillLedger, libroVentas, libroCompras, correccionesDeOtroPeriodo } from '../modules/erp/contabilidad.js';
 import { countsAsReceivable } from '../modules/erp/cobros.js';
 import { countsAsPayable } from '../modules/erp/pagos.js';
@@ -23,7 +23,10 @@ const DBF = join(tmpdir(), 'conta-backfill-' + randomBytes(4).toString('hex') + 
 // -wal, que es donde viven los últimos cambios confirmados. La comprobación medía una foto vieja.
 // Medido: el original leído con su WAL daba desfase 0 y un `cp` del mismo fichero daba 654,00 €.
 // `.backup` de sqlite copia la base ENTERA, WAL incluido, y de forma consistente.
-execFileSync('sqlite3', [SRC, ".backup '" + DBF + "'"]);
+// ⚙️ 6 SEP 2026 — CIFRADO EN REPOSO. Era `sqlite3 … .backup`, y el sqlite3 del sistema no puede
+// abrir una base cifrada. Pasa por `copiarBase`, que es la pieza que ya existía para esto mismo y
+// que ahora copia por dentro, por el punto único. La lección de abajo no cambia ni una coma.
+copiarBase(SRC, DBF);
 const db = new Database(DBF);
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log('  ✓ ' + m); } else { fail++; console.error('  ✗ ' + m); } };
