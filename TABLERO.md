@@ -460,7 +460,7 @@ familia entera en verde: `test-contabilidad` 38 · `verify-contabilidad-diario-m
 > cuándo no se corre— y se espera un sí. Si dice que no, queda pendiente aquí y se vuelve a
 > proponer al abrir la siguiente sesión.
 
-- **Último barrido completo:** 2026-09-07 · `55c177f` · **176/229** · 1388 s
+- **Último barrido completo:** 2026-09-07 · `eae5394` · **163/212** · 1170 s
 - **Estado:** ✅ al día
 
 <!-- BARRIDO:FIN -->
@@ -9299,7 +9299,7 @@ cazar las cinco familias de rastro; si alguien afloja los patrones, cae.
 ## TAREA — Sacar DISA del producto · PASO 2: borrar el código
 
 - **id:** sacar-disa-paso-2-borrado
-- **estado:** 🔨 EN CURSO — 7 sep 2026 (noche)
+- **estado:** ✅ HECHA — 7 sep 2026 (noche) · commits `eae5394` (código) + datos/arreglos abajo
 - **origen:** encargo de Ibrahin, 7 sep 2026
 
 Rutas, servicios, ficheros y tablas de DISA. **Leer antes la trampa de `disa_proposals` de la ficha
@@ -9335,6 +9335,174 @@ graves** (decisión de Ibrahin, 7 sep 2026): quedan como fichas propias, aquí a
    una excepción escrita por Ibrahin: `gate-registro-alta` NO SE TOCA** — sus 4 fallos son del alta
    pública rota (ficha aparte, aquí abajo), no del borrado de DISA. Se queda rojo, con su dueño
    escrito, y no se afloja ni se adapta para que pase.
+
+### ✅ COMMIT 1 (código) — HECHO — 7 sep 2026 (noche) · commit `eae5394`
+
+**39 ficheros borrados**: `modules/disa/` entero (7 ficheros, 4.028 líneas), `core/llm.js`,
+`scripts/lib/disa-accion.mjs`, `scripts/lib/centinela-red.cjs`, y 34 comprobaciones exclusivas del
+chat. **12 ficheros compartidos tocados con cuidado**, quitando solo la parte del chat (detalle
+completo en el mensaje del commit). `core/loader.js` deja de declarar `disa` en `MODULOS` — si no,
+cada arranque intentaría importar un módulo que ya no existe y mandaría un aviso real a Telegram,
+para siempre.
+
+**`gate-disa-fuera-de-la-vista` sigue en verde con el módulo ya borrado del disco: 20 ✓ · 0 ✗.** Las
+cinco intocables comprobadas en navegador: Propuestas, Avisos, Recurrentes, el Vigía y el contador,
+las cinco 200 y cero errores JS. `disa_proposals` intacta, sin tocar (86 filas). El censo de rutas
+de esta mañana (`permisos-paso-1-censo-rutas`) sigue funcionando sobre el árbol reducido: 574 rutas
+(antes 610), 14 públicas — las mismas de siempre, ninguna nueva.
+
+**Nuevo `scripts/verify-sin-proveedor-ia.mjs`** (RAPIDO + infra), que sustituye a
+`censo-ia-apagada.mjs` con el criterio corregido por Ibrahin: cero apariciones de la dirección del
+proveedor en el árbol, código y comprobaciones. **Prueba en rojo hecha en el árbol real**: se
+reintrodujo la dirección del proveedor en `modules/erp/routes/products.js`, el censo la cazó y dijo
+el fichero y la línea exactos, y se devolvió el código a su sitio (diff limpio verificado).
+
+### 🔧 DOS ROJOS PREEXISTENTES DESTAPADOS AL VERIFICAR — no son de este borrado, no se tocan aquí
+
+Aparecieron al ejecutar `gate-cupones-desmontados` y `gate-historial-clinico` tras el redeploy, y
+los dos se comprobaron con causa raíz medida, no supuesta:
+
+- **`gate-cupones-desmontados` → `SqliteError: file is not a database`.** El gate hace
+  `VACUUM INTO` de una copia de trabajo y la abre con `new Database(tmp)` — el `better-sqlite3`
+  normal, **sin la llave del cifrado en reposo** (del 6 sep 2026). Desde que las bases viven
+  cifradas, un `VACUUM INTO` de una base cifrada produce una copia TAMBIÉN cifrada, y abrirla sin
+  llave falla. Colisión entre el cifrado del 6 sep y un gate que no se actualizó. No es de DISA.
+- **`gate-historial-clinico` → «y ningún temporizador del sistema lo toca» falla contra
+  `bamburu-backup-secondary.service`.** El gate busca `/hc_|historial/i` en las unidades de
+  systemd para asegurarse de que nada automático borra el historial clínico. La unidad de la copia
+  secundaria tiene `Environment=BACKUP_HC_URL=` (Healthchecks.io) — **`HC_` de Healthchecks, no de
+  «Historial Clínico»** — y el regex, sin distinguir mayúsculas, la caza por error. Falso positivo
+  de nombres, no un borrado automático real. No es de DISA.
+
+Los dos quedan como deuda técnica, con su causa escrita, para quien los arregle: el primero necesita
+abrir con `core/sqlite-bamburu` en vez del `better-sqlite3` a secas; el segundo necesita que el
+patrón distinga `hc_` (tablas) de `HC_URL` (variable de entorno).
+
+### ✅ COMMIT 2 (datos) — HECHO — 7 sep 2026 (noche)
+
+**Volcado ANTES de tocar nada.** `docs/historico/disa-tablas-del-chat-volcado-2026-09-07.json`
+(212.519 bytes), las 9 tablas del chat de las 17 negocios que tenían algo: 129 `disa_conversations` ·
+62 `disa_conversation_threads` · 68 `disa_agents` · 17 `disa_profile` · 6 `disa_usage` · 4
+`disa_spend` · 1 `disa_quick_chips` · 1 `disa_action_audit` · 0 `disa_agent_instructions`. **Leído
+de vuelta y reconstruido el recuento desde el propio fichero antes de continuar**: coincide exacto.
+
+**Archivado, no destruido — la regla permanente de esta casa.** `ALTER TABLE … RENAME TO …_archived`
+en las 18 bases de negocio: **137 tablas renombradas, 0 saltadas** (ninguna ya archivada de antes).
+Verificado: **0 tablas vivas restantes** de las 9 (todas tienen su `_archived`), y `integrity_check`
+en las 18 bases da `ok` sin excepción.
+
+**`disa_proposals`: 86 antes → 86 después. Idéntica.** No se le tocó ni una fila.
+
+**Y una etiqueta de dato histórico, reescrita sin la palabra "DISA":** 95 filas de `attachments` en
+`desarrollo-bamburu` decían `original_name = 'Compra dictada por voz a DISA'` (compras registradas
+por voz al chat, sin foto/PDF). Pasan a `'Compra registrada por dictado de voz'` — mismo dato, mismo
+significado, solo texto. `modules/erp/attachments.js` ya mostraba esta etiqueta rediseñada desde el
+Commit 1; esto actualiza las filas que ya existían para que digan lo mismo.
+
+**Comprobado tras archivar:** desplegado, `gate-disa-fuera-de-la-vista` sigue en **20 ✓ · 0 ✗**, y
+`disa_proposals` sigue respondiendo con sus 86 filas.
+
+### ⚠️ PENDIENTE, Y NO LO HE TOCADO — la clave sigue en `/etc/bamburu.env`
+
+**`ANTHROPIC_API_KEY` sigue puesta en `/etc/bamburu.env`.** Confirmado que existe la variable, **sin
+leer ni imprimir su valor**. Ningún código del árbol la lee ya —`core/llm.js`, el único que la leía,
+está borrado (`verify-sin-proveedor-ia` lo comprueba)—, así que hoy es un secreto sin puerta, pero
+sigue siendo un secreto vivo en un fichero del servidor.
+
+**Dos cosas pendientes, y las dos son de Ibrahin, no mías:**
+1. **Quitar `ANTHROPIC_API_KEY` de `/etc/bamburu.env`.** No la he tocado — es un fichero de secretos
+   fuera del repo, y tocarlo no estaba en este encargo.
+2. **Revocar la clave en la web del proveedor** (console.anthropic.com), para que aunque alguien la
+   encontrara copiada en algún sitio, ya no sirva para nada.
+
+### 🆘 INCIDENTE DE VERDAD, DURANTE EL BARRIDO — `desarrollo-bamburu.db` se corrompió y se recuperó
+
+Al medir el criterio 5 (barrido completo) aparecieron 23 rojos nuevos de golpe, casi todos de
+márgenes, avisos, propuestas y traslados. La causa raíz **no era el borrado de DISA**: era que
+`data/tenants/desarrollo-bamburu.db` — el negocio que usan decenas de gates como banco de pruebas,
+así que recibe muchísima más carga que cualquier otro — **se corrompió de verdad** (`SqliteError:
+database disk image is malformed`) hacia las 16:00, en medio del barrido completo y de mis propias
+re-ejecuciones de gates en paralelo. Confirmado en el journal del servicio: los primeros 500 con ese
+error salen a las 16:00:55, con la web real devolviendo error a usuarios de ese negocio.
+
+**Blast radius medido, no supuesto:** `quick_check` en las 18 bases de negocio — **solo
+`desarrollo-bamburu` afectada, las otras 17 sanas.** Dentro de ella, la tabla `products` tenía una
+página rota (fallaba incluso un `SELECT *` completo, aunque `COUNT(*)` colaba por un índice sano);
+el resto de tablas leían bien. Causa exacta sin cerrar del todo — el sospechoso más fuerte es la
+carga concurrente de hoy (barrido completo + mis re-ejecuciones sueltas, todo pegando a la MISMA base
+de pruebas a la vez) chocando con el cierre automático de conexiones que entró en vigor hoy mismo
+(`conexiones-que-no-se-cierran`, ver CLAUDE.md) — pero no hay una reproducción aislada que lo pruebe,
+así que se apunta como sospecha medida, no como diagnóstico cerrado.
+
+**Recuperación, sin perder nada real:**
+1. Copia forense del fichero corrupto ANTES de tocarlo (`/home/ubuntu/bases-descartadas/2026-09-07-desarrollo-bamburu-corrupta/`) — no se borró, se archivó.
+2. Encontrada la copia de las 03:34 de esa misma madrugada (`bamburu-backup.timer`, cifrada, verificada con `integrity_check` + restore real la propia noche) — la única copia de esta base con menos de 13 horas de antigüedad.
+3. Las dos únicas facturas creadas entre las 03:34 y la corrupción se revisaron una a una: las dos eran `GATE Rent Cliente`, residuo de pruebas anuladas — cero dato real perdido.
+4. Restaurada esa copia, **rehecho a mano** sobre ella el archivado de las 9 tablas del chat (idéntico al de las demás 17 bases) y el reetiquetado de los 95 `attachments` — para que este negocio quedara en el MISMO estado que le tocaba tras el Commit 2.
+5. Verificado tras la recuperación: `integrity_check` OK, `disa_proposals` = 86 (igual que el resto de este informe), `products` con su recuento normal, el dominio del negocio responde 200 en producción.
+
+**Esto destapó 5 comprobaciones de verdad rotas** (no por la corrupción — por asunciones del propio
+gate que ya no eran ciertas), todas investigadas una a una y corregidas, **ninguna dejada en rojo**:
+
+- **`test-pagos-proveedor`** — importaba `confirmCaptureSvc` de la captura por IA, ya borrada. Sus
+  DOS bloques sobre "creación automática desde la captura C2" (que probaban exactamente el código del
+  chat) se retiraron; las otras 22 pruebas del motor de pagos —de verdad, sin relación con DISA—
+  siguen las 22 en pie. **95 OK.**
+- **`gate-avisos-badge`** — pedía `POST /api/disa/alerts/open`, la ruta del "resumen-primero" del
+  badge de avisos. Se había clasificado como del chat en el Paso 0 y NO LO ERA del todo: la ruta
+  vivía en `modules/disa/index.js`, pero su lógica (`resumirAvisos`, determinista, sin IA, cero
+  llamadas al proveedor) es y era de `modules/erp/avisos.js`. **Se recuperó como
+  `POST /api/erp/avisos/resumen`**, en el módulo vivo de avisos — no se resucita ningún módulo DISA,
+  solo se le devuelve su ruta a una función que nunca fue del chat.
+- **`gate-informes-se-entienden`** — comprobaba que un aviso flotante no quedara tapado por
+  `#disaFab` (la burbuja). La burbuja ya no existe: retirada esa comprobación puntual (el resto de la
+  regla — z-index alto, aviso visible — sigue en pie).
+- **`test-oficio-alta`** — probaba que `disa_profile.sector` seguía vacío, para demostrar que el
+  oficio y el perfil del chat eran cosas distintas. `disa_profile` ya no es una tabla viva (archivada
+  hoy): retirada esa comprobación puntual: lo que hacía falta demostrar (que `business_sector` no se
+  pisa) lo siguen demostrando las otras.
+- **`gate-menu-navegacion`** — el más serio de los cinco, con AVERÍA REAL EN PRODUCCIÓN dentro:
+  1. Un selector `.disa-pin` que el paso 1 (ayer, `ba7142a`) ya había renombrado a `.pin-inicio` —
+     rompía el gate con una excepción desde su primera línea, y por eso llevaba TODO ESTE TIEMPO sin
+     llegar a ejecutar el resto de sus 90 y pico comprobaciones.
+  2. Al arreglar eso, salió a la luz que el fixture del gate seguía llamando «DISA» al área que el
+     paso 1 renombró a «Propuestas» (y seguía esperando la entrada muerta «Hablar con DISA»).
+     Corregido el fixture, y retirado el bloque que pulsaba «Hablar con DISA» para comprobar que
+     abría el chat (ya no existe nada que abrir).
+  3. **Y una AVERÍA REAL, en código vivo, sin relación con hoy salvo la causa:**
+     `modules/erp/routes/menu-routes.js` seguía comparando `a.id === 'disa'` para decidir si pintar
+     el contador de Propuestas pendientes al repintar el menú por AJAX (arrastrar entradas, guardar
+     orden). El paso 1 renombró el id del área a `'propuestas'` en `layout.js` (la carga de página
+     completa) pero se dejó ESTA copia sin tocar — así que, desde el 6 sep 2026, **el contador de
+     Propuestas desaparecía en silencio cada vez que alguien reordenaba su menú**, y nadie se enteró
+     porque nada lo comprobaba (este gate llevaba roto por el `.disa-pin` desde el mismo día).
+     Corregido a `a.id === 'propuestas'`, igual que `layout.js`. **155 OK · 0 fallos.**
+
+**Barrido completo, medido tras todo lo anterior:** `163/212 pasan · 49 NO` (esta mañana: `176/229 ·
+53 NO` — 17 menos en el total porque son las comprobaciones exclusivas del chat, borradas con él).
+Diferencia exacta contra la lista de esta mañana: **7 rojos de esta mañana ya no existen** (eran
+del chat, incluidos en el borrado) y **solo 3 nombres nuevos**, los tres investigados:
+- `gate-copias-cifradas` — reproducido dos veces dentro del barrido, pero UNA réplica aislada del
+  mismo escenario (mismo guion, mismo entorno de mentira) sale en verde. No toca nada de DISA ni de
+  la corrupción — es una interferencia entre los tres escenarios que corren dentro del mismo proceso
+  del propio gate. Deuda técnica anotada, no arreglada hoy: no es de este encargo.
+- `gate-conexiones-que-se-cierran` y `lint-js-servido` — los dos en VERDE al repetirlos solos
+  inmediatamente después del barrido (22/22 y 1185/1185). Con 4 gates corriendo a la vez y dos de
+  ellos con navegador, son artefactos de la concurrencia del propio barrido, no del borrado.
+- `gate-registro-alta` sigue rojo, **tal y como pidió Ibrahin: no se toca.** Sus 4 fallos son del
+  alta pública rota (ficha `alta-publica-rota-sin-formulario`, arriba), no de este borrado.
+
+### Los 5 criterios de HECHO, con su medida final
+
+1. ✅ `gate-disa-fuera-de-la-vista`: **20 ✓ · 0 ✗**.
+2. ✅ Las cinco intocables responden — comprobado en navegador (Commit 1) y reconfirmado con gates
+   reales tras la recuperación de la base (`gate-avisos-badge` 25 OK, `verify-avisos-permisos` 16 OK,
+   `gate-propuestas-reposicion` 16 OK navegador, `verify-propuestas-recurrentes` 55 OK).
+3. ✅ `disa_proposals`: **86 antes → 86 después**, idéntica, en `desarrollo-bamburu` (incluso tras
+   pasar por la recuperación de la base).
+4. ✅ Cero apariciones de `api.anthropic.com` en el árbol — `verify-sin-proveedor-ia`: **4 ✓ · 0 ✗**.
+5. ✅ Barrido completo sin rojos nuevos causados por el borrado (detalle arriba); `gate-registro-alta`
+   se deja rojo, tal cual, con su ficha propia.
 
 ---
 
