@@ -134,6 +134,20 @@ Dos redes de seguridad más, para que esto no dependa de acordarse:
 - `gate-agenda-visual` termina pidiendo la pantalla **a la dirección pública** y comprobando que sirve
   el código nuevo.
 
+## REGLA DE SEGURIDAD — obligatoria en toda tarea, sin excepción
+
+Ninguna tarea se cierra en verde sin responder estas tres, por escrito, en el cierre:
+
+1. ¿Qué permiso exige cada ruta nueva o tocada? Si alguna solo pide "estar dentro", se dice y se
+   justifica.
+2. ¿Qué datos personales toca, dónde se guardan y cómo se borran?
+3. ¿Qué pasa si falla a medias? ¿Puede dejar datos rotos o perderlos en silencio?
+
+Una tarea que funciona pero no responde estas tres NO está terminada.
+
+Motivo, y queda escrito: durante meses se entregó "hecho" comprobando solo que funcionara. La
+factura de eso llegó toda junta el 7 sep 2026.
+
 ## Actualización — FASE DE OPTIMIZACIÓN (v2)
 
 > Este bloque manda sobre lo que siga abajo cuando haya contradicción; el resto se conserva como
