@@ -40,36 +40,23 @@
 // (`[[FunctionLocation]]`), no de una búsqueda de texto: es la posición del manejador que de verdad
 // se ejecuta.
 //
-//   node scripts/censo-permisos-rutas.mjs              → informe legible
-//   node scripts/censo-permisos-rutas.mjs --json <fich> → el mapa entero, para otra herramienta
-//   node scripts/censo-permisos-rutas.mjs --md <fich>  → escribe el inventario en Markdown
+//   node scripts/censo-permisos-rutas.mjs                    → informe legible
+//   node scripts/censo-permisos-rutas.mjs --json <fich>      → el mapa entero, para otra herramienta
+//   node scripts/censo-permisos-rutas.mjs --md <fich>        → escribe el inventario en Markdown
+//   node scripts/censo-permisos-rutas.mjs --declarar <fich>  → escribe la DECLARACIÓN que compara
+//     el arranque (tarea `barrera-de-permisos`, 8 sep 2026) — la ejecuta un humano, nunca el arranque
 
 import { Session } from 'node:inspector/promises';
 import path from 'node:path';
 import { writeFileSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+// ⚙️ 8 SEP 2026 (`barrera-de-permisos`) — LA CLASIFICACIÓN (qué exige cada ruta) se mudó a
+// `core/mapa-rutas.js`: la necesita también el arranque del servidor, y una clasificación en dos
+// copias es la forma exacta en que empiezan a decir cosas distintas. Aquí se queda lo que es solo
+// de este script: `localizar()` (el inspector, caro, y solo para el informe humano) y el CLI.
+import { clasificarRutas } from '../core/mapa-rutas.js';
 
 const RAIZ = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
-
-// Comprobaciones que NO son middleware: se llaman dentro del manejador, así que solo se ven leyendo
-// el código de la función que de verdad sirve la ruta (no el fichero entero).
-const POR_DENTRO = [
-  ['checkPermission', /\bcheckPermission\s*\(/],
-  ['puedeHistorial', /\bpuedeHistorial\s*\(/],
-  ['soloDueno', /\bsoloDueno\s*\(/],
-  ['hasPerm', /\bhasPerm\s*\(/],
-  ['isOwner', /\bget\(\s*['"]isOwner['"]\s*\)/],
-  ['isAdmin', /\bget\(\s*['"]isAdmin['"]\s*\)/],
-];
-
-// Lo que hace que un middleware SEA una guarda: que pueda negar el paso. Se mira su código, no su
-// nombre, porque cada módulo bautiza las suyas como quiere.
-const NIEGA_EL_PASO = [
-  /redirect\s*\(\s*['"`][^'"`]*login/i,      // te manda a la pantalla de entrada
-  /,\s*401\s*\)/,                            // «no autorizado»
-  /,\s*403\s*\)/,                            // «prohibido»
-  /\bdenegarPermiso\s*\(/,                   // la pantalla común de permiso denegado
-];
 
 /** Localiza cada función (fichero:línea) con el inspector. Devuelve un Map fn → 'fichero:línea'. */
 async function localizar(funciones) {
@@ -94,23 +81,6 @@ async function localizar(funciones) {
   delete globalThis.__censoFns;
   sesion.disconnect();
   return sitio;
-}
-
-/**
- * ¿El camino de un middleware (`/admin/*`) alcanza a esta ruta?
- *
- * ⚠️ **`/x/*` alcanza también a `/x` PELADO**, y esto no se dedujo: se midió con Hono a mano el
- * 7 sep 2026 (`use('*')` dentro de un `route('/superadmin', …)` corta igual `/superadmin` que
- * `/superadmin/algo`). La primera versión de este censo exigía la barra y por eso declaraba «sin
- * guarda» la portada del superadmin, que redirige a login desde siempre.
- */
-function alcanza(patron, camino) {
-  if (patron === '*' || patron === '/*' || patron === '/') return true;
-  if (patron.endsWith('/*')) {
-    const raiz = patron.slice(0, -2);                 // '/admin/*' → '/admin'
-    return camino === raiz || camino.startsWith(raiz + '/');
-  }
-  return patron === camino;
 }
 
 /**
@@ -153,93 +123,11 @@ export async function censar() {
   if (!Number(process.env.PORT)) process.env.PORT = String(await puertoLibre());
   const { app } = await import(path.join(RAIZ, 'index.js'));
 
-  const entradas = app.routes;
-  const rutas = entradas.filter(e => e.method !== 'ALL');
-
-  // Localizar TODAS las funciones implicadas, de una vez.
-  const fns = [...new Set(entradas.map(e => e.handler))].filter(f => typeof f === 'function');
+  // Localizar TODAS las funciones implicadas, de una vez — la parte cara, solo para este informe.
+  const fns = [...new Set(app.routes.map(e => e.handler))].filter(f => typeof f === 'function');
   const sitio = await localizar(fns);
 
-  const fuenteDe = h => { try { return Function.prototype.toString.call(h); } catch { return ''; } };
-  const nombreDe = h => h?.name || '(anónima)';
-
-  // Agrupar por (método, camino). Hono mete UNA ENTRADA POR MANEJADOR, así que una ruta declarada
-  // como `get(p, guarda, manejador)` aparece dos veces: contar entradas no es contar rutas.
-  const porRuta = new Map();
-  for (let i = 0; i < entradas.length; i++) {
-    const e = entradas[i];
-    if (e.method === 'ALL') continue;
-    const clave = `${e.method} ${e.path}`;
-    if (!porRuta.has(clave)) porRuta.set(clave, { metodo: e.method, camino: e.path, propios: [], desde: i });
-    porRuta.get(clave).propios.push(e.handler);
-  }
-
-  const salida = [];
-  for (const [, r] of porRuta) {
-    // REGLA 2 — el orden manda: solo alcanzan los `use()` registrados ANTES de esta ruta.
-    const cadena = [];
-    for (let i = 0; i < r.desde; i++) {
-      const m = entradas[i];
-      if (m.method === 'ALL' && alcanza(m.path, r.camino)) cadena.push(m.handler);
-    }
-    cadena.push(...r.propios);
-
-    const permisos = new Set();
-    const guardas = [];            // toda pieza que puede negar el paso, con su nombre y su sitio
-    let sesion = false;
-    const porDentro = new Set();
-
-    for (const h of cadena) {
-      const g = h?.bamburuGuarda;
-      const fuente = fuenteDe(h);
-      if (g?.tipo === 'permiso' && g.permiso) {
-        permisos.add(g.permiso);
-        guardas.push({ nombre: nombreDe(h), permiso: g.permiso, donde: sitio.get(h) || '' });
-        continue;
-      }
-      if (g?.tipo === 'sesion') {
-        sesion = true;
-        guardas.push({ nombre: nombreDe(h), permiso: null, donde: sitio.get(h) || '' });
-        continue;
-      }
-      // REGLA 3 — guarda sin etiqueta: se reconoce por poder negar el paso.
-      if (NIEGA_EL_PASO.some(re => re.test(fuente))) {
-        sesion = true;
-        guardas.push({ nombre: nombreDe(h), permiso: null, donde: sitio.get(h) || '', sinNombrar: true });
-      }
-    }
-    // Comprobaciones POR DENTRO: solo en el manejador FINAL, que es el que sirve la ruta. Mirarlas
-    // en toda la cadena contaba como «lo comprueba» a rutas cuyo middleware casualmente nombraba
-    // una de estas funciones.
-    const ultimo = r.propios[r.propios.length - 1];
-    const fuenteFinal = fuenteDe(ultimo);
-    for (const [nombre, re] of POR_DENTRO) if (re.test(fuenteFinal)) porDentro.add(nombre);
-
-    salida.push({
-      metodo: r.metodo,
-      camino: r.camino,
-      donde: sitio.get(ultimo) || '(sin localizar)',
-      permisos: [...permisos].sort(),
-      sesion,
-      guardas,
-      porDentro: [...porDentro].sort(),
-      veredicto: permisos.size ? 'permiso'
-               : porDentro.size ? 'por dentro'
-               : sesion ? 'solo sesion'
-               : 'sin guarda',
-    });
-  }
-  salida.sort((a, b) => a.camino.localeCompare(b.camino) || a.metodo.localeCompare(b.metodo));
-  return {
-    rutas: salida,
-    entradasEnLaTabla: entradas.length,
-    middleware: entradas.filter(e => e.method === 'ALL').length,
-    total: salida.length,
-    conPermiso: salida.filter(r => r.veredicto === 'permiso').length,
-    porDentro: salida.filter(r => r.veredicto === 'por dentro').length,
-    soloSesion: salida.filter(r => r.veredicto === 'solo sesion').length,
-    sinGuarda: salida.filter(r => r.veredicto === 'sin guarda').length,
-  };
+  return clasificarRutas(app, sitio);
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
@@ -267,6 +155,54 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     }
     writeFileSync(process.argv[md + 1], L.join('\n') + '\n');
     console.error(`  inventario escrito: ${process.argv[md + 1]} (${c.total} rutas)`);
+  }
+  // ⚙️ 8 SEP 2026 (`barrera-de-permisos`) — la DECLARACIÓN que compara el arranque real. La escribe
+  // un humano a mano, ejecutando esto, después de mirar lo que cambió — nunca el propio arranque.
+  //
+  // `pendiente_revisar` en las de «solo sesión»/«sin guarda» que NO son de la propia cuenta: es el
+  // juicio de `permisos-por-ruta.md` (7 sep 2026) llevado adelante por patrón de camino, no
+  // reverificado ruta a ruta hoy. **Declarar no es aprobar** — sigue siendo la pregunta de la tarea
+  // `cerrar-las-38-rutas-abiertas`, no una respuesta.
+  const PROPIA_CUENTA = [
+    /^\/admin$/,                                                // el Inicio: lo ve cualquiera con sesión
+    /^\/(admin\/)?(login|logout|change-password|forgot-password|reset-password)(\/|$|\?)/,
+    /^\/admin\/(perfil|avisos|security|setup-2fa|confirm-2fa|disable-2fa|verify-2fa)(\/|$)/,
+    /^\/api\/erp\/(perfil|avisos)(\/|$)/,
+    /^\/admin\/fichaje$/, /^\/api\/erp\/fichaje$/,
+    /^\/api\/erp\/fichaje\/(entrar|salir|estado)(\/|$)/,      // el PROPIO fichaje; /historial/:userId es de otro
+    /^\/api\/erp\/(inicio|menu)\/orden(\/|$)/,                 // cómo ordena SU Inicio y SU menú
+    /^\/portal(\/|$)/,                                          // el cliente, con su propio enlace
+    /^\/reserva(\/|$)/,                                         // reserva pública, con el suyo
+    /^\/(acceso|registro|find-tenant)(\/|$)/,
+    /^\/api\/registro(\/|$)/,
+    /^\/(favicon|docs)/,
+    /^\/superadmin\/login$/,
+    /^\/stripe\/webhook$/,
+    /^\/admin\/autologin$/,
+    /^\/$/,
+  ];
+  const declarar = process.argv.indexOf('--declarar');
+  if (declarar !== -1 && process.argv[declarar + 1]) {
+    const rutas = {};
+    for (const r of c.rutas) {
+      const clave = r.metodo + ' ' + r.camino;
+      const fila = { veredicto: r.veredicto };
+      if (r.permisos.length) fila.permisos = r.permisos;
+      if ((r.veredicto === 'solo sesion' || r.veredicto === 'sin guarda')
+          && !PROPIA_CUENTA.some(re => re.test(r.camino))) {
+        fila.pendiente_revisar = true;
+      }
+      rutas[clave] = fila;
+    }
+    const declaracion = {
+      generado_en: new Date().toISOString(),
+      generado_por: 'node scripts/censo-permisos-rutas.mjs --declarar',
+      total_rutas: c.total,
+      rutas,
+    };
+    writeFileSync(process.argv[declarar + 1], JSON.stringify(declaracion, null, 2) + '\n');
+    const pendientes = Object.values(rutas).filter(r => r.pendiente_revisar).length;
+    console.error(`  declaración escrita: ${process.argv[declarar + 1]} (${c.total} rutas, ${pendientes} pendientes de revisar)`);
   }
   console.log(`\nCENSO DE PERMISOS POR RUTA\n`);
   console.log(`  entradas en la tabla de Hono : ${c.entradasEnLaTabla}   (una por manejador)`);

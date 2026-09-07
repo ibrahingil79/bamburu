@@ -1,0 +1,3115 @@
+{
+  "generado_en": "2026-09-07T20:09:16.140Z",
+  "generado_por": "node scripts/censo-permisos-rutas.mjs --declarar",
+  "total_rutas": 573,
+  "rutas": {
+    "GET /": {
+      "veredicto": "sin guarda"
+    },
+    "GET /acceso": {
+      "veredicto": "sin guarda"
+    },
+    "GET /acceso/entrar": {
+      "veredicto": "sin guarda"
+    },
+    "GET /admin": {
+      "veredicto": "solo sesion"
+    },
+    "GET /admin/activity": {
+      "veredicto": "permiso",
+      "permisos": [
+        "admin.manage_users"
+      ]
+    },
+    "GET /admin/albaranes": {
+      "veredicto": "permiso",
+      "permisos": [
+        "albaranes.read"
+      ]
+    },
+    "GET /admin/albaranes/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "albaranes.read"
+      ]
+    },
+    "GET /admin/albaranes/:id/pdf": {
+      "veredicto": "permiso",
+      "permisos": [
+        "albaranes.read"
+      ]
+    },
+    "GET /admin/albaranes/new": {
+      "veredicto": "permiso",
+      "permisos": [
+        "albaranes.create"
+      ]
+    },
+    "GET /admin/analytics": {
+      "veredicto": "permiso",
+      "permisos": [
+        "analytics.read"
+      ]
+    },
+    "GET /admin/autologin": {
+      "veredicto": "sin guarda"
+    },
+    "GET /admin/avisos": {
+      "veredicto": "solo sesion"
+    },
+    "GET /admin/categories": {
+      "veredicto": "permiso",
+      "permisos": [
+        "categories.read"
+      ]
+    },
+    "GET /admin/change-password": {
+      "veredicto": "solo sesion"
+    },
+    "POST /admin/change-password": {
+      "veredicto": "solo sesion"
+    },
+    "GET /admin/citas": {
+      "veredicto": "permiso",
+      "permisos": [
+        "citas.read"
+      ]
+    },
+    "GET /admin/citas/ajustes": {
+      "veredicto": "permiso",
+      "permisos": [
+        "citas.edit"
+      ]
+    },
+    "GET /admin/citas/cola": {
+      "veredicto": "permiso",
+      "permisos": [
+        "citas.read"
+      ]
+    },
+    "GET /admin/citas/horarios": {
+      "veredicto": "permiso",
+      "permisos": [
+        "citas.read"
+      ]
+    },
+    "GET /admin/citas/publica": {
+      "veredicto": "permiso",
+      "permisos": [
+        "citas.edit"
+      ]
+    },
+    "GET /admin/citas/recursos": {
+      "veredicto": "permiso",
+      "permisos": [
+        "citas.read"
+      ]
+    },
+    "GET /admin/citas/servicios": {
+      "veredicto": "permiso",
+      "permisos": [
+        "citas.read"
+      ]
+    },
+    "GET /admin/clients": {
+      "veredicto": "permiso",
+      "permisos": [
+        "clients.read"
+      ]
+    },
+    "GET /admin/clients/:id{[0-9]+}": {
+      "veredicto": "permiso",
+      "permisos": [
+        "clients.read"
+      ]
+    },
+    "GET /admin/clients/groups": {
+      "veredicto": "permiso",
+      "permisos": [
+        "clients.read"
+      ]
+    },
+    "GET /admin/cobros": {
+      "veredicto": "permiso",
+      "permisos": [
+        "cobros.read"
+      ]
+    },
+    "GET /admin/conciliacion": {
+      "veredicto": "permiso",
+      "permisos": [
+        "conciliacion.read"
+      ]
+    },
+    "POST /admin/conciliacion/:id/conciliar-cobro": {
+      "veredicto": "permiso",
+      "permisos": [
+        "conciliacion.manage"
+      ]
+    },
+    "POST /admin/conciliacion/:id/conciliar-factura": {
+      "veredicto": "permiso",
+      "permisos": [
+        "conciliacion.manage"
+      ]
+    },
+    "POST /admin/conciliacion/:id/conciliar-gasto": {
+      "veredicto": "permiso",
+      "permisos": [
+        "conciliacion.manage"
+      ]
+    },
+    "POST /admin/conciliacion/:id/conciliar-pago": {
+      "veredicto": "permiso",
+      "permisos": [
+        "conciliacion.manage"
+      ]
+    },
+    "POST /admin/conciliacion/:id/deshacer": {
+      "veredicto": "permiso",
+      "permisos": [
+        "conciliacion.manage"
+      ]
+    },
+    "POST /admin/conciliacion/:id/ignorar": {
+      "veredicto": "permiso",
+      "permisos": [
+        "conciliacion.manage"
+      ]
+    },
+    "GET /admin/conciliacion/export.csv": {
+      "veredicto": "permiso",
+      "permisos": [
+        "conciliacion.read"
+      ]
+    },
+    "GET /admin/conciliacion/export.xlsx": {
+      "veredicto": "permiso",
+      "permisos": [
+        "conciliacion.read"
+      ]
+    },
+    "POST /admin/conciliacion/import": {
+      "veredicto": "permiso",
+      "permisos": [
+        "conciliacion.manage"
+      ]
+    },
+    "POST /admin/confirm-2fa": {
+      "veredicto": "solo sesion"
+    },
+    "GET /admin/contabilidad": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.read"
+      ]
+    },
+    "GET /admin/contabilidad/bienes": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.read"
+      ]
+    },
+    "POST /admin/contabilidad/bienes": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.create"
+      ]
+    },
+    "GET /admin/contabilidad/bienes.csv": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.read"
+      ]
+    },
+    "GET /admin/contabilidad/bienes.pdf": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.read"
+      ]
+    },
+    "GET /admin/contabilidad/bienes.xlsx": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.read"
+      ]
+    },
+    "POST /admin/contabilidad/bienes/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.create"
+      ]
+    },
+    "POST /admin/contabilidad/bienes/:id/baja": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.create"
+      ]
+    },
+    "POST /admin/contabilidad/bienes/:id/reactivar": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.create"
+      ]
+    },
+    "GET /admin/contabilidad/compras": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.read"
+      ]
+    },
+    "GET /admin/contabilidad/compras.csv": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.read"
+      ]
+    },
+    "GET /admin/contabilidad/compras.pdf": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.read"
+      ]
+    },
+    "GET /admin/contabilidad/compras.xlsx": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.read"
+      ]
+    },
+    "GET /admin/contabilidad/diario": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.read"
+      ]
+    },
+    "GET /admin/contabilidad/diario.csv": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.read"
+      ]
+    },
+    "GET /admin/contabilidad/diario.pdf": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.read"
+      ]
+    },
+    "GET /admin/contabilidad/diario.xlsx": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.read"
+      ]
+    },
+    "GET /admin/contabilidad/mayor": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.read"
+      ]
+    },
+    "GET /admin/contabilidad/mayor.csv": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.read"
+      ]
+    },
+    "GET /admin/contabilidad/mayor.pdf": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.read"
+      ]
+    },
+    "GET /admin/contabilidad/mayor.xlsx": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.read"
+      ]
+    },
+    "GET /admin/contabilidad/modelos": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.read"
+      ]
+    },
+    "GET /admin/contabilidad/modelos.csv": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.read"
+      ]
+    },
+    "GET /admin/contabilidad/modelos.pdf": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.read"
+      ]
+    },
+    "GET /admin/contabilidad/pyg": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.read"
+      ]
+    },
+    "GET /admin/contabilidad/pyg.csv": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.read"
+      ]
+    },
+    "GET /admin/contabilidad/pyg.pdf": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.read"
+      ]
+    },
+    "GET /admin/contabilidad/pyg.xlsx": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.read"
+      ]
+    },
+    "GET /admin/contabilidad/ventas": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.read"
+      ]
+    },
+    "GET /admin/contabilidad/ventas.csv": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.read"
+      ]
+    },
+    "GET /admin/contabilidad/ventas.pdf": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.read"
+      ]
+    },
+    "GET /admin/contabilidad/ventas.xlsx": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.read"
+      ]
+    },
+    "GET /admin/crm": {
+      "veredicto": "permiso",
+      "permisos": [
+        "crm.read"
+      ]
+    },
+    "GET /admin/crm/cola": {
+      "veredicto": "permiso",
+      "permisos": [
+        "crm.read"
+      ]
+    },
+    "GET /admin/crm/tareas": {
+      "veredicto": "permiso",
+      "permisos": [
+        "crm.read"
+      ]
+    },
+    "GET /admin/descuentos": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.read"
+      ]
+    },
+    "POST /admin/disable-2fa": {
+      "veredicto": "solo sesion"
+    },
+    "GET /admin/facturar-horas": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.create"
+      ]
+    },
+    "GET /admin/fichaje": {
+      "veredicto": "solo sesion"
+    },
+    "GET /admin/forgot-password": {
+      "veredicto": "solo sesion"
+    },
+    "POST /admin/forgot-password": {
+      "veredicto": "solo sesion"
+    },
+    "GET /admin/historial/:id{[0-9]+}": {
+      "veredicto": "permiso",
+      "permisos": [
+        "historial.read"
+      ]
+    },
+    "POST /admin/historial/:id{[0-9]+}/antecedentes": {
+      "veredicto": "permiso",
+      "permisos": [
+        "historial.read"
+      ]
+    },
+    "POST /admin/historial/:id{[0-9]+}/borrar": {
+      "veredicto": "permiso",
+      "permisos": [
+        "historial.read"
+      ]
+    },
+    "POST /admin/historial/:id{[0-9]+}/consentimiento": {
+      "veredicto": "permiso",
+      "permisos": [
+        "historial.read"
+      ]
+    },
+    "POST /admin/historial/:id{[0-9]+}/consentimiento/revocar": {
+      "veredicto": "permiso",
+      "permisos": [
+        "historial.read"
+      ]
+    },
+    "GET /admin/historial/:id{[0-9]+}/copia": {
+      "veredicto": "permiso",
+      "permisos": [
+        "historial.read"
+      ]
+    },
+    "POST /admin/historial/:id{[0-9]+}/nota": {
+      "veredicto": "permiso",
+      "permisos": [
+        "historial.read"
+      ]
+    },
+    "GET /admin/historial/accesos": {
+      "veredicto": "permiso",
+      "permisos": [
+        "historial.read"
+      ]
+    },
+    "GET /admin/inventory": {
+      "veredicto": "permiso",
+      "permisos": [
+        "inventory.read"
+      ]
+    },
+    "GET /admin/invoices": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.read"
+      ]
+    },
+    "GET /admin/invoices/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.read"
+      ]
+    },
+    "GET /admin/invoices/:id/facturae.xml": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.read"
+      ]
+    },
+    "GET /admin/invoices/:id/pdf": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.read"
+      ]
+    },
+    "GET /admin/invoices/:id/rectificativa/new": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.create"
+      ]
+    },
+    "GET /admin/invoices/new": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.create"
+      ]
+    },
+    "GET /admin/listados/:clave/imprimir": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "GET /admin/listados/:clave/pdf": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "GET /admin/login": {
+      "veredicto": "solo sesion"
+    },
+    "POST /admin/login": {
+      "veredicto": "solo sesion"
+    },
+    "GET /admin/logout": {
+      "veredicto": "solo sesion"
+    },
+    "GET /admin/migracion": {
+      "veredicto": "permiso",
+      "permisos": [
+        "company.read"
+      ]
+    },
+    "GET /admin/migracion/importar": {
+      "veredicto": "permiso",
+      "permisos": [
+        "company.read"
+      ]
+    },
+    "GET /admin/mostrador": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.create"
+      ]
+    },
+    "GET /admin/mostrador/:id/pdf": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.read"
+      ]
+    },
+    "GET /admin/pagos": {
+      "veredicto": "permiso",
+      "permisos": [
+        "purchases.read"
+      ]
+    },
+    "GET /admin/pedidos": {
+      "veredicto": "permiso",
+      "permisos": [
+        "pedidos.read"
+      ]
+    },
+    "GET /admin/pedidos/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "pedidos.read"
+      ]
+    },
+    "GET /admin/pedidos/:id/edit": {
+      "veredicto": "permiso",
+      "permisos": [
+        "pedidos.edit"
+      ]
+    },
+    "GET /admin/pedidos/:id/pdf": {
+      "veredicto": "permiso",
+      "permisos": [
+        "pedidos.read"
+      ]
+    },
+    "GET /admin/pedidos/new": {
+      "veredicto": "permiso",
+      "permisos": [
+        "pedidos.create"
+      ]
+    },
+    "GET /admin/perfil": {
+      "veredicto": "solo sesion"
+    },
+    "POST /admin/perfil/confirm-2fa": {
+      "veredicto": "solo sesion"
+    },
+    "POST /admin/perfil/disable-2fa": {
+      "veredicto": "solo sesion"
+    },
+    "POST /admin/perfil/password": {
+      "veredicto": "solo sesion"
+    },
+    "POST /admin/perfil/regenerar-rescate": {
+      "veredicto": "solo sesion"
+    },
+    "GET /admin/portal": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.read"
+      ]
+    },
+    "POST /admin/portal/enviar/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.read"
+      ]
+    },
+    "POST /admin/portal/iban": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.read"
+      ]
+    },
+    "GET /admin/portal/mensajes/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.read"
+      ]
+    },
+    "POST /admin/portal/mensajes/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.read"
+      ]
+    },
+    "GET /admin/products": {
+      "veredicto": "permiso",
+      "permisos": [
+        "products.read"
+      ]
+    },
+    "GET /admin/propuestas": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "GET /admin/proyectos": {
+      "veredicto": "permiso",
+      "permisos": [
+        "proyectos.read"
+      ]
+    },
+    "GET /admin/purchase-order-receipts/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "purchases.read"
+      ]
+    },
+    "GET /admin/purchase-orders": {
+      "veredicto": "permiso",
+      "permisos": [
+        "purchases.read"
+      ]
+    },
+    "GET /admin/purchase-orders/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "purchases.read"
+      ]
+    },
+    "GET /admin/purchase-orders/:id{[0-9]+}/pdf": {
+      "veredicto": "permiso",
+      "permisos": [
+        "purchases.read"
+      ]
+    },
+    "GET /admin/purchase-orders/:id/edit": {
+      "veredicto": "permiso",
+      "permisos": [
+        "purchases.edit"
+      ]
+    },
+    "GET /admin/purchase-orders/:id/receipts/new": {
+      "veredicto": "permiso",
+      "permisos": [
+        "purchases.create"
+      ]
+    },
+    "GET /admin/purchase-orders/new": {
+      "veredicto": "permiso",
+      "permisos": [
+        "purchases.create"
+      ]
+    },
+    "GET /admin/purchases": {
+      "veredicto": "permiso",
+      "permisos": [
+        "purchases.read"
+      ]
+    },
+    "GET /admin/purchases/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "purchases.read"
+      ]
+    },
+    "GET /admin/purchases/capture": {
+      "veredicto": "permiso",
+      "permisos": [
+        "purchases.create"
+      ]
+    },
+    "GET /admin/purchases/new": {
+      "veredicto": "permiso",
+      "permisos": [
+        "purchases.create"
+      ]
+    },
+    "GET /admin/quotes": {
+      "veredicto": "permiso",
+      "permisos": [
+        "quotes.read"
+      ]
+    },
+    "GET /admin/quotes/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "quotes.read"
+      ]
+    },
+    "GET /admin/quotes/:id/edit": {
+      "veredicto": "permiso",
+      "permisos": [
+        "quotes.edit"
+      ]
+    },
+    "GET /admin/quotes/:id/pdf": {
+      "veredicto": "permiso",
+      "permisos": [
+        "quotes.read"
+      ]
+    },
+    "GET /admin/quotes/new": {
+      "veredicto": "permiso",
+      "permisos": [
+        "quotes.create"
+      ]
+    },
+    "GET /admin/recurrentes": {
+      "veredicto": "permiso",
+      "permisos": [
+        "recurrentes.read"
+      ]
+    },
+    "POST /admin/recurrentes": {
+      "veredicto": "permiso",
+      "permisos": [
+        "recurrentes.manage"
+      ]
+    },
+    "POST /admin/recurrentes/:id/activar": {
+      "veredicto": "permiso",
+      "permisos": [
+        "recurrentes.manage"
+      ]
+    },
+    "POST /admin/recurrentes/:id/pausar": {
+      "veredicto": "permiso",
+      "permisos": [
+        "recurrentes.manage"
+      ]
+    },
+    "POST /admin/recurrentes/borrador/:id/emitir": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.create"
+      ]
+    },
+    "POST /admin/recurrentes/borrador/:id/omitir": {
+      "veredicto": "permiso",
+      "permisos": [
+        "recurrentes.manage"
+      ]
+    },
+    "GET /admin/rentabilidad": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.read",
+        "proyectos.read"
+      ]
+    },
+    "GET /admin/reset-password": {
+      "veredicto": "solo sesion"
+    },
+    "POST /admin/reset-password": {
+      "veredicto": "solo sesion"
+    },
+    "GET /admin/security": {
+      "veredicto": "solo sesion"
+    },
+    "GET /admin/settings": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "GET /admin/settings/avisos": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "GET /admin/settings/plantillas": {
+      "veredicto": "permiso",
+      "permisos": [
+        "company.read"
+      ]
+    },
+    "GET /admin/settings/situacion-fiscal": {
+      "veredicto": "permiso",
+      "permisos": [
+        "company.read"
+      ]
+    },
+    "GET /admin/setup-2fa": {
+      "veredicto": "solo sesion"
+    },
+    "POST /admin/setup-2fa": {
+      "veredicto": "solo sesion"
+    },
+    "GET /admin/stock-transfers": {
+      "veredicto": "permiso",
+      "permisos": [
+        "inventory.read"
+      ]
+    },
+    "GET /admin/stock-transfers/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "inventory.read"
+      ]
+    },
+    "GET /admin/stock-transfers/new": {
+      "veredicto": "permiso",
+      "permisos": [
+        "inventory.edit"
+      ]
+    },
+    "GET /admin/supplier-invoices": {
+      "veredicto": "permiso",
+      "permisos": [
+        "purchases.read"
+      ]
+    },
+    "GET /admin/supplier-invoices/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "purchases.read"
+      ]
+    },
+    "GET /admin/supplier-invoices/new": {
+      "veredicto": "permiso",
+      "permisos": [
+        "purchases.create"
+      ]
+    },
+    "GET /admin/supplier-returns": {
+      "veredicto": "permiso",
+      "permisos": [
+        "purchases.read"
+      ]
+    },
+    "GET /admin/supplier-returns/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "purchases.read"
+      ]
+    },
+    "GET /admin/supplier-returns/new": {
+      "veredicto": "permiso",
+      "permisos": [
+        "purchases.create"
+      ]
+    },
+    "GET /admin/suppliers": {
+      "veredicto": "permiso",
+      "permisos": [
+        "suppliers.read"
+      ]
+    },
+    "GET /admin/suscripcion": {
+      "veredicto": "por dentro"
+    },
+    "GET /admin/suscripcion/cancelado": {
+      "veredicto": "por dentro"
+    },
+    "GET /admin/suscripcion/descargar": {
+      "veredicto": "por dentro"
+    },
+    "GET /admin/suscripcion/vuelta": {
+      "veredicto": "por dentro"
+    },
+    "GET /admin/tags": {
+      "veredicto": "permiso",
+      "permisos": [
+        "tags.read"
+      ]
+    },
+    "GET /admin/tiempo": {
+      "veredicto": "permiso",
+      "permisos": [
+        "tiempo.read"
+      ]
+    },
+    "GET /admin/users": {
+      "veredicto": "permiso",
+      "permisos": [
+        "admin.manage_users"
+      ]
+    },
+    "POST /admin/verifactu/enviar/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.create"
+      ]
+    },
+    "GET /admin/verifactu/envios": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.read"
+      ]
+    },
+    "POST /admin/verify-2fa": {
+      "veredicto": "solo sesion"
+    },
+    "GET /admin/vigia": {
+      "veredicto": "permiso",
+      "permisos": [
+        "analytics.read"
+      ]
+    },
+    "GET /admin/warehouses": {
+      "veredicto": "permiso",
+      "permisos": [
+        "inventory.read"
+      ]
+    },
+    "POST /api/erp/albaranes": {
+      "veredicto": "permiso",
+      "permisos": [
+        "albaranes.create"
+      ]
+    },
+    "GET /api/erp/albaranes/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "albaranes.read"
+      ]
+    },
+    "POST /api/erp/albaranes/:id/anular": {
+      "veredicto": "permiso",
+      "permisos": [
+        "albaranes.edit"
+      ]
+    },
+    "POST /api/erp/albaranes/:id/factura": {
+      "veredicto": "permiso",
+      "permisos": [
+        "albaranes.edit"
+      ]
+    },
+    "GET /api/erp/analytics/best-sellers": {
+      "veredicto": "permiso",
+      "permisos": [
+        "analytics.read"
+      ]
+    },
+    "GET /api/erp/analytics/constructor/areas": {
+      "veredicto": "permiso",
+      "permisos": [
+        "analytics.read"
+      ]
+    },
+    "GET /api/erp/analytics/constructor/campos": {
+      "veredicto": "permiso",
+      "permisos": [
+        "analytics.read"
+      ]
+    },
+    "GET /api/erp/analytics/constructor/comparables": {
+      "veredicto": "permiso",
+      "permisos": [
+        "analytics.read"
+      ]
+    },
+    "POST /api/erp/analytics/constructor/comparar": {
+      "veredicto": "permiso",
+      "permisos": [
+        "analytics.read"
+      ]
+    },
+    "POST /api/erp/analytics/constructor/cruzar": {
+      "veredicto": "permiso",
+      "permisos": [
+        "analytics.read"
+      ]
+    },
+    "GET /api/erp/analytics/constructor/medidas": {
+      "veredicto": "permiso",
+      "permisos": [
+        "analytics.read"
+      ]
+    },
+    "POST /api/erp/analytics/constructor/medidas": {
+      "veredicto": "permiso",
+      "permisos": [
+        "analytics.read"
+      ]
+    },
+    "DELETE /api/erp/analytics/constructor/medidas/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "analytics.read"
+      ]
+    },
+    "GET /api/erp/analytics/constructor/paneles": {
+      "veredicto": "permiso",
+      "permisos": [
+        "analytics.read"
+      ]
+    },
+    "POST /api/erp/analytics/constructor/paneles": {
+      "veredicto": "permiso",
+      "permisos": [
+        "analytics.read"
+      ]
+    },
+    "DELETE /api/erp/analytics/constructor/paneles/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "analytics.read"
+      ]
+    },
+    "GET /api/erp/analytics/export/clients": {
+      "veredicto": "permiso",
+      "permisos": [
+        "analytics.read"
+      ]
+    },
+    "GET /api/erp/analytics/export/informes": {
+      "veredicto": "permiso",
+      "permisos": [
+        "analytics.read"
+      ]
+    },
+    "GET /api/erp/analytics/export/margen": {
+      "veredicto": "permiso",
+      "permisos": [
+        "analytics.read"
+      ]
+    },
+    "GET /api/erp/analytics/export/products": {
+      "veredicto": "permiso",
+      "permisos": [
+        "analytics.read"
+      ]
+    },
+    "GET /api/erp/analytics/export/sales": {
+      "veredicto": "permiso",
+      "permisos": [
+        "analytics.read"
+      ]
+    },
+    "GET /api/erp/analytics/informes": {
+      "veredicto": "permiso",
+      "permisos": [
+        "analytics.read"
+      ]
+    },
+    "GET /api/erp/analytics/margen": {
+      "veredicto": "permiso",
+      "permisos": [
+        "analytics.read"
+      ]
+    },
+    "GET /api/erp/analytics/overview": {
+      "veredicto": "permiso",
+      "permisos": [
+        "analytics.read"
+      ]
+    },
+    "GET /api/erp/analytics/plan": {
+      "veredicto": "permiso",
+      "permisos": [
+        "analytics.read"
+      ]
+    },
+    "POST /api/erp/analytics/plan": {
+      "veredicto": "permiso",
+      "permisos": [
+        "analytics.read"
+      ]
+    },
+    "GET /api/erp/analytics/responsable": {
+      "veredicto": "permiso",
+      "permisos": [
+        "analytics.read"
+      ]
+    },
+    "GET /api/erp/analytics/sales-by-period": {
+      "veredicto": "permiso",
+      "permisos": [
+        "analytics.read"
+      ]
+    },
+    "GET /api/erp/analytics/stock-report": {
+      "veredicto": "permiso",
+      "permisos": [
+        "analytics.read"
+      ]
+    },
+    "GET /api/erp/avisos": {
+      "veredicto": "solo sesion"
+    },
+    "GET /api/erp/avisos/contador": {
+      "veredicto": "solo sesion"
+    },
+    "POST /api/erp/avisos/no-visto": {
+      "veredicto": "solo sesion"
+    },
+    "POST /api/erp/avisos/resumen": {
+      "veredicto": "solo sesion"
+    },
+    "POST /api/erp/avisos/visto": {
+      "veredicto": "solo sesion"
+    },
+    "GET /api/erp/categories": {
+      "veredicto": "permiso",
+      "permisos": [
+        "categories.read"
+      ]
+    },
+    "POST /api/erp/categories": {
+      "veredicto": "permiso",
+      "permisos": [
+        "categories.create"
+      ]
+    },
+    "DELETE /api/erp/categories/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "categories.delete"
+      ]
+    },
+    "PUT /api/erp/categories/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "categories.edit"
+      ]
+    },
+    "GET /api/erp/citas": {
+      "veredicto": "permiso",
+      "permisos": [
+        "citas.read"
+      ]
+    },
+    "POST /api/erp/citas": {
+      "veredicto": "permiso",
+      "permisos": [
+        "citas.edit"
+      ]
+    },
+    "DELETE /api/erp/citas/:id{[0-9]+}": {
+      "veredicto": "permiso",
+      "permisos": [
+        "citas.edit"
+      ]
+    },
+    "GET /api/erp/citas/:id{[0-9]+}": {
+      "veredicto": "permiso",
+      "permisos": [
+        "citas.read"
+      ]
+    },
+    "PUT /api/erp/citas/:id{[0-9]+}": {
+      "veredicto": "permiso",
+      "permisos": [
+        "citas.edit"
+      ]
+    },
+    "POST /api/erp/citas/:id/atender": {
+      "veredicto": "permiso",
+      "permisos": [
+        "citas.edit"
+      ]
+    },
+    "POST /api/erp/citas/:id/aviso": {
+      "veredicto": "permiso",
+      "permisos": [
+        "citas.edit"
+      ]
+    },
+    "GET /api/erp/citas/:id/aviso-links": {
+      "veredicto": "permiso",
+      "permisos": [
+        "citas.read"
+      ]
+    },
+    "POST /api/erp/citas/:id/estado": {
+      "veredicto": "permiso",
+      "permisos": [
+        "citas.edit"
+      ]
+    },
+    "POST /api/erp/citas/:id/mover": {
+      "veredicto": "permiso",
+      "permisos": [
+        "citas.edit"
+      ]
+    },
+    "GET /api/erp/citas/agenda": {
+      "veredicto": "permiso",
+      "permisos": [
+        "citas.read"
+      ]
+    },
+    "POST /api/erp/citas/ajustes": {
+      "veredicto": "permiso",
+      "permisos": [
+        "citas.edit"
+      ]
+    },
+    "POST /api/erp/citas/bloqueo": {
+      "veredicto": "permiso",
+      "permisos": [
+        "citas.edit"
+      ]
+    },
+    "DELETE /api/erp/citas/bloqueo/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "citas.edit"
+      ]
+    },
+    "GET /api/erp/citas/cola/data": {
+      "veredicto": "permiso",
+      "permisos": [
+        "citas.read"
+      ]
+    },
+    "POST /api/erp/citas/excepcion": {
+      "veredicto": "permiso",
+      "permisos": [
+        "citas.edit"
+      ]
+    },
+    "DELETE /api/erp/citas/excepcion/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "citas.edit"
+      ]
+    },
+    "GET /api/erp/citas/horario": {
+      "veredicto": "permiso",
+      "permisos": [
+        "citas.read"
+      ]
+    },
+    "POST /api/erp/citas/horario": {
+      "veredicto": "permiso",
+      "permisos": [
+        "citas.edit"
+      ]
+    },
+    "GET /api/erp/citas/huecos": {
+      "veredicto": "permiso",
+      "permisos": [
+        "citas.read"
+      ]
+    },
+    "GET /api/erp/citas/mes": {
+      "veredicto": "permiso",
+      "permisos": [
+        "citas.read"
+      ]
+    },
+    "GET /api/erp/citas/meta": {
+      "veredicto": "permiso",
+      "permisos": [
+        "citas.read"
+      ]
+    },
+    "POST /api/erp/citas/recursos": {
+      "veredicto": "permiso",
+      "permisos": [
+        "citas.edit"
+      ]
+    },
+    "DELETE /api/erp/citas/recursos/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "citas.edit"
+      ]
+    },
+    "PUT /api/erp/citas/recursos/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "citas.edit"
+      ]
+    },
+    "GET /api/erp/citas/recursos/list": {
+      "veredicto": "permiso",
+      "permisos": [
+        "citas.read"
+      ]
+    },
+    "POST /api/erp/citas/serie": {
+      "veredicto": "permiso",
+      "permisos": [
+        "citas.edit"
+      ]
+    },
+    "POST /api/erp/citas/servicios": {
+      "veredicto": "permiso",
+      "permisos": [
+        "citas.edit"
+      ]
+    },
+    "PUT /api/erp/citas/servicios/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "citas.edit"
+      ]
+    },
+    "GET /api/erp/citas/servicios/list": {
+      "veredicto": "permiso",
+      "permisos": [
+        "citas.read"
+      ]
+    },
+    "GET /api/erp/citas/sugerir": {
+      "veredicto": "permiso",
+      "permisos": [
+        "citas.read"
+      ]
+    },
+    "GET /api/erp/clients": {
+      "veredicto": "permiso",
+      "permisos": [
+        "clients.read"
+      ]
+    },
+    "POST /api/erp/clients": {
+      "veredicto": "permiso",
+      "permisos": [
+        "clients.create"
+      ]
+    },
+    "DELETE /api/erp/clients/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "clients.edit"
+      ]
+    },
+    "GET /api/erp/clients/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "clients.read"
+      ]
+    },
+    "PUT /api/erp/clients/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "clients.edit"
+      ]
+    },
+    "GET /api/erp/clients/:id{[0-9]+}/contactos": {
+      "veredicto": "permiso",
+      "permisos": [
+        "clients.read"
+      ]
+    },
+    "POST /api/erp/clients/:id{[0-9]+}/contactos": {
+      "veredicto": "permiso",
+      "permisos": [
+        "clients.edit"
+      ]
+    },
+    "GET /api/erp/clients/:id/360": {
+      "veredicto": "permiso",
+      "permisos": [
+        "clients.read"
+      ]
+    },
+    "GET /api/erp/clients/:id/360/tarjeta/:clave": {
+      "veredicto": "permiso",
+      "permisos": [
+        "clients.read"
+      ]
+    },
+    "GET /api/erp/clients/:id/360/timeline": {
+      "veredicto": "permiso",
+      "permisos": [
+        "clients.read"
+      ]
+    },
+    "POST /api/erp/clients/:id/account-actions": {
+      "veredicto": "permiso",
+      "permisos": [
+        "cobros.manage"
+      ]
+    },
+    "GET /api/erp/clients/:id/account-email-preview": {
+      "veredicto": "permiso",
+      "permisos": [
+        "clients.read"
+      ]
+    },
+    "GET /api/erp/clients/:id/account-summary": {
+      "veredicto": "permiso",
+      "permisos": [
+        "clients.read"
+      ]
+    },
+    "GET /api/erp/clients/:id/invoices": {
+      "veredicto": "permiso",
+      "permisos": [
+        "clients.read"
+      ]
+    },
+    "GET /api/erp/clients/:id/notas": {
+      "veredicto": "permiso",
+      "permisos": [
+        "clients.read"
+      ]
+    },
+    "POST /api/erp/clients/:id/notas": {
+      "veredicto": "permiso",
+      "permisos": [
+        "clients.edit"
+      ]
+    },
+    "DELETE /api/erp/clients/:id/notas/:nid": {
+      "veredicto": "permiso",
+      "permisos": [
+        "clients.edit"
+      ]
+    },
+    "PUT /api/erp/clients/:id/notas/:nid": {
+      "veredicto": "permiso",
+      "permisos": [
+        "clients.edit"
+      ]
+    },
+    "GET /api/erp/clients/:id/orders": {
+      "veredicto": "permiso",
+      "permisos": [
+        "clients.read"
+      ]
+    },
+    "POST /api/erp/clients/:id/restore": {
+      "veredicto": "permiso",
+      "permisos": [
+        "clients.edit"
+      ]
+    },
+    "PUT /api/erp/clients/chips-ficha": {
+      "veredicto": "permiso",
+      "permisos": [
+        "clients.edit"
+      ]
+    },
+    "DELETE /api/erp/clients/groups/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "clients.edit"
+      ]
+    },
+    "PUT /api/erp/clients/groups/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "clients.edit"
+      ]
+    },
+    "GET /api/erp/clients/groups/all": {
+      "veredicto": "permiso",
+      "permisos": [
+        "clients.read"
+      ]
+    },
+    "POST /api/erp/clients/groups/create": {
+      "veredicto": "permiso",
+      "permisos": [
+        "clients.create"
+      ]
+    },
+    "PUT /api/erp/clients/periodo-ficha": {
+      "veredicto": "permiso",
+      "permisos": [
+        "clients.read"
+      ]
+    },
+    "GET /api/erp/clients/search": {
+      "veredicto": "permiso",
+      "permisos": [
+        "clients.read"
+      ]
+    },
+    "GET /api/erp/cobros": {
+      "veredicto": "permiso",
+      "permisos": [
+        "cobros.read"
+      ]
+    },
+    "GET /api/erp/contabilidad/libros": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.read"
+      ]
+    },
+    "GET /api/erp/crm": {
+      "veredicto": "permiso",
+      "permisos": [
+        "crm.read"
+      ]
+    },
+    "POST /api/erp/crm": {
+      "veredicto": "permiso",
+      "permisos": [
+        "crm.manage"
+      ]
+    },
+    "DELETE /api/erp/crm/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "crm.manage"
+      ]
+    },
+    "GET /api/erp/crm/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "crm.read"
+      ]
+    },
+    "PUT /api/erp/crm/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "crm.manage"
+      ]
+    },
+    "POST /api/erp/crm/:id/close": {
+      "veredicto": "permiso",
+      "permisos": [
+        "crm.manage"
+      ]
+    },
+    "GET /api/erp/crm/:id/email-preview": {
+      "veredicto": "permiso",
+      "permisos": [
+        "crm.read"
+      ]
+    },
+    "POST /api/erp/crm/:id/reopen": {
+      "veredicto": "permiso",
+      "permisos": [
+        "crm.manage"
+      ]
+    },
+    "POST /api/erp/crm/:id/restore": {
+      "veredicto": "permiso",
+      "permisos": [
+        "crm.manage"
+      ]
+    },
+    "POST /api/erp/crm/:id/stage": {
+      "veredicto": "permiso",
+      "permisos": [
+        "crm.manage"
+      ]
+    },
+    "POST /api/erp/crm/clients/:cid/activities": {
+      "veredicto": "permiso",
+      "permisos": [
+        "crm.manage"
+      ]
+    },
+    "GET /api/erp/crm/clients/:cid/summary": {
+      "veredicto": "permiso",
+      "permisos": [
+        "crm.read"
+      ]
+    },
+    "GET /api/erp/crm/clients/:cid/timeline": {
+      "veredicto": "permiso",
+      "permisos": [
+        "crm.read"
+      ]
+    },
+    "GET /api/erp/crm/tareas": {
+      "veredicto": "permiso",
+      "permisos": [
+        "crm.read"
+      ]
+    },
+    "POST /api/erp/crm/tareas": {
+      "veredicto": "permiso",
+      "permisos": [
+        "crm.manage"
+      ]
+    },
+    "DELETE /api/erp/crm/tareas/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "crm.manage"
+      ]
+    },
+    "POST /api/erp/crm/tareas/:id/hecha": {
+      "veredicto": "permiso",
+      "permisos": [
+        "crm.manage"
+      ]
+    },
+    "POST /api/erp/crm/tareas/:id/reprogramar": {
+      "veredicto": "permiso",
+      "permisos": [
+        "crm.manage"
+      ]
+    },
+    "GET /api/erp/crm/worklist": {
+      "veredicto": "permiso",
+      "permisos": [
+        "crm.read"
+      ]
+    },
+    "POST /api/erp/descuentos/bonos": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.edit"
+      ]
+    },
+    "GET /api/erp/descuentos/bonos/:clientId": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.read"
+      ]
+    },
+    "POST /api/erp/descuentos/bonos/:id/consumir": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.edit"
+      ]
+    },
+    "GET /api/erp/descuentos/bonos/:id/consumos": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.read"
+      ]
+    },
+    "DELETE /api/erp/descuentos/consumos/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.edit"
+      ]
+    },
+    "GET /api/erp/descuentos/promociones": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.read"
+      ]
+    },
+    "POST /api/erp/descuentos/promociones": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.edit"
+      ]
+    },
+    "DELETE /api/erp/descuentos/promociones/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.edit"
+      ]
+    },
+    "POST /api/erp/descuentos/proponer": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.read"
+      ]
+    },
+    "POST /api/erp/facturar-horas": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.create"
+      ]
+    },
+    "GET /api/erp/facturar-horas/preview": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.create"
+      ]
+    },
+    "POST /api/erp/fichaje": {
+      "veredicto": "solo sesion"
+    },
+    "POST /api/erp/fichaje/corregir": {
+      "veredicto": "permiso",
+      "permisos": [
+        "tiempo.edit"
+      ]
+    },
+    "GET /api/erp/fichaje/de/:userId": {
+      "veredicto": "permiso",
+      "permisos": [
+        "tiempo.read"
+      ]
+    },
+    "GET /api/erp/fichaje/dentro": {
+      "veredicto": "permiso",
+      "permisos": [
+        "tiempo.read"
+      ]
+    },
+    "GET /api/erp/fichaje/estado": {
+      "veredicto": "solo sesion"
+    },
+    "GET /api/erp/fichaje/historial/:userId/:fecha": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "GET /api/erp/fichaje/mio": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "POST /api/erp/importar/:id/deshacer": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "POST /api/erp/importar/analizar": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "GET /api/erp/importar/historial": {
+      "veredicto": "permiso",
+      "permisos": [
+        "company.read"
+      ]
+    },
+    "POST /api/erp/importar/importar": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "GET /api/erp/inicio/arranque": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "PUT /api/erp/inicio/arranque/plegado": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "GET /api/erp/inicio/bloques": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "GET /api/erp/inicio/cuadro": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "GET /api/erp/inicio/cuadro/:seccion": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "DELETE /api/erp/inicio/cuadro/orden": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "GET /api/erp/inicio/cuadro/orden": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "PUT /api/erp/inicio/cuadro/orden": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "GET /api/erp/inicio/datos": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "DELETE /api/erp/inicio/empresa": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "PUT /api/erp/inicio/empresa": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "DELETE /api/erp/inicio/layout": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "GET /api/erp/inicio/layout": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "PUT /api/erp/inicio/layout": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "GET /api/erp/invoices": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.read"
+      ]
+    },
+    "POST /api/erp/invoices": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.create"
+      ]
+    },
+    "GET /api/erp/invoices/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.read"
+      ]
+    },
+    "POST /api/erp/invoices/:id/anular": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.create"
+      ]
+    },
+    "POST /api/erp/invoices/:id/collection-actions": {
+      "veredicto": "permiso",
+      "permisos": [
+        "cobros.manage"
+      ]
+    },
+    "GET /api/erp/invoices/:id/collection-email-preview": {
+      "veredicto": "permiso",
+      "permisos": [
+        "cobros.read"
+      ]
+    },
+    "POST /api/erp/invoices/:id/payments": {
+      "veredicto": "permiso",
+      "permisos": [
+        "cobros.manage"
+      ]
+    },
+    "DELETE /api/erp/invoices/:id/payments/:pid": {
+      "veredicto": "permiso",
+      "permisos": [
+        "cobros.manage"
+      ]
+    },
+    "POST /api/erp/invoices/:id/proyecto": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.create"
+      ]
+    },
+    "POST /api/erp/invoices/:id/rectificativa": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.create"
+      ]
+    },
+    "POST /api/erp/invoices/:id/sustitutiva": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.create"
+      ]
+    },
+    "POST /api/erp/invoices/compute-totals": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.create"
+      ]
+    },
+    "POST /api/erp/invoices/from-order/:orderId": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.create"
+      ]
+    },
+    "POST /api/erp/listados/:clave/enviar": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "GET /api/erp/mapa/sugerencias": {
+      "veredicto": "permiso",
+      "permisos": [
+        "clients.read"
+      ]
+    },
+    "GET /api/erp/mapa/tesela/:z/:x/:y": {
+      "veredicto": "permiso",
+      "permisos": [
+        "clients.read"
+      ]
+    },
+    "GET /api/erp/menu/anclas": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "PUT /api/erp/menu/anclas": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "DELETE /api/erp/menu/orden": {
+      "veredicto": "solo sesion"
+    },
+    "PUT /api/erp/menu/orden": {
+      "veredicto": "solo sesion"
+    },
+    "GET /api/erp/migracion": {
+      "veredicto": "permiso",
+      "permisos": [
+        "company.read"
+      ]
+    },
+    "POST /api/erp/migracion": {
+      "veredicto": "permiso",
+      "permisos": [
+        "company.update"
+      ]
+    },
+    "POST /api/erp/mostrador/sale": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.create"
+      ]
+    },
+    "GET /api/erp/pagos": {
+      "veredicto": "permiso",
+      "permisos": [
+        "purchases.read"
+      ]
+    },
+    "POST /api/erp/pedidos": {
+      "veredicto": "permiso",
+      "permisos": [
+        "pedidos.create"
+      ]
+    },
+    "GET /api/erp/pedidos/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "pedidos.read"
+      ]
+    },
+    "PUT /api/erp/pedidos/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "pedidos.edit"
+      ]
+    },
+    "POST /api/erp/pedidos/:id/anular": {
+      "veredicto": "permiso",
+      "permisos": [
+        "pedidos.edit"
+      ]
+    },
+    "POST /api/erp/pedidos/:id/anular-y-rehacer": {
+      "veredicto": "permiso",
+      "permisos": [
+        "pedidos.create"
+      ]
+    },
+    "POST /api/erp/pedidos/:id/confirmar": {
+      "veredicto": "permiso",
+      "permisos": [
+        "pedidos.edit"
+      ]
+    },
+    "POST /api/erp/pedidos/:id/factura": {
+      "veredicto": "permiso",
+      "permisos": [
+        "pedidos.edit"
+      ]
+    },
+    "POST /api/erp/pedidos/compute-totals": {
+      "veredicto": "permiso",
+      "permisos": [
+        "pedidos.read"
+      ]
+    },
+    "PUT /api/erp/perfil": {
+      "veredicto": "solo sesion"
+    },
+    "DELETE /api/erp/perfil/foto": {
+      "veredicto": "solo sesion"
+    },
+    "POST /api/erp/perfil/foto": {
+      "veredicto": "solo sesion"
+    },
+    "GET /api/erp/perfil/foto/:id": {
+      "veredicto": "solo sesion"
+    },
+    "GET /api/erp/products": {
+      "veredicto": "permiso",
+      "permisos": [
+        "products.read"
+      ]
+    },
+    "POST /api/erp/products": {
+      "veredicto": "permiso",
+      "permisos": [
+        "products.create"
+      ]
+    },
+    "DELETE /api/erp/products/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "products.delete"
+      ]
+    },
+    "GET /api/erp/products/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "products.read"
+      ]
+    },
+    "PUT /api/erp/products/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "products.edit"
+      ]
+    },
+    "GET /api/erp/products/:id/images": {
+      "veredicto": "permiso",
+      "permisos": [
+        "products.read"
+      ]
+    },
+    "POST /api/erp/products/:id/images": {
+      "veredicto": "permiso",
+      "permisos": [
+        "products.edit"
+      ]
+    },
+    "DELETE /api/erp/products/:id/images/:imgId": {
+      "veredicto": "permiso",
+      "permisos": [
+        "products.edit"
+      ]
+    },
+    "GET /api/erp/products/:id/lotes": {
+      "veredicto": "permiso",
+      "permisos": [
+        "products.read"
+      ]
+    },
+    "GET /api/erp/products/:id/niveles": {
+      "veredicto": "permiso",
+      "permisos": [
+        "products.read"
+      ]
+    },
+    "PUT /api/erp/products/:id/niveles": {
+      "veredicto": "permiso",
+      "permisos": [
+        "products.edit"
+      ]
+    },
+    "GET /api/erp/products/:id/stock": {
+      "veredicto": "permiso",
+      "permisos": [
+        "products.read"
+      ]
+    },
+    "POST /api/erp/products/:id/stock/adjust": {
+      "veredicto": "permiso",
+      "permisos": [
+        "inventory.edit"
+      ]
+    },
+    "GET /api/erp/products/:id/variants": {
+      "veredicto": "permiso",
+      "permisos": [
+        "products.read"
+      ]
+    },
+    "POST /api/erp/products/:id/variants": {
+      "veredicto": "permiso",
+      "permisos": [
+        "products.edit"
+      ]
+    },
+    "DELETE /api/erp/products/:id/variants/:vid": {
+      "veredicto": "permiso",
+      "permisos": [
+        "products.edit"
+      ]
+    },
+    "PUT /api/erp/products/:id/variants/:vid": {
+      "veredicto": "permiso",
+      "permisos": [
+        "products.edit"
+      ]
+    },
+    "GET /api/erp/products/search": {
+      "veredicto": "permiso",
+      "permisos": [
+        "products.read"
+      ]
+    },
+    "DELETE /api/erp/products/tags/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "tags.delete"
+      ]
+    },
+    "GET /api/erp/products/tags/all": {
+      "veredicto": "permiso",
+      "permisos": [
+        "tags.read"
+      ]
+    },
+    "POST /api/erp/products/tags/create": {
+      "veredicto": "permiso",
+      "permisos": [
+        "tags.create"
+      ]
+    },
+    "GET /api/erp/propuestas": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "POST /api/erp/propuestas/:id/aprobar": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "POST /api/erp/propuestas/:id/descartar": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "POST /api/erp/propuestas/:id/emitir": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "POST /api/erp/propuestas/:id/enviar": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "POST /api/erp/propuestas/:id/preparar": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "POST /api/erp/propuestas/:id/preparar-compra": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "POST /api/erp/propuestas/:id/redactar": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "POST /api/erp/propuestas/:id/registrado": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "GET /api/erp/propuestas/contador": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "POST /api/erp/propuestas/generar": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "GET /api/erp/proyectos": {
+      "veredicto": "permiso",
+      "permisos": [
+        "proyectos.read"
+      ]
+    },
+    "POST /api/erp/proyectos": {
+      "veredicto": "permiso",
+      "permisos": [
+        "proyectos.edit"
+      ]
+    },
+    "DELETE /api/erp/proyectos/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "proyectos.edit"
+      ]
+    },
+    "GET /api/erp/proyectos/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "proyectos.read"
+      ]
+    },
+    "PUT /api/erp/proyectos/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "proyectos.edit"
+      ]
+    },
+    "POST /api/erp/proyectos/:id/restore": {
+      "veredicto": "permiso",
+      "permisos": [
+        "proyectos.edit"
+      ]
+    },
+    "GET /api/erp/purchase-order-receipts/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "purchases.read"
+      ]
+    },
+    "POST /api/erp/purchase-order-receipts/:id/cancel": {
+      "veredicto": "permiso",
+      "permisos": [
+        "purchases.edit"
+      ]
+    },
+    "POST /api/erp/purchase-orders": {
+      "veredicto": "permiso",
+      "permisos": [
+        "purchases.create"
+      ]
+    },
+    "GET /api/erp/purchase-orders/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "purchases.read"
+      ]
+    },
+    "PUT /api/erp/purchase-orders/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "purchases.edit"
+      ]
+    },
+    "POST /api/erp/purchase-orders/:id/anular": {
+      "veredicto": "permiso",
+      "permisos": [
+        "purchases.edit"
+      ]
+    },
+    "POST /api/erp/purchase-orders/:id/anular-y-rehacer": {
+      "veredicto": "permiso",
+      "permisos": [
+        "purchases.create"
+      ]
+    },
+    "POST /api/erp/purchase-orders/:id/close": {
+      "veredicto": "permiso",
+      "permisos": [
+        "purchases.edit"
+      ]
+    },
+    "POST /api/erp/purchase-orders/:id/email": {
+      "veredicto": "permiso",
+      "permisos": [
+        "purchases.edit"
+      ]
+    },
+    "POST /api/erp/purchase-orders/:id/enviar": {
+      "veredicto": "permiso",
+      "permisos": [
+        "purchases.edit"
+      ]
+    },
+    "GET /api/erp/purchase-orders/:id/receipts": {
+      "veredicto": "permiso",
+      "permisos": [
+        "purchases.read"
+      ]
+    },
+    "POST /api/erp/purchase-orders/:id/receipts": {
+      "veredicto": "permiso",
+      "permisos": [
+        "purchases.create"
+      ]
+    },
+    "GET /api/erp/purchases": {
+      "veredicto": "permiso",
+      "permisos": [
+        "purchases.read"
+      ]
+    },
+    "POST /api/erp/purchases": {
+      "veredicto": "permiso",
+      "permisos": [
+        "purchases.create"
+      ]
+    },
+    "GET /api/erp/purchases/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "purchases.read"
+      ]
+    },
+    "POST /api/erp/purchases/:id/cancel": {
+      "veredicto": "permiso",
+      "permisos": [
+        "purchases.create"
+      ]
+    },
+    "POST /api/erp/purchases/:id/receive": {
+      "veredicto": "permiso",
+      "permisos": [
+        "purchases.create"
+      ]
+    },
+    "GET /api/erp/purchases/capture/file/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "purchases.read"
+      ]
+    },
+    "GET /api/erp/purchases/capture/supplier-orders": {
+      "veredicto": "permiso",
+      "permisos": [
+        "purchases.read"
+      ]
+    },
+    "POST /api/erp/quotes": {
+      "veredicto": "permiso",
+      "permisos": [
+        "quotes.create"
+      ]
+    },
+    "GET /api/erp/quotes/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "quotes.read"
+      ]
+    },
+    "PUT /api/erp/quotes/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "quotes.edit"
+      ]
+    },
+    "POST /api/erp/quotes/:id/anular": {
+      "veredicto": "permiso",
+      "permisos": [
+        "quotes.edit"
+      ]
+    },
+    "POST /api/erp/quotes/:id/anular-y-rehacer": {
+      "veredicto": "permiso",
+      "permisos": [
+        "quotes.create"
+      ]
+    },
+    "POST /api/erp/quotes/:id/convert": {
+      "veredicto": "permiso",
+      "permisos": [
+        "quotes.edit"
+      ]
+    },
+    "POST /api/erp/quotes/:id/email": {
+      "veredicto": "permiso",
+      "permisos": [
+        "quotes.edit"
+      ]
+    },
+    "POST /api/erp/quotes/:id/emitir": {
+      "veredicto": "permiso",
+      "permisos": [
+        "quotes.edit"
+      ]
+    },
+    "POST /api/erp/quotes/:id/follow": {
+      "veredicto": "permiso",
+      "permisos": [
+        "quotes.edit"
+      ]
+    },
+    "POST /api/erp/quotes/compute-totals": {
+      "veredicto": "permiso",
+      "permisos": [
+        "quotes.read"
+      ]
+    },
+    "GET /api/erp/rentabilidad/comparativa": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.read",
+        "proyectos.read"
+      ]
+    },
+    "GET /api/erp/rentabilidad/proyecto/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.read",
+        "proyectos.read"
+      ]
+    },
+    "GET /api/erp/reserva-publica/ajustes": {
+      "veredicto": "permiso",
+      "permisos": [
+        "citas.read"
+      ]
+    },
+    "POST /api/erp/reserva-publica/ajustes": {
+      "veredicto": "permiso",
+      "permisos": [
+        "citas.edit"
+      ]
+    },
+    "POST /api/erp/reserva-publica/aviso-encendido/apagar": {
+      "veredicto": "permiso",
+      "permisos": [
+        "citas.edit"
+      ]
+    },
+    "POST /api/erp/reserva-publica/aviso-encendido/vale": {
+      "veredicto": "permiso",
+      "permisos": [
+        "citas.edit"
+      ]
+    },
+    "POST /api/erp/reserva-publica/caducar": {
+      "veredicto": "permiso",
+      "permisos": [
+        "citas.edit"
+      ]
+    },
+    "POST /api/erp/reserva-publica/servicio/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "citas.edit"
+      ]
+    },
+    "GET /api/erp/reserva-publica/solicitudes": {
+      "veredicto": "permiso",
+      "permisos": [
+        "citas.read"
+      ]
+    },
+    "POST /api/erp/reserva-publica/solicitudes/:id/aprobar": {
+      "veredicto": "permiso",
+      "permisos": [
+        "citas.edit"
+      ]
+    },
+    "POST /api/erp/reserva-publica/solicitudes/:id/rechazar": {
+      "veredicto": "permiso",
+      "permisos": [
+        "citas.edit"
+      ]
+    },
+    "GET /api/erp/settings/avisos/correos": {
+      "veredicto": "permiso",
+      "permisos": [
+        "company.read"
+      ]
+    },
+    "PUT /api/erp/settings/avisos/correos/:tipo": {
+      "veredicto": "permiso",
+      "permisos": [
+        "company.update"
+      ]
+    },
+    "POST /api/erp/settings/avisos/correos/:tipo/prueba": {
+      "veredicto": "permiso",
+      "permisos": [
+        "company.read"
+      ]
+    },
+    "GET /api/erp/settings/avisos/mi-parte": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "GET /api/erp/settings/avisos/mias": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "PUT /api/erp/settings/avisos/mias": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "GET /api/erp/settings/company": {
+      "veredicto": "permiso",
+      "permisos": [
+        "company.read"
+      ]
+    },
+    "PUT /api/erp/settings/company": {
+      "veredicto": "permiso",
+      "permisos": [
+        "company.update"
+      ]
+    },
+    "GET /api/erp/settings/email-templates": {
+      "veredicto": "permiso",
+      "permisos": [
+        "company.read"
+      ]
+    },
+    "DELETE /api/erp/settings/email-templates/:tipo/:tono": {
+      "veredicto": "permiso",
+      "permisos": [
+        "company.update"
+      ]
+    },
+    "GET /api/erp/settings/email-templates/:tipo/:tono": {
+      "veredicto": "permiso",
+      "permisos": [
+        "company.read"
+      ]
+    },
+    "PUT /api/erp/settings/email-templates/:tipo/:tono": {
+      "veredicto": "permiso",
+      "permisos": [
+        "company.update"
+      ]
+    },
+    "POST /api/erp/settings/email-templates/:tipo/:tono/preview": {
+      "veredicto": "permiso",
+      "permisos": [
+        "company.read"
+      ]
+    },
+    "GET /api/erp/settings/fiscal-profile": {
+      "veredicto": "permiso",
+      "permisos": [
+        "company.read"
+      ]
+    },
+    "PUT /api/erp/settings/fiscal-profile": {
+      "veredicto": "permiso",
+      "permisos": [
+        "company.update"
+      ]
+    },
+    "DELETE /api/erp/settings/logo": {
+      "veredicto": "permiso",
+      "permisos": [
+        "company.update"
+      ]
+    },
+    "POST /api/erp/settings/logo": {
+      "veredicto": "permiso",
+      "permisos": [
+        "company.update"
+      ]
+    },
+    "GET /api/erp/settings/logo/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "company.read"
+      ]
+    },
+    "GET /api/erp/settings/margen": {
+      "veredicto": "permiso",
+      "permisos": [
+        "company.read"
+      ]
+    },
+    "PUT /api/erp/settings/margen": {
+      "veredicto": "permiso",
+      "permisos": [
+        "company.update"
+      ]
+    },
+    "POST /api/erp/settings/margen/alta": {
+      "veredicto": "permiso",
+      "permisos": [
+        "company.update"
+      ]
+    },
+    "GET /api/erp/settings/oficio": {
+      "veredicto": "permiso",
+      "permisos": [
+        "company.read"
+      ]
+    },
+    "PUT /api/erp/settings/oficio": {
+      "veredicto": "permiso",
+      "permisos": [
+        "company.update"
+      ]
+    },
+    "POST /api/erp/settings/oficio/sembrar": {
+      "veredicto": "permiso",
+      "permisos": [
+        "company.update"
+      ]
+    },
+    "GET /api/erp/settings/store": {
+      "veredicto": "permiso",
+      "permisos": [
+        "store_settings.read"
+      ]
+    },
+    "PUT /api/erp/settings/store": {
+      "veredicto": "permiso",
+      "permisos": [
+        "store_settings.update"
+      ]
+    },
+    "POST /api/erp/stock-transfers": {
+      "veredicto": "permiso",
+      "permisos": [
+        "inventory.edit"
+      ]
+    },
+    "GET /api/erp/stock-transfers/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "inventory.read"
+      ]
+    },
+    "POST /api/erp/stock-transfers/:id/cancel": {
+      "veredicto": "permiso",
+      "permisos": [
+        "inventory.edit"
+      ]
+    },
+    "POST /api/erp/stock/movements/:id/reverse": {
+      "veredicto": "permiso",
+      "permisos": [
+        "inventory.edit"
+      ]
+    },
+    "GET /api/erp/supplier-invoices": {
+      "veredicto": "permiso",
+      "permisos": [
+        "purchases.read"
+      ]
+    },
+    "POST /api/erp/supplier-invoices": {
+      "veredicto": "permiso",
+      "permisos": [
+        "purchases.create"
+      ]
+    },
+    "GET /api/erp/supplier-invoices/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "purchases.read"
+      ]
+    },
+    "POST /api/erp/supplier-invoices/:id/anular": {
+      "veredicto": "permiso",
+      "permisos": [
+        "purchases.create"
+      ]
+    },
+    "POST /api/erp/supplier-invoices/:id/payments": {
+      "veredicto": "permiso",
+      "permisos": [
+        "purchases.create"
+      ]
+    },
+    "DELETE /api/erp/supplier-invoices/:id/payments/:pid": {
+      "veredicto": "permiso",
+      "permisos": [
+        "purchases.create"
+      ]
+    },
+    "POST /api/erp/supplier-invoices/:id/proyecto": {
+      "veredicto": "permiso",
+      "permisos": [
+        "purchases.create"
+      ]
+    },
+    "POST /api/erp/supplier-invoices/:id/refunds": {
+      "veredicto": "permiso",
+      "permisos": [
+        "purchases.create"
+      ]
+    },
+    "GET /api/erp/supplier-invoices/eligible-origins": {
+      "veredicto": "permiso",
+      "permisos": [
+        "purchases.read"
+      ]
+    },
+    "GET /api/erp/supplier-invoices/supplier-debt": {
+      "veredicto": "permiso",
+      "permisos": [
+        "purchases.read"
+      ]
+    },
+    "POST /api/erp/supplier-returns": {
+      "veredicto": "permiso",
+      "permisos": [
+        "purchases.create"
+      ]
+    },
+    "GET /api/erp/supplier-returns/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "purchases.read"
+      ]
+    },
+    "POST /api/erp/supplier-returns/:id/cancel": {
+      "veredicto": "permiso",
+      "permisos": [
+        "purchases.edit"
+      ]
+    },
+    "GET /api/erp/supplier-returns/returnable": {
+      "veredicto": "permiso",
+      "permisos": [
+        "purchases.read"
+      ]
+    },
+    "GET /api/erp/suppliers": {
+      "veredicto": "permiso",
+      "permisos": [
+        "suppliers.read"
+      ]
+    },
+    "POST /api/erp/suppliers": {
+      "veredicto": "permiso",
+      "permisos": [
+        "suppliers.create"
+      ]
+    },
+    "DELETE /api/erp/suppliers/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "suppliers.delete"
+      ]
+    },
+    "PUT /api/erp/suppliers/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "suppliers.edit"
+      ]
+    },
+    "POST /api/erp/suppliers/:id/account-payments": {
+      "veredicto": "permiso",
+      "permisos": [
+        "purchases.create"
+      ]
+    },
+    "GET /api/erp/suppliers/:id/account-summary": {
+      "veredicto": "permiso",
+      "permisos": [
+        "purchases.read"
+      ]
+    },
+    "POST /api/erp/suppliers/:id/restore": {
+      "veredicto": "permiso",
+      "permisos": [
+        "suppliers.edit"
+      ]
+    },
+    "GET /api/erp/suppliers/search": {
+      "veredicto": "permiso",
+      "permisos": [
+        "suppliers.read"
+      ]
+    },
+    "POST /api/erp/suscripcion/alta": {
+      "veredicto": "por dentro"
+    },
+    "POST /api/erp/suscripcion/descarga/preparar": {
+      "veredicto": "por dentro"
+    },
+    "POST /api/erp/suscripcion/rescatar": {
+      "veredicto": "por dentro"
+    },
+    "GET /api/erp/suscripcion/situacion": {
+      "veredicto": "por dentro"
+    },
+    "GET /api/erp/tiempo": {
+      "veredicto": "permiso",
+      "permisos": [
+        "tiempo.read"
+      ]
+    },
+    "POST /api/erp/tiempo": {
+      "veredicto": "permiso",
+      "permisos": [
+        "tiempo.edit"
+      ]
+    },
+    "DELETE /api/erp/tiempo/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "tiempo.edit"
+      ]
+    },
+    "PUT /api/erp/tiempo/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "tiempo.edit"
+      ]
+    },
+    "GET /api/erp/tiempo/activo": {
+      "veredicto": "permiso",
+      "permisos": [
+        "tiempo.read"
+      ]
+    },
+    "GET /api/erp/tiempo/proyecto/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "tiempo.read"
+      ]
+    },
+    "POST /api/erp/tiempo/start": {
+      "veredicto": "permiso",
+      "permisos": [
+        "tiempo.edit"
+      ]
+    },
+    "POST /api/erp/tiempo/stop": {
+      "veredicto": "permiso",
+      "permisos": [
+        "tiempo.edit"
+      ]
+    },
+    "GET /api/erp/users": {
+      "veredicto": "permiso",
+      "permisos": [
+        "admin.manage_users"
+      ]
+    },
+    "POST /api/erp/users": {
+      "veredicto": "permiso",
+      "permisos": [
+        "admin.manage_users"
+      ]
+    },
+    "DELETE /api/erp/users/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "admin.manage_users"
+      ]
+    },
+    "PUT /api/erp/users/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "admin.manage_users"
+      ]
+    },
+    "GET /api/erp/users/:id/baja": {
+      "veredicto": "permiso",
+      "permisos": [
+        "admin.manage_users"
+      ]
+    },
+    "GET /api/erp/users/:id/permissions": {
+      "veredicto": "permiso",
+      "permisos": [
+        "admin.manage_users"
+      ]
+    },
+    "POST /api/erp/users/:id/permissions": {
+      "veredicto": "permiso",
+      "permisos": [
+        "admin.manage_users"
+      ]
+    },
+    "POST /api/erp/users/:id/recuperar": {
+      "veredicto": "permiso",
+      "permisos": [
+        "admin.manage_users"
+      ]
+    },
+    "GET /api/erp/users/activity": {
+      "veredicto": "permiso",
+      "permisos": [
+        "admin.manage_users"
+      ]
+    },
+    "GET /api/erp/users/backup": {
+      "veredicto": "permiso",
+      "permisos": [
+        "backup.download"
+      ]
+    },
+    "GET /api/erp/vigia/avisos": {
+      "veredicto": "permiso",
+      "permisos": [
+        "analytics.read"
+      ]
+    },
+    "GET /api/erp/vigia/detectores": {
+      "veredicto": "permiso",
+      "permisos": [
+        "analytics.read"
+      ]
+    },
+    "GET /api/erp/vigia/hallazgos": {
+      "veredicto": "permiso",
+      "permisos": [
+        "analytics.read"
+      ]
+    },
+    "GET /api/erp/warehouses": {
+      "veredicto": "permiso",
+      "permisos": [
+        "inventory.read"
+      ]
+    },
+    "POST /api/erp/warehouses": {
+      "veredicto": "permiso",
+      "permisos": [
+        "inventory.edit"
+      ]
+    },
+    "DELETE /api/erp/warehouses/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "inventory.edit"
+      ]
+    },
+    "PUT /api/erp/warehouses/:id": {
+      "veredicto": "permiso",
+      "permisos": [
+        "inventory.edit"
+      ]
+    },
+    "POST /api/erp/warehouses/:id/default": {
+      "veredicto": "permiso",
+      "permisos": [
+        "inventory.edit"
+      ]
+    },
+    "POST /api/erp/warehouses/:id/restore": {
+      "veredicto": "permiso",
+      "permisos": [
+        "inventory.edit"
+      ]
+    },
+    "GET /api/erp/warehouses/:id/stock": {
+      "veredicto": "permiso",
+      "permisos": [
+        "inventory.read"
+      ]
+    },
+    "POST /api/registro/crear": {
+      "veredicto": "sin guarda"
+    },
+    "GET /cita/:token": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "POST /cita/:token/anular": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "POST /cita/:token/avisar": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "POST /cita/:token/cambiar": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "POST /cita/:token/confirmar": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "GET /cita/:token/huecos": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "GET /docs": {
+      "veredicto": "sin guarda"
+    },
+    "GET /favicon.ico": {
+      "veredicto": "sin guarda"
+    },
+    "GET /favicon.svg": {
+      "veredicto": "sin guarda"
+    },
+    "POST /find-tenant": {
+      "veredicto": "sin guarda"
+    },
+    "GET /portal": {
+      "veredicto": "solo sesion"
+    },
+    "GET /portal/:token": {
+      "veredicto": "solo sesion"
+    },
+    "GET /portal/factura/:id/pdf": {
+      "veredicto": "solo sesion"
+    },
+    "POST /portal/mensaje": {
+      "veredicto": "solo sesion"
+    },
+    "GET /registro": {
+      "veredicto": "sin guarda"
+    },
+    "GET /reservar": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "GET /reservar/:handle": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "GET /reservar/:handle/huecos": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "GET /reservar/:handle/personas": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "POST /reservar/:handle/reservar": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "POST /stripe/webhook": {
+      "veredicto": "sin guarda"
+    },
+    "GET /superadmin": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "GET /superadmin/2fa": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "POST /superadmin/2fa/activar": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "POST /superadmin/2fa/desactivar": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "POST /superadmin/2fa/regenerar": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "GET /superadmin/avance": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "GET /superadmin/backups": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "POST /superadmin/backups/run": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "GET /superadmin/change-password": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "POST /superadmin/change-password": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "GET /superadmin/errores": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "GET /superadmin/integridad": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "POST /superadmin/integridad/run": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "GET /superadmin/login": {
+      "veredicto": "sin guarda"
+    },
+    "POST /superadmin/login": {
+      "veredicto": "solo sesion"
+    },
+    "POST /superadmin/logout": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "GET /superadmin/migraciones": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "GET /superadmin/migraciones/:slug/:id/fichero": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "GET /superadmin/negocios": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "POST /superadmin/negocios/:id/cap": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "POST /superadmin/negocios/:id/reactivate": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "POST /superadmin/negocios/:id/suspend": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "GET /superadmin/salud": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "GET /superadmin/seguridad": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    },
+    "POST /superadmin/verify-2fa": {
+      "veredicto": "solo sesion",
+      "pendiente_revisar": true
+    }
+  }
+}

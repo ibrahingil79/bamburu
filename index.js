@@ -16,6 +16,8 @@ import { register as registerSuperadmin } from './modules/superadmin/index.js';
 import { docsHtml } from './docs.html.js';
 import { errorShell, ERR } from './modules/erp/layout.js';
 import { restringirArbol } from './core/db-file-perms.js';
+import { compararConDeclaracion } from './core/barrera-permisos.js';
+import { avisarArranqueRoto } from './core/aviso-arranque.js';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 const APP_DIR_RAIZ = dirname(fileURLToPath(import.meta.url));
@@ -1679,6 +1681,30 @@ app.notFound((c) => {
 // («600 de 1.025») no fuera reproducible por nadie. Añadir un `export` a un módulo ESM no cambia
 // cuándo ni cómo se ejecuta: el servidor arranca exactamente igual.
 export { app };
+
+// ⚙️ 8 SEP 2026 (`barrera-de-permisos`) — EL PORTERO. Va aquí, DESPUÉS de TODA ruta que se
+// registre (incluida `/admin/disa/*` de arriba, que se añade tras `loadModules`) y ANTES de
+// `serve()`: si se pusiera pegado a `loadModules`, la barrera no vería esa ruta y declararía
+// segura una tabla que aún no está completa. Coste medido: 34-49 ms (core/barrera-permisos.js).
+{
+  const veredicto = compararConDeclaracion(app);
+  if (!veredicto.ok) {
+    console.error('🛑 ' + veredicto.mensaje);
+    const aviso = await avisarArranqueRoto({ modulo: 'barrera-de-permisos', esencial: true, error: new Error(veredicto.mensaje) });
+    console.error('   Aviso a Telegram: ' + (aviso.enviado ? 'enviado' : 'NO enviado — ' + aviso.motivo));
+    // LANZA en vez de `process.exit()`, mismo motivo que `core/loader.js`: bajo systemd la salida
+    // estándar es un socket y esas escrituras son asíncronas — un `exit()` inmediato puede cortar
+    // justo las líneas de arriba. El camino fatal de Node las vacía antes de morir, y sale con
+    // código 1, que es lo que `Restart=on-failure` necesita ver.
+    throw new Error('Bamburu no arranca: la barrera de permisos ha encontrado una regresión. ' + veredicto.motivo);
+  }
+  if (veredicto.avisos.length) {
+    console.log('✅ Barrera de permisos: ' + veredicto.avisos.length + ' ruta(s) piden AHORA MÁS que antes (mejora, no bloquea):');
+    for (const a of veredicto.avisos) console.log('   · ' + a.ruta + ' — antes «' + a.declarado + '», ahora «' + a.ahora + '»');
+  } else {
+    console.log('✅ Barrera de permisos: la app coincide con lo declarado.');
+  }
+}
 
 const PUERTO = Number(process.env.PORT) || 3000;
 const servidor = serve({ fetch: app.fetch, port: PUERTO, hostname: '127.0.0.1' }, (info) => {
