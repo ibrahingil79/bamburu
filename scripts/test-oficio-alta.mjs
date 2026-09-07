@@ -61,28 +61,13 @@ const serviciosDe = db => db.prepare(
 ).all();
 
 try {
-  console.log('\n[1] La pantalla del alta ofrece los SEIS botones');
-  {
-    let init = null, html = '';
-    try {
-      const r = await fetch(BASE + '/api/registro/init', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
-      init = await r.json();
-      html = await (await fetch(BASE + '/registro')).text();
-    } catch (e) {
-      check('el servidor responde en ' + BASE, false, e.message + ' — ¿está levantado?');
-    }
-    if (init) {
-      check('/api/registro/init devuelve la lista de oficios', Array.isArray(init.oficios));
-      check('son SEIS', (init.oficios || []).length === 6, (init.oficios || []).map(o => o.id).join(', '));
-      check('coinciden con los del ERP (una sola fuente, no una copia)',
-        JSON.stringify((init.oficios || []).map(o => o.id)) === JSON.stringify(OFICIOS.map(o => o.id)));
-      check('cada uno trae su etiqueta para el botón',
-        (init.oficios || []).every(o => typeof o.label === 'string' && o.label.length > 0));
-      check('la pantalla trae el paso de oficio', /oficio-grid/.test(html) && /oficio-btn/.test(html));
-      check('los botones se enganchan por addEventListener (la CSP estricta bloquea los atributos)',
-        /addEventListener\('click'/.test(html) && !/<button[^>]*class="oficio-btn"[^>]*onclick/.test(html));
-    }
-  }
+  // ⚙️ 7 sep 2026 (`arreglar-alta-publica`) — AQUÍ SE COMPROBABA que la pantalla del alta ofrecía
+  // los seis botones de oficio, servidos por `/api/registro/init`. El alta pública dejó de
+  // preguntar el oficio: es un formulario de tres campos (nombre, correo, contraseña) y nada más
+  // — decisión de producto de Ibrahin. El oficio se queda en 'otro' al crear (el paso saltado de
+  // siempre) y se elige después en Ajustes. `/api/registro/init` no existe ya. Retirado, no
+  // heredado: lo que sigue abajo (que cada oficio nace con su vocabulario y su catálogo) no
+  // dependía de esa pantalla y sigue probándose igual, contra `provisionTenant` directamente.
 
   console.log('\n[2] Un negocio de cada oficio nace hablando su idioma, sin tocar un ajuste');
   for (const of of OFICIOS) {

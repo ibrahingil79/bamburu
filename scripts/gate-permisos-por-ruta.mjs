@@ -49,7 +49,9 @@ const PUBLICAS = new Set([
   'GET /docs',                    // la documentación pública
   'GET /acceso', 'GET /acceso/entrar', 'POST /find-tenant',   // la entrada: aún no hay sesión
   'GET /registro',                // el alta de un negocio nuevo
-  'POST /api/registro/init', 'POST /api/registro/crear', 'POST /api/registro/disa',
+  // ⚙️ 7 sep 2026 (`arreglar-alta-publica`) — /api/registro/init y /api/registro/disa eran del
+  // chat de onboarding, borrado: el alta es ahora un formulario normal con un único endpoint.
+  'POST /api/registro/crear',
   'GET /superadmin/login',        // la entrada del superadmin
   'POST /stripe/webhook',         // lo valida la FIRMA de Stripe, no una sesión
   'GET /admin/autologin',         // exige un vale de un solo uso; sin él manda a /acceso
