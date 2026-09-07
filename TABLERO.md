@@ -460,7 +460,7 @@ familia entera en verde: `test-contabilidad` 38 · `verify-contabilidad-diario-m
 > cuándo no se corre— y se espera un sí. Si dice que no, queda pendiente aquí y se vuelve a
 > proponer al abrir la siguiente sesión.
 
-- **Último barrido completo:** 2026-09-07 · `eae5394` · **163/212** · 1170 s
+- **Último barrido completo:** 2026-09-07 · `ff2ddcb` · **166/212** · 1213 s
 - **Estado:** ✅ al día
 
 <!-- BARRIDO:FIN -->
@@ -9506,33 +9506,89 @@ del chat, incluidos en el borrado) y **solo 3 nombres nuevos**, los tres investi
 
 ---
 
-## 🆘 TAREA — El alta pública está rota: nadie puede darse de alta en Bamburu
+## ✅ TAREA — El alta pública está rota: nadie puede darse de alta en Bamburu
 
-- **id:** alta-publica-rota-sin-formulario
+- **id:** alta-publica-rota-sin-formulario / `arreglar-alta-publica`
+- **estado:** ✅ HECHA — 7 sep 2026 (noche)
+- **prioridad:** era 🔺🔺 la primera de la cola. Cerrada.
+- **origen:** hallazgo del Paso 0 de `sacar-disa-paso-2-borrado`, encargo propio de Ibrahin el 7 sep 2026
+
+**PASO 0 confirmó que la tarea era más pequeña de lo que parecía.** `createTenantSvc` →
+`provisionTenant` (`core/tenant-signup.js` / `core/tenant-provisioning.js`) nunca dependieron del
+chat: validan con Zod, comprueban unicidad de email, generan slug único, crean la base YA cifrada
+por el punto único de siempre, y registran el tenant. Estaban enteros y vivos. Lo único roto era el
+pegamento: `sessionData.draft`/`ready` los rellenaba el bucle de conversación con la IA, que ya no
+corre desde el 6 sep. **No hizo falta tocar `provisionTenant` ni una línea.**
+
+**Lo construido:** `/registro` es ahora un formulario normal — nombre del negocio, correo,
+contraseña, nada más (decisión de producto de Ibrahin: NIF/dirección/oficio se piden después, en
+Ajustes) — que llama directo a `POST /api/registro/crear` sin sesión de conversación. Se retiraron
+por muertos `onboardingSessions`, `newSession()`, `/api/registro/init` y `/api/registro/disa`.
+
+**Decisión de construcción, no de producto (dejada escrita, como pide RITUAL.md):** el esquema
+exige `ownerName` y no está entre los tres campos — se rellena con el propio nombre del negocio,
+cambiable después en Ajustes → Usuarios.
+
+**Los 5 criterios, medidos:**
+1. ✅ `gate-registro-alta` reescrito de punta a punta (era una conversación simulada con un modelo
+   real; esa premisa desapareció con la IA) contra el flujo nuevo, **pulsando en un navegador de
+   verdad**: **24 ✓ · 0 ✗**.
+2. ✅ Alta real de principio a fin — formulario → `/admin` con el panel vacío. Captura en
+   `~/informes-shots/alta-publica-panel-vacio.png`.
+3. ✅ El mismo correo dos veces → error claro EN LA PÁGINA, no crea un segundo negocio (ya lo
+   garantizaba `emailTaken`, sin tocar).
+4. ✅ La base nace cifrada — comprobado abriéndola SIN la llave (`bamburuSinLlave`) y con ella.
+5. ✅ Barrido completo: **166/212** (antes 163/212 — sube exactamente por este arreglo). Diff exacto
+   contra el barrido anterior: **cero rojos nuevos**, uno arreglado (`gate-registro-alta`).
+
+**Freno antirrobots:** ya existía y no se dobló — `/api/registro/crear` lleva tres `rateLimit` por
+IP (10/min · 3/hora · 10/día). **Hallazgo de construcción sobre el propio gate:** con solo 2
+peticiones reales por pasada (crear + duplicado) ya casi agota el cupo de 3/hora; se retiró la
+tercera comprobación (contraseña corta por HTTP) del gate porque **ya estaba cubierta a nivel de
+motor** en `test-registro-alta.mjs` (sin pasar por el servidor, sin gastar cupo) — no relajar el
+freno, repartir mejor qué se prueba por dónde.
+
+**PRUEBA EN ROJO — hecha sobre el árbol real:** se hizo lanzar `AVERÍA PROVOCADA A PROPÓSITO` desde
+`createTenantSvc`; el gate lo cazó exactamente en el paso de creación («PULSANDO: rellenar los TRES
+campos y crear el negocio de verdad») y no llegó más allá. Devuelto el código a su sitio (`git diff`
+limpio verificado).
+
+**Commit:** `c264ad8` (código) — ver también el hallazgo nuevo, justo abajo.
+
+---
+
+## 🆘 TAREA — Investigar por qué se corrompió `desarrollo-bamburu.db` bajo carga
+
+- **id:** investigar-corrupcion-desarrollo-bamburu
 - **estado:** pendiente
-- **prioridad:** 🔺🔺 **LA PRIMERA DE LA COLA — delante de todo lo demás, incluido el Bloque 3.**
-  Subida por Ibrahin el 7 sep 2026 (noche), al confirmar el Paso 0 de `sacar-disa-paso-2-borrado`.
-- **origen:** hallazgo del Paso 0 de `sacar-disa-paso-2-borrado`, medido en vivo el 7 sep 2026
+- **prioridad:** justo detrás de esta tarea, por decisión de Ibrahin (encargo del 7 sep 2026, noche)
+- **origen:** incidente real durante `sacar-disa-paso-2-borrado` (7 sep 2026, ~16:00)
 
-**MEDIDO EN PRODUCCIÓN, con una petición real:**
+**Lo que se sabe, medido:** `data/tenants/desarrollo-bamburu.db` — el negocio que decenas de gates
+usan como banco de pruebas, así que recibe mucha más carga que cualquier otro — se corrompió de
+verdad (`SqliteError: database disk image is malformed`) en medio del barrido completo de esa
+noche, con la web real devolviendo 500 a partir de las 16:00:55. Blast radius confirmado con
+`quick_check` en las 18 bases: **solo esta, las otras 17 sanas**. Dentro de ella, solo la tabla
+`products` tenía una página rota (un `SELECT *` completo fallaba; `COUNT(*)` colaba por un índice
+sano). Se reparó restaurando la copia cifrada de esa misma madrugada (03:34) y rehaciendo a mano el
+archivado de las tablas del chat sobre ella — sin perder ningún dato real (las dos facturas
+posteriores a la copia eran residuo de pruebas anuladas).
 
-```
-POST /api/registro/init   → sesión creada, bienvenida de siempre
-POST /api/registro/disa   → «El alta por chat está retirada... rellena el formulario»
-POST /api/registro/crear  → 409 «Aún no hemos terminado de preparar tu negocio»
-```
+**Lo que NO se encontró: la causa.** El archivado de tablas (`sacar-disa-paso-2-borrado`) queda
+descartado como culpable — esa misma base ya había pasado su propio `integrity_check` justo después
+de archivar, antes de que apareciera la corrupción. La sospecha más fuerte, sin confirmar: la carga
+concurrente de esa noche (el barrido completo + varias re-ejecuciones sueltas del mismo gate, todo
+pegando a la MISMA base de pruebas a la vez) chocando con el cierre automático de conexiones que
+entró en vigor esa misma madrugada (`conexiones-que-no-se-cierran`, `core/tenant-middleware.js`) —
+pero no hay una reproducción aislada que lo pruebe. `desarrollo-bamburu` es, con diferencia, el
+negocio con más tráfico concurrente de todo el árbol de pruebas: si el mecanismo es real, cualquier
+negocio de verdad con tráfico alto podría tocarlo el día de mañana, no solo el banco de pruebas.
 
-**El "formulario" que el mensaje de retirada promete NO EXISTE.** `sessionData.draft` y
-`sessionData.ready` solo se fijaban dentro del bucle de conversación con la IA
-(`modules/registro/index.js`, marcador `[LISTO:{...}]`), y ese bucle ya no corre desde el 6 sep
-2026 (`apagar-disa-paso-1`). Sin ese bucle, `draft`/`ready` no se fijan **nunca**, así que
-`/api/registro/crear` siempre devuelve 409. **Es una función nueva que construir, no un apagado**:
-un formulario real que pida nombre del negocio, nombre del dueño, email, oficio y contraseña, sin
-conversación de por medio, y que deje `sessionData.draft`/`ready` en el mismo sitio donde
-`/api/registro/crear` los espera hoy — para no tener que tocar esa ruta.
-
-**No se ha construido nada aquí.** Va primera de la cola porque, mientras siga así, **Bamburu no
-puede sumar un cliente nuevo**.
+**Qué hace falta:** reproducir de forma aislada y controlada (no en el negocio de desarrollo, con
+copia previa) escritura + lectura concurrentes intensas contra la misma base mientras el repaso de
+30 s de `tenant-middleware.js` cierra/reabre conexiones, para confirmar o descartar la sospecha con
+una medida, no con una suposición. Si se confirma, la reparación toca `conexiones-que-no-se-cierran`
+o el propio motor de conexiones — no `sacar-disa-paso-2-borrado`, que queda cerrada y limpia.
 
 ---
 
