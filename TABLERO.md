@@ -9299,11 +9299,93 @@ cazar las cinco familias de rastro; si alguien afloja los patrones, cae.
 ## TAREA — Sacar DISA del producto · PASO 2: borrar el código
 
 - **id:** sacar-disa-paso-2-borrado
-- **estado:** pendiente
+- **estado:** 🔨 EN CURSO — 7 sep 2026 (noche)
 - **origen:** encargo de Ibrahin, 7 sep 2026
 
 Rutas, servicios, ficheros y tablas de DISA. **Leer antes la trampa de `disa_proposals` de la ficha
 de arriba**, y la lista de lo que queda. Archivar, no destruir.
+
+### Paso 0 de este paso — solo lectura, publicado y confirmado por Ibrahin antes de tocar nada
+
+Tres listas (código exclusivo del chat · piezas compartidas que se tocan con cuidado · tablas), el
+recuento de `disa_proposals` por negocio, y **dos hallazgos que cambiaron la premisa del encargo**:
+
+1. **No hay paquete del proveedor que desinstalar.** `core/llm.js` habla por `fetch` directo a
+   `api.anthropic.com`, sin SDK. Verificado contra `package.json` y `package-lock.json`: cero
+   dependencias. **El criterio 4 queda corregido por Ibrahin**: en vez de «paquete desinstalado»,
+   **cero apariciones de `api.anthropic.com` en todo el árbol**, código y comprobaciones.
+2. **Las migraciones de `disa_*` en `modules/erp/models.js` están intercaladas con la siembra del
+   sistema de permisos** (`permissions`/`user_permissions`, ~60 permisos) y con `platform_limits`
+   (de superadmin). Un borrado por rango de líneas se habría llevado el sistema de permisos por
+   delante. Se separa statement por statement.
+
+Y dos cosas que salieron mirando y que **no son de este encargo, pero se apuntan hoy porque son
+graves** (decisión de Ibrahin, 7 sep 2026): quedan como fichas propias, aquí abajo.
+
+### Criterios de HECHO — escritos antes de construir, con la corrección de Ibrahin
+
+1. `gate-disa-fuera-de-la-vista` sigue en verde.
+2. Las cinco intocables responden: avisos, propuestas, impago, reposición, recurrentes.
+   Comprobado abriéndolas en navegador.
+3. `disa_proposals` tiene EXACTAMENTE las mismas filas que en este Paso 0 (86, todas en
+   `desarrollo-bamburu`) — contadas antes y después del borrado de las demás tablas.
+4. **⚙️ CORREGIDO POR IBRAHIN:** cero apariciones de `api.anthropic.com` en el árbol (código y
+   comprobaciones). No hay paquete que desinstalar.
+5. Barrido completo sin rojos nuevos. Los 3 rojos "por diseño" quedan retirados o reescritos, **con
+   una excepción escrita por Ibrahin: `gate-registro-alta` NO SE TOCA** — sus 4 fallos son del alta
+   pública rota (ficha aparte, aquí abajo), no del borrado de DISA. Se queda rojo, con su dueño
+   escrito, y no se afloja ni se adapta para que pase.
+
+---
+
+## 🆘 TAREA — El alta pública está rota: nadie puede darse de alta en Bamburu
+
+- **id:** alta-publica-rota-sin-formulario
+- **estado:** pendiente
+- **prioridad:** 🔺🔺 **LA PRIMERA DE LA COLA — delante de todo lo demás, incluido el Bloque 3.**
+  Subida por Ibrahin el 7 sep 2026 (noche), al confirmar el Paso 0 de `sacar-disa-paso-2-borrado`.
+- **origen:** hallazgo del Paso 0 de `sacar-disa-paso-2-borrado`, medido en vivo el 7 sep 2026
+
+**MEDIDO EN PRODUCCIÓN, con una petición real:**
+
+```
+POST /api/registro/init   → sesión creada, bienvenida de siempre
+POST /api/registro/disa   → «El alta por chat está retirada... rellena el formulario»
+POST /api/registro/crear  → 409 «Aún no hemos terminado de preparar tu negocio»
+```
+
+**El "formulario" que el mensaje de retirada promete NO EXISTE.** `sessionData.draft` y
+`sessionData.ready` solo se fijaban dentro del bucle de conversación con la IA
+(`modules/registro/index.js`, marcador `[LISTO:{...}]`), y ese bucle ya no corre desde el 6 sep
+2026 (`apagar-disa-paso-1`). Sin ese bucle, `draft`/`ready` no se fijan **nunca**, así que
+`/api/registro/crear` siempre devuelve 409. **Es una función nueva que construir, no un apagado**:
+un formulario real que pida nombre del negocio, nombre del dueño, email, oficio y contraseña, sin
+conversación de por medio, y que deje `sessionData.draft`/`ready` en el mismo sitio donde
+`/api/registro/crear` los espera hoy — para no tener que tocar esa ruta.
+
+**No se ha construido nada aquí.** Va primera de la cola porque, mientras siga así, **Bamburu no
+puede sumar un cliente nuevo**.
+
+---
+
+## TAREA — Retirar los vestigios de superadmin que vigilaban la IA
+
+- **id:** superadmin-vestigios-de-ia
+- **estado:** pendiente
+- **prioridad:** no urgente — apuntada el 7 sep 2026, sin fecha de entrega
+- **origen:** hallazgo del Paso 0 de `sacar-disa-paso-2-borrado`
+
+Tres piezas del panel de superadmin que dejan de medir nada real en cuanto el paso 2 borra
+`core/llm.js` y las tablas del chat, y quedarán marcando **cero para siempre** sin que nadie lo note:
+
+- La columna **"Gasto IA (mes)"** y el modal **"Tope de IA"** (`modules/superadmin/index.js`),
+  que leen/escriben `platform_limits.ai_cap_eur` — tabla que se queda (la usa el mecanismo), pero
+  el tope que fija ya no frena nada.
+- El KPI **"Frenos en DISA (24h)"** (`modules/superadmin/seguridad.js`), que cuenta límites de
+  tasa sobre rutas que ya no reciben ninguna petición.
+
+No se tocan en el paso 2 (ese encargo es DISA, no superadmin) ni son urgentes: no rompen nada, solo
+dejan de decir algo útil. Apuntada para que no se quede como ruido permanente sin dueño.
 
 ---
 

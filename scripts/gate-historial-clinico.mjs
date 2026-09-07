@@ -14,7 +14,6 @@ import { launchOpts, exigeCodigoServido } from './lib/gate-env.mjs';
 import { negocioDesechable } from './lib/negocio-desechable.mjs';
 import { fijarOficio } from '../modules/erp/oficios.js';
 import { menuDeUsuario } from '../modules/erp/menu.js';
-import { evaluateQueryAccess, QUERY_PROTECTED_TABLES } from '../modules/disa/index.js';
 import { filtrarPorPermiso, SIN_PERMISO_DECLARADO } from '../core/correo-equipo.js';
 import { readFileSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
@@ -186,18 +185,12 @@ try {
   // ── [9] POR DÓNDE NO PUEDE SALIR ────────────────────────────────────────────────────────────
   console.log('\n[9] POR DÓNDE NO SALE');
   {
-    for (const t of ['hc_consentimientos', 'hc_antecedentes', 'hc_notas', 'hc_accesos']) {
-      ok(QUERY_PROTECTED_TABLES.has(t), 'DISA tiene protegida la tabla ' + t);
-    }
-    // Y la prueba que de verdad importa: ni el DUEÑO puede sacarlo por chat.
-    const veredicto = evaluateQueryAccess('SELECT * FROM hc_notas', { isAdmin: true, allTables: ['hc_notas'], hasPerm: () => true });
-    ok(typeof veredicto === 'string' && /protegida/i.test(veredicto),
-       'ni el dueño puede pedírselo a DISA por chat', veredicto || '(¡pasó!)');
-    // Ninguna tabla del historial en la allowlist de ESCRITURA de DISA.
-    const disa = readFileSync(join(RAIZ, 'modules/disa/index.js'), 'utf8');
-    const wt = disa.slice(disa.indexOf('const WRITABLE_TABLES'), disa.indexOf('const WRITABLE_TABLES') + 900);
-    ok(!/hc_/.test(wt), '  y ninguna está en la lista de tablas que DISA puede escribir');
-    // Ni en los listados, ni en la analítica, ni en el portal.
+    // ⚙️ 7 SEP 2026 (`sacar-disa-paso-2-borrado`) — AQUÍ SE PROBABA QUE DISA TENÍA LAS CUATRO
+    // TABLAS PROTEGIDAS (QUERY_PROTECTED_TABLES), que ni el dueño podía pedirlas por chat
+    // (evaluateQueryAccess) y que ninguna estaba en su lista de escritura (WRITABLE_TABLES,
+    // modules/disa/index.js). El chat se ha borrado con todo su código: no hay ya ninguna vía
+    // por la que pudiera sacar el historial, así que la pregunta no tiene sentido. Se quedan
+    // las otras tres vías, que SÍ siguen vivas y siguen siendo la comprobación real.
     for (const [f, etq] of [['modules/erp/routes/listados.js', 'los listados imprimibles'],
                             ['modules/erp/constructor-analitica.js', 'el constructor de analítica'],
                             ['modules/portal/index.js', 'el portal del cliente']]) {

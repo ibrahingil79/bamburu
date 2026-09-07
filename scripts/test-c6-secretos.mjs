@@ -59,49 +59,10 @@ console.log('\n[B7] Los scripts de ops ya no imprimen contraseñas');
     /pedirContrasenyaNueva\([^)]*\)/.test(leer('scripts/reset-admin.js')) && prompt.includes('minimo = 10'));
 }
 
-console.log('\n[B8] DISA no manda al log los valores del WHERE (son PII de tus clientes)');
-{
-  const { redactarSql } = await import('../modules/disa/index.js');
-
-  const casos = [
-    { sql: "SELECT total FROM invoices WHERE client_name='Juan Pérez'", fuera: ['Juan Pérez'] },
-    { sql: "SELECT * FROM clients WHERE email='ana@ejemplo.com' LIMIT 10", fuera: ['ana@ejemplo.com'] },
-    { sql: "SELECT * FROM clients WHERE phone='+34600123456'", fuera: ['+34600123456'] },
-    { sql: "SELECT * FROM invoices WHERE total > 1500.50 AND year = 2026", fuera: ['1500.50', '2026'] },
-    { sql: `SELECT * FROM clients WHERE nombre="María O'Neill"`, fuera: ['María', "O'Neill"] },
-  ];
-  for (const { sql, fuera } of casos) {
-    const red = redactarSql(sql);
-    const filtrado = fuera.filter(v => red.includes(v));
-    check(`ROJO antes de C6 · no se filtra ${fuera.join(' / ')}`, filtrado.length === 0, red);
-  }
-
-  // La FORMA se conserva: sin esto el log no serviría para nada y alguien lo volvería a abrir.
-  const red = redactarSql("SELECT c.name, SUM(i.total) FROM clients c JOIN invoices i ON i.client_id=c.id WHERE c.email='x@y.test' GROUP BY c.id");
-  check('conserva las tablas', red.includes('clients') && red.includes('invoices'));
-  check('conserva el JOIN y el GROUP BY', red.includes('JOIN') && red.includes('GROUP BY'));
-  check('conserva la columna del WHERE (se ve por qué buscaba, no a quién)', red.includes('c.email'));
-  check('aguanta null/undefined sin reventar', redactarSql(null) === '' && redactarSql(undefined) === '');
-
-  // El sitio real: lo que loguea la herramienta debe pasar por redactarSql, nunca el sql crudo.
-  //
-  // ⚙️ REESCRITO EL 24 AGO 2026. Antes esto buscaba el TEXTO LITERAL `console.log('[DISA] query_database:`
-  // en UNA línea. El producto sigue haciendo lo correcto, pero la traza se generalizó para cubrir
-  // todas las herramientas —`'[DISA] ' + toolUse.name + ':'`— y se partió en tres líneas, así que la
-  // comprobación no encontraba su cadena y cantaba un fallo de producto que no existía.
-  // **Medía cómo estaba ESCRITA la línea, no lo que hace.** Ahora se busca la SENTENCIA entera
-  // (desde `console.log('[DISA] ` hasta su `);`) y se afirma sobre el mecanismo.
-  const disa = leer('modules/disa/index.js');
-  // Se busca la traza DE LA HERRAMIENTA, no cualquier `[DISA]`: hay varias, y la primera del fichero
-  // es la del arranque («Usando BD»). La que importa es la que imprime `toolUse.name`.
-  const i = disa.indexOf("console.log('[DISA] ' + toolUse.name");
-  const sentencia = i === -1 ? '' : disa.slice(i, disa.indexOf(');', i) + 2);
-  check('la traza de la herramienta pasa el SQL por redactarSql',
-    /query_database'\s*\?\s*redactarSql\(/.test(sentencia.replace(/\s+/g, ' ')),
-    sentencia.replace(/\s+/g, ' ').slice(0, 80));
-  check('y NO manda el sql crudo al log',
-    sentencia !== '' && !/(?<!redactarSql\()\binp\.sql\b(?![^)]*\))/.test(sentencia) && !/toolUse\.input\?\.sql\s*,/.test(sentencia));
-}
+// ⚙️ 7 SEP 2026 (`sacar-disa-paso-2-borrado`) — AQUÍ IBA "[B8] DISA no manda al log los valores
+// del WHERE": probaba `redactarSql` (modules/disa/index.js), que limpiaba de PII la traza de la
+// herramienta de consulta genérica del chat antes de escribirla en el log. Se retira con el
+// chat: no queda ninguna consulta que loguear.
 
 console.log('\n[B9] Ninguna BD de negocio es legible por otros usuarios de la máquina');
 {

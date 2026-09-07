@@ -506,7 +506,11 @@ export function getTenantsByEmail(email) {
 }
 
 // ---------------------------------------------------------------------------
-// Gasto GLOBAL de Anthropic (freno de gasto, por mes natural 'YYYY-MM')
+// Gasto GLOBAL de Anthropic (histórico; se leía en `core/llm.js`, borrado el 7 sep 2026
+// con `sacar-disa-paso-2-borrado`). `getGlobalLlmSpend` SE QUEDA — la lee
+// `modules/superadmin/seguridad.js` para enseñar el histórico. `addGlobalLlmSpend` y
+// `markGlobalLlmAlerted` solo las llamaba `core/llm.js`: sin él, no tienen quien las
+// invoque, y se retiran. La tabla `llm_spend_global` no se toca: queda con lo que ya tenía.
 // ---------------------------------------------------------------------------
 
 // Devuelve { eur, alerted_80 } del mes (0 si no hay fila).
@@ -514,19 +518,6 @@ export function getGlobalLlmSpend(month) {
   return controlDb
     .prepare('SELECT eur, alerted_80 FROM llm_spend_global WHERE month = ?')
     .get(month) ?? { eur: 0, alerted_80: 0 };
-}
-
-// Suma gasto al acumulador global del mes (crea la fila si no existe).
-export function addGlobalLlmSpend(month, eur) {
-  controlDb
-    .prepare(`INSERT INTO llm_spend_global (month, eur) VALUES (?, ?)
-              ON CONFLICT(month) DO UPDATE SET eur = eur + excluded.eur`)
-    .run(month, eur);
-}
-
-// Marca que ya se envió el aviso del 80% de este mes (para no repetirlo).
-export function markGlobalLlmAlerted(month) {
-  controlDb.prepare('UPDATE llm_spend_global SET alerted_80 = 1 WHERE month = ?').run(month);
 }
 
 // ---------------------------------------------------------------------------

@@ -30,8 +30,10 @@ export const MODULOS = [
     porque: 'el panel de administración y /api/erp: todo el producto de dentro. Sin él el dueño no puede facturar, cobrar ni mirar nada, y es la avería que ya ocurrió tres veces' },
   { nombre: 'store',  esencial: false,
     porque: 'la tienda pública está APAGADA desde D1 (el montaje de /store y /api/store está comentado a propósito y /store devuelve 404). Hoy este módulo no monta ni una ruta' },
-  { nombre: 'disa',   esencial: false,
-    porque: 'la IA es una de las dos puertas de CANON §3-bis y su ausencia degrada el producto, pero la puerta visual sigue entera y el negocio se puede operar. Decisión de Ibrahin, 3 sep 2026' },
+  // ⚙️ 7 SEP 2026 (`sacar-disa-paso-2-borrado`) — 'disa' SALE DE ESTA LISTA, no se marca `esencial`.
+  // `modules/disa/` se ha BORRADO (no apagado): dejar la entrada aquí haría que CADA arranque del
+  // servicio intentara importar un módulo que ya no existe, fallara, y mandara un aviso de verdad
+  // a Telegram — para siempre, en cada reinicio. Se tacha en el comentario, no se deja viva.
   { nombre: 'portal', esencial: false,
     porque: 'el portal del cliente final (/portal/:token) es cara al público, pero son tres rutas y su caída no impide operar el negocio. Decisión de Ibrahin, 3 sep 2026' },
 ];

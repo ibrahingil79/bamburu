@@ -36,75 +36,11 @@ export function tenantDb(slug = 'desarrollo-bamburu') {
   return p;
 }
 
-// Los gates que llaman al MODELO REAL dependen de que el negocio tenga cuota de IA este mes. El
-// freno de gasto de core/llm.js corta ANTES de llamar a la API (429) cuando el gasto del mes supera
-// el tope del tenant, y entonces el gate no prueba nada: se queda mirando una pantalla que nunca se
-// pinta y muere con una traza confusa (así estuvieron gate-c2-captura y gate-disa-captura-chat, con
-// el diagnóstico equivocado de "selector caducado" encima).
-//
-// Sin cuota NO hay veredicto: se aborta con código 2, como cuando falta el Chromium. "No he podido
-// probarlo" y "ha fallado" no son lo mismo, y confundirlos es como nació el falso verde de julio.
-export function requireLlmQuota(db) {
-  const TOPE_POR_DEFECTO = 5;   // core/llm.js · TENANT_CAP_EUR
-  const mes = new Date().toISOString().slice(0, 7);
-  let gasto = 0, tope = TOPE_POR_DEFECTO;
-  try { gasto = db.prepare('SELECT eur FROM disa_spend WHERE month=?').get(mes)?.eur || 0; } catch { /* sin tabla: no bloquea */ }
-  try {
-    const v = db.prepare("SELECT value FROM platform_limits WHERE key='ai_cap_eur'").get()?.value;
-    if (typeof v === 'number' && v >= 0) tope = v;
-  } catch { /* sin tabla: el default */ }
-  if (gasto >= tope) {
-    abortar(
-      'El negocio ha agotado su cuota de IA de ' + mes + ': ' + gasto.toFixed(3) + ' € de un tope de ' + tope + ' €.',
-      'El modelo devolvería 429 y este gate no probaría NADA. Sube el tope (platform_limits.ai_cap_eur) o espera al mes que viene.'
-    );
-  }
-}
-
-/**
- * ¿RESPONDE el proveedor de IA? Distinto del tope del negocio, y por eso hace falta aparte.
- *
- * ⚙️ POR QUÉ EXISTE (1 sep 2026). Tres comprobaciones que llaman al modelo real
- * —`verify-d5-create-product`, `verify-llm-migracion`, `verify-albaranes-disa`— morían en 0-1 s
- * con `TypeError: Cannot read properties of undefined (reading 'replace')`. Parecía que estaban
- * rotas. **No lo estaban:** la cuenta del PROVEEDOR de IA se había quedado sin saldo, `callClaude`
- * lanzaba `llm_provider_balance` (503), la respuesta llegaba `undefined` y el código hacía
- * `r1.reply.replace(...)` encima.
- *
- * `requireLlmQuota` NO lo cazaba: aquél mira el tope de gasto DEL NEGOCIO (`ai_cap_eur`), que es
- * otra cosa. Un negocio con cuota de sobra choca igual contra una cuenta de proveedor vacía.
- *
- * **Morir con un TypeError disfraza «no hay saldo» de «esto está roto»**, que es exactamente el
- * pecado que este fichero existe para impedir. Aborta con código 2 —«no he podido probarlo»— que
- * NO es lo mismo que «ha fallado».
- *
- * Cuesta prácticamente nada: una llamada de `max_tokens: 1`, y si no hay saldo no llega a cobrarse.
- */
-export async function requireLlmProvider() {
-  let llm;
-  try { llm = await import('../../core/llm.js'); }
-  catch (e) { abortar('No puedo cargar core/llm.js: ' + e.message, 'Sin él no hay forma de saber si el proveedor responde.'); }
-  if (!llm.hasAnthropicKey()) {
-    abortar('No hay clave del proveedor de IA configurada.',
-            'Esta comprobación llama al modelo de verdad: sin clave no prueba NADA. Mira /etc/bamburu.env.');
-  }
-  try {
-    await llm.callClaude({ model: 'claude-haiku-4-5-20251001', max_tokens: 1,
-                           messages: [{ role: 'user', content: 'ok' }] });
-  } catch (e) {
-    if (e?.code === 'llm_provider_balance') {
-      abortar('El proveedor de IA NO TIENE SALDO (503 llm_provider_balance).',
-              'No es un fallo del producto ni de esta comprobación: DISA está caída para todo el mundo '
-              + 'por la misma causa. Recarga la cuenta del proveedor. Hasta entonces esto no puede probar nada.');
-    }
-    if (e?.code === 'llm_tenant_cap' || e?.code === 'llm_global_cap') {
-      abortar('Se ha alcanzado el tope de gasto de IA: ' + e.message,
-              'Sube el tope o espera al mes que viene. Esta comprobación no puede probar nada mientras tanto.');
-    }
-    abortar('El proveedor de IA no responde: ' + (e?.code || e?.message || 'sin detalle'),
-            'Esta comprobación llama al modelo de verdad, así que sin proveedor no hay veredicto.');
-  }
-}
+// ⚙️ 7 SEP 2026 (`sacar-disa-paso-2-borrado`) — AQUÍ VIVÍAN `requireLlmQuota` Y `requireLlmProvider`,
+// las dos guardas de las comprobaciones que llamaban al MODELO REAL (gate-c2-captura,
+// verify-d5-create-product, verify-llm-migracion, verify-albaranes-disa, gate-pago-voz-avisos…).
+// Todas esas comprobaciones se han borrado con el chat: no queda ninguna que llame al proveedor,
+// así que no queda ninguna guarda que hacerle falta a nadie.
 
 // EL NAVEGADOR EN ESTE SERVIDOR — la receta, medida el 1 sep 2026.
 //

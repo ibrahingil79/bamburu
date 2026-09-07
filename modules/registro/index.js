@@ -3,10 +3,8 @@ import { safeError } from '../../core/errors.js';
 import { rateLimit } from '../../core/rate-limit.js';
 import { autologinStore } from '../../core/autologin-store.js';
 import { randomBytes } from 'crypto';
-import { callClaude, hasAnthropicKey, textFromResponse, iaApagada } from '../../core/llm.js';   // helper único de IA: clave + transporte centralizados
-import { createTenantSvc, validateSignupDraft, emailTaken } from '../../core/tenant-signup.js';
+import { createTenantSvc } from '../../core/tenant-signup.js';
 import { OFICIOS, normalizaOficio } from '../erp/oficios.js';   // PASO 8 — los seis oficios del alta
-import { checkEmailFormat } from '../../core/signup-schema.js';
 
 // Sesiones de onboarding EN MEMORIA: sessionId -> { messages, draft, ready, created }.
 // Es deliberado y suficiente: un alta dura minutos. Si el servidor se reinicia a mitad,
@@ -20,51 +18,17 @@ setInterval(() => {
   }
 }, 300000);
 
-// Bienvenida REAL: primer mensaje del asistente, guardado en el historial del backend
-// desde el inicio para que la IA "sepa" que ya saludó y continúe con naturalidad (defecto A).
-const WELCOME = '¡Hola! Soy DISA, tu asistente en Bamburu. Voy a ayudarte a poner en marcha tu negocio en un momento, sin formularios: solo cuéntamelo con tus palabras.\n\nPara empezar, háblame un poco de tu negocio: ¿a qué te dedicas y cómo se llama?';
+// Bienvenida: primer mensaje guardado en el historial del backend desde el inicio.
+//
+// ⚙️ 7 SEP 2026 (`sacar-disa-paso-2-borrado`) — decía «Soy DISA»; se reescribe sin la palabra.
+// El HISTORIAL de la conversación (`newSession`, `onboardingSessions`) SE QUEDA: lo usan
+// `/api/registro/init` y `/api/registro/crear`, que siguen vivas. Lo que se ha ido es el
+// bucle que procesaba las respuestas del usuario con el modelo (`buildSystemPrompt`,
+// `LISTO_RE`, `EMAIL_RE`) — nada de eso tenía ya forma de ejecutarse.
+const WELCOME = '¡Hola! Bienvenido a Bamburu. Voy a ayudarte a poner en marcha tu negocio en un momento, sin formularios: solo cuéntamelo con tus palabras.\n\nPara empezar, háblame un poco de tu negocio: ¿a qué te dedicas y cómo se llama?';
 
 function newSession() {
   return { messages: [{ role: 'assistant', content: WELCOME }], draft: null, ready: false, created: Date.now() };
-}
-
-// Marcadores que emite la IA: [EMAIL:...] para verificar el email en cuanto lo recibe
-// (antes de resumir), y [LISTO:{...}] con todos los datos (sin contraseña).
-const LISTO_RE = /\[LISTO:(\{[\s\S]*?\})\]/;
-const EMAIL_RE = /\[EMAIL:\s*([^\]\s]+)\s*\]/i;
-
-function buildSystemPrompt() {
-  return [
-    'Eres DISA, la asistente de bienvenida de Bamburu.',
-    'Acabas de saludar al usuario y le has pedido que te hable de su negocio (ese saludo ya está en la conversación; NO lo repitas).',
-    '',
-    'Tu objetivo es registrar su negocio de forma natural y cálida, como una conversación, NO como un formulario. Recoge estos datos, en este orden, de uno en uno o en grupos naturales según lo que el usuario te vaya contando:',
-    '1. Nombre del negocio',
-    '2. Sector o tipo de actividad (peluquería, fontanería, tienda, restaurante…)',
-    '3. Nombre del propietario (con quién hablo)',
-    '4. Email de contacto',
-    '',
-    'País: asume España por defecto. NO preguntes el país salvo que el usuario dé señales claras de estar en otro lugar (otra moneda, otro país, una ciudad de fuera de España…); en ese caso, confírmalo con tacto.',
-    '',
-    'NO pidas la contraseña: se elige después, en un campo seguro, fuera de esta conversación. No la trates aquí; como mucho, al final puedes mencionar que el último paso será elegirla.',
-    '',
-    'VERIFICACIÓN DEL EMAIL (muy importante):',
-    '- En cuanto el usuario te dé su email, en ESE MISMO mensaje añade al final, en una línea aparte, el marcador [EMAIL:la-dirección] y dile en una frase breve que lo estás comprobando. NO resumas ni emitas [LISTO] en ese mensaje.',
-    '- Recibirás el resultado como una verificación interna entre paréntesis (empieza por «verificación interna del email»). Esas notas son AUTOMÁTICAS del sistema: NUNCA las menciones, las cites ni hagas referencia a ellas; actúa según su contenido con naturalidad, como si lo hubieras comprobado tú mismo.',
-    '- Si el email no es válido o ya está en uso, discúlpate con naturalidad y pide otro, y vuelve a comprobarlo con [EMAIL:...]. Solo cuando la verificación confirme que el email es válido y está libre puedes avanzar hacia el resumen.',
-    '',
-    'Cuando tengas los CUATRO datos y el email ya esté CONFIRMADO por el sistema:',
-    '1. Presenta un RESUMEN claro y breve de lo recogido para que el usuario lo revise.',
-    '2. En el MISMO mensaje, añade al final, en una línea aparte, EXACTAMENTE este marcador con los datos en JSON (sin contraseña):',
-    '[LISTO:{"businessName":"...","sector":"...","ownerName":"...","email":"...","country":"ES"}]',
-    '',
-    'Reglas:',
-    '- Habla en español, con tildes, cercana y breve.',
-    '- Una sola cosa por mensaje; no abrumes.',
-    '- Si el usuario da varios datos a la vez, recógelos todos (pero el email se comprueba con [EMAIL:...] ANTES de resumir).',
-    '- Usa el marcador [LISTO:...] UNA sola vez, solo cuando tengas los cuatro datos y el email verificado.',
-    '- Tras el resumen con [LISTO:...], no hagas más preguntas: el usuario pulsará un botón para crear su negocio y elegir su contraseña.',
-  ].join('\n');
 }
 
 export function register(app) {
@@ -89,137 +53,18 @@ export function register(app) {
   app.post('/api/registro/disa',
     rateLimit({ windowMs: 60000, max: 20, keyPrefix: 'onboarding' }),
     async (c) => {
-      // ⛔ IA APAGADA (Ibrahin, 6 sep 2026). El alta por CONVERSACIÓN se retira; el alta en sí NO —
-      // `provisionTenant` nunca necesitó el modelo, y el catálogo de arranque por oficio tampoco.
-      // Se contesta con 200 y un texto en el mismo campo `reply` que usaba el modelo, para que la
-      // página lo pinte igual y quien se esté dando de alta LEA qué hacer en vez de encallarse.
-      if (iaApagada()) {
-        return c.json({
-          reply: 'El alta por chat está retirada: Bamburu ya no usa inteligencia artificial.\n\n'
-               + 'Puedes darte de alta rellenando el formulario, que es igual de rápido y pide lo mismo: '
-               + 'el nombre de tu negocio, tu nombre, tu correo y una contraseña.',
-          ia_apagada: true,
-          done: false,
-        });
-      }
-
-      let body;
-      try { body = await c.req.json(); } catch { return c.json({ error: 'Petición inválida.' }, 400); }
-
-      const message = body?.message?.trim();
-      if (!message) return c.json({ error: 'Mensaje vacío.' }, 400);
-
-      let sessionId = body?.session_id || c.req.header('x-onboarding-session');
-      let sessionData = sessionId ? onboardingSessions.get(sessionId) : null;
-      if (!sessionData) {
-        // Sesión perdida (reinicio/expiración): re-sembramos con la bienvenida en el historial.
-        sessionId = randomBytes(16).toString('hex');
-        sessionData = newSession();
-        onboardingSessions.set(sessionId, sessionData);
-      }
-      const history = sessionData.messages;
-
-      if (!hasAnthropicKey()) {
-        return c.json({ error: 'Ahora mismo no puedo seguir con el alta. Inténtalo en unos minutos o escríbenos a soporte.' }, 500);
-      }
-
-      const recentHistory = history.slice(-14).map(m => ({ role: m.role, content: m.content }));
-      const convo = [...recentHistory, { role: 'user', content: message }];
-
-      let cleanReply = '';
-      let ready = false;
-      let summary = null;
-
-      // Bucle: la IA comprueba el email EN CUANTO lo recibe (marcador [EMAIL:...]); el
-      // servidor valida formato + unicidad y le devuelve el resultado para que continúe o
-      // pida otro. Así el RESUMEN solo aparece con un email ya verificado — nunca se muestra
-      // un resumen contradicho después por un error de email.
-      let guard = 0;
-      while (guard++ < 4) {
-        let apiData;
-        try {
-          apiData = await callClaude({
-            model: 'claude-sonnet-5',   // D4: DISA de onboarding en Sonnet 5 (antes 4-6), como el chat del panel
-            max_tokens: 1024,
-            system: buildSystemPrompt(),
-            messages: convo,
-          });
-        } catch (err) {
-          console.error('[DISA onboarding] API error:', err.message);
-          return c.json({ error: 'He tenido un problema para responderte. Inténtalo de nuevo en un momento.' }, 500);
-        }
-        // EL TEXTO SE SACA CON textFromResponse, NUNCA CON content[0].
-        // Esto tiró el alta en producción (15 ago 2026): `content[0]` dejó de ser el texto porque el
-        // modelo empezó a devolver un bloque `thinking` DELANTE. `content[0].text` era undefined, la
-        // respuesta salía VACÍA y con HTTP 200 — sin error en el log y sin nada en pantalla, así que
-        // parecía que DISA "pensaba" sin fin. El helper filtra por `type === 'text'`: el número de
-        // bloques que mande el modelo, y en qué orden, deja de importar.
-        const raw = textFromResponse(apiData);
-
-        // (a) Verificación del email: validar formato + unicidad y devolver el resultado a
-        //     la IA — ANTES de cualquier resumen (corrige el "resumen y luego error").
-        const em = raw.match(EMAIL_RE);
-        if (em) {
-          const addr = em[1].trim();
-          const ackText = raw.replace(EMAIL_RE, '').trim();
-          const fmt = checkEmailFormat(addr);
-          let note;
-          if (!fmt) {
-            note = `(verificación interna del email "${addr}": el formato NO es válido. Discúlpate con naturalidad y pide al usuario que lo escriba de nuevo. No menciones esta nota. No resumas ni emitas [LISTO] todavía.)`;
-          } else if (emailTaken(fmt)) {
-            note = `(verificación interna del email "${fmt}": YA EXISTE una cuenta en Bamburu con ese email. Con amabilidad, dile que ese correo ya está registrado y que use otro distinto, y pídeselo. No menciones esta nota. No resumas ni emitas [LISTO] todavía.)`;
-          } else {
-            note = `(verificación interna del email "${fmt}": válido y libre. Continúa con naturalidad: si ya tienes el nombre del negocio, el sector y el nombre del propietario, presenta el resumen y emite [LISTO]; si falta algo, pídelo. No menciones esta nota.)`;
-          }
-          convo.push({ role: 'assistant', content: ackText || '(comprobando el email…)' });
-          convo.push({ role: 'user', content: note });
-          continue;   // re-llamada a la IA con el resultado de la verificación
-        }
-
-        // (b) Resumen final con los datos.
-        const m = raw.match(LISTO_RE);
-        if (m) {
-          const text = raw.replace(LISTO_RE, '').trim();
-          let draft = null;
-          try { draft = JSON.parse(m[1]); } catch { draft = null; }
-          if (draft) {
-            try {
-              const valid = validateSignupDraft(draft);
-              sessionData.draft = valid;
-              sessionData.ready = true;
-              ready = true;
-              cleanReply = text;
-              summary = {
-                businessName: valid.businessName, sector: valid.sector || '',
-                ownerName: valid.ownerName, email: valid.email, country: valid.country,
-              };
-            } catch (e) {
-              // Salvaguarda: si la IA resumió con un email inválido pese al paso (a),
-              // mostramos SOLO la re-pregunta, nunca el resumen contradicho.
-              sessionData.draft = null;
-              sessionData.ready = false;
-              cleanReply = e.message || 'Hay un dato del alta que no es válido.';
-            }
-          } else {
-            cleanReply = text;
-          }
-          break;
-        }
-
-        // (c) Respuesta normal (sigue recogiendo datos).
-        cleanReply = raw;
-        break;
-      }
-
-      // Defensa: nunca dejar escapar marcadores al usuario.
-      cleanReply = cleanReply.replace(LISTO_RE, '').replace(EMAIL_RE, '').trim();
-
-      history.push({ role: 'user', content: message });
-      history.push({ role: 'assistant', content: cleanReply });
-      sessionData.messages = history;
-      onboardingSessions.set(sessionId, sessionData);
-
-      return c.json({ reply: cleanReply, session_id: sessionId, ready, summary });
+      // ⛔ IA APAGADA (Ibrahin, 6 sep 2026), y BORRADA (`sacar-disa-paso-2-borrado`, 7 sep 2026):
+      // el bucle de conversación con el modelo, `buildSystemPrompt`, los marcadores [EMAIL:...]
+      // y [LISTO:...] no existen ya en el árbol. Esta ruta se queda, con su respuesta fija, porque
+      // el frontend de `/registro` sigue llamándola: quien tenga la pantalla abierta y escriba algo
+      // debe seguir recibiendo una respuesta clara, no un 404.
+      return c.json({
+        reply: 'El alta por chat está retirada: Bamburu ya no usa inteligencia artificial.\n\n'
+             + 'Puedes darte de alta rellenando el formulario, que es igual de rápido y pide lo mismo: '
+             + 'el nombre de tu negocio, tu nombre, tu correo y una contraseña.',
+        ia_apagada: true,
+        done: false,
+      });
     }
   );
 
@@ -269,7 +114,7 @@ export function register(app) {
   );
 }
 
-// ── HTML del onboarding con DISA ──────────────────────────────────────────
+// ── HTML del onboarding ────────────────────────────────────────────────────
 // (Mismo aspecto que antes; el rediseño visual llegará con el sistema de diseño.)
 
 function onboardingHtml(nonce = '') {
@@ -278,7 +123,7 @@ function onboardingHtml(nonce = '') {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1.0">
-  <title>Empieza con Bamburu — DISA te da la bienvenida</title>
+  <title>Empieza con Bamburu</title>
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
     body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:#070B14;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px}
@@ -287,10 +132,10 @@ function onboardingHtml(nonce = '') {
     .logo small{display:block;font-size:12px;font-weight:400;color:rgba(255,255,255,0.4);letter-spacing:0;margin-top:4px}
     .card{background:#0D1220;border:1px solid rgba(255,255,255,0.08);border-radius:20px;width:100%;max-width:440px;box-shadow:0 30px 80px rgba(0,0,0,0.5);display:flex;flex-direction:column;overflow:hidden;height:580px}
     .card-header{background:rgba(20,184,166,0.08);border-bottom:1px solid rgba(20,184,166,0.15);padding:16px 18px;flex-shrink:0;display:flex;align-items:center;gap:12px}
-    .disa-avatar{width:38px;height:38px;border-radius:12px;background:linear-gradient(135deg,#14B8A6,#0F766E);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;color:#fff}
-    .disa-info{flex:1}
-    .disa-name{font-weight:700;font-size:14px;color:#fff}
-    .disa-status{font-size:11px;color:rgba(255,255,255,0.45);display:flex;align-items:center;gap:5px;margin-top:1px}
+    .asistente-avatar{width:38px;height:38px;border-radius:12px;background:linear-gradient(135deg,#14B8A6,#0F766E);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;color:#fff}
+    .asistente-info{flex:1}
+    .asistente-name{font-weight:700;font-size:14px;color:#fff}
+    .asistente-status{font-size:11px;color:rgba(255,255,255,0.45);display:flex;align-items:center;gap:5px;margin-top:1px}
     .status-dot{width:6px;height:6px;border-radius:50%;background:#4ADE80;box-shadow:0 0 6px rgba(74,222,128,0.6);flex-shrink:0}
     .messages{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:10px;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,0.1) transparent}
     .typing{display:none;align-items:center;gap:4px;padding:10px 14px;background:rgba(255,255,255,0.06);border-radius:14px;border-bottom-left-radius:4px;width:fit-content}
@@ -349,10 +194,10 @@ function onboardingHtml(nonce = '') {
 
   <div class="card">
     <div class="card-header">
-      <div class="disa-avatar">✦</div>
-      <div class="disa-info">
-        <div class="disa-name">DISA</div>
-        <div class="disa-status"><span class="status-dot"></span>Asistente de bienvenida</div>
+      <div class="asistente-avatar">✦</div>
+      <div class="asistente-info">
+        <div class="asistente-name">Bamburu</div>
+        <div class="asistente-status"><span class="status-dot"></span>Asistente de bienvenida</div>
       </div>
     </div>
 
@@ -577,7 +422,7 @@ function onboardingHtml(nonce = '') {
         typing.classList.remove('visible');
         if(d.session_id) sessionId=d.session_id;
         if(Array.isArray(d.oficios)) OFICIOS=d.oficios;
-        addMsg('assistant', d.reply || '¡Hola! Soy DISA, tu asistente en Bamburu.');
+        addMsg('assistant', d.reply || '¡Hola! Bienvenido a Bamburu.');
         input.focus();
       }catch(e){
         typing.classList.remove('visible');

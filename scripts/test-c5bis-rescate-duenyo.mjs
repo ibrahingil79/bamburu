@@ -236,13 +236,9 @@ try {
     check('POST /admin/disable-2fa → redirige y NO desactiva', r2.status === 302 && r2.headers.get('location') === '/admin/perfil');
   }
 
-  console.log('\n[11] DISA no toca los códigos');
-  {
-    const { QUERY_PROTECTED_TABLES, evaluateQueryAccess } = await import('../modules/disa/index.js');
-    check('la tabla está en la lista PROTEGIDA', QUERY_PROTECTED_TABLES.has('admin_recovery_codes'));
-    const err = evaluateQueryAccess('SELECT * FROM admin_recovery_codes', { isAdmin: true, allTables: ['admin_recovery_codes'], hasPerm: () => true });
-    check('ni siquiera un owner puede leerlos por chat (bypass incluido)', !!err, err || '');
-  }
+  // ⚙️ 7 SEP 2026 (`sacar-disa-paso-2-borrado`) — AQUÍ IBA "[11] DISA no toca los códigos":
+  // comprobaba que `admin_recovery_codes` estaba protegida contra la herramienta de consulta
+  // genérica del chat. Borrado con todo su código: no queda ninguna vía de chat que comprobar.
 
   console.log(`\n${'─'.repeat(58)}`);
   console.log(`  ${ok} OK · ${fail} fallos`);

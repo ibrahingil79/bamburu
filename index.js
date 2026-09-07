@@ -1616,6 +1616,15 @@ app.use('*', readOnlyGuard);   // bloqueo de escritura para negocios en SOLO LEC
 console.log('🎋 Iniciando Bamburu...');
 await loadModules(app, db);
 
+// ⚙️ 7 SEP 2026 (`sacar-disa-paso-2-borrado`) — `modules/disa/` SE HA BORRADO ENTERO, con la
+// redirección que el paso 1 (`sacar-disa-paso-1-invisible`) había puesto dentro de él para
+// `/admin/disa/*`. Esa redirección se queda, movida aquí: quien tenga un marcador guardado de la
+// pantalla del chat no debe encontrarse un error, sino que le manden al panel, exactamente igual
+// que antes de borrar el código. (`/api/disa/*` no lleva redirección: era una API que solo llamaba
+// el propio chat —el botón flotante y el constructor de tienda—, y los dos se han ido con ella; no
+// hay ningún marcador de navegador que pueda apuntar ahí.)
+app.all('/admin/disa/*', c => c.redirect('/admin'));
+
 // Manejador global de errores: registra los 5xx para el panel de superadmin (zona Errores),
 // los deja en el journal y devuelve un 500 genérico (sin filtrar el detalle al cliente).
 // Para HTTPException respeta su respuesta/estado (no cambia el comportamiento actual).

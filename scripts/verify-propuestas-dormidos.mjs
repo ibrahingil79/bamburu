@@ -362,13 +362,11 @@ try {
   generarPropuestasDormidos(db, { today: tras90 });
   ok(!!propuestoPara(db, semanalDormido), 'y 90 días después del envío, si sigue dormido, vuelve a proponerse');
 
-  // ── 10. FUERA de WRITABLE_TABLES ────────────────────────────────────────────
-  console.log('\n[10] DISA no puede escribir en sus propias propuestas');
-  const disaSrc = readFileSync('modules/disa/index.js', 'utf8');
-  const bloque = disaSrc.slice(disaSrc.indexOf('const WRITABLE_TABLES'), disaSrc.indexOf('const WRITABLE_TABLES') + 1600);
-  const escribibles = bloque.split('\n').filter(l => !l.trim().startsWith('//')).join('\n');
-  ok(!/'disa_proposals'/.test(escribibles), 'disa_proposals NO está en WRITABLE_TABLES: DISA no puede escribirse sus propias propuestas');
-  ok(!/'client_activities'/.test(escribibles), 'client_activities tampoco: el registro de contacto solo lo escribe el servicio validado');
+  // ⚙️ 7 SEP 2026 (`sacar-disa-paso-2-borrado`) — AQUÍ IBA "[10] DISA no puede escribir en sus
+  // propias propuestas": comprobaba que `disa_proposals` y `client_activities` no estaban en la
+  // lista de escritura genérica del chat (modules/disa/index.js). Borrado con todo su código: no
+  // queda ninguna vía de escritura genérica que comprobar. `disa_proposals` SIGUE VIVA — la sigue
+  // escribiendo únicamente este motor de propuestas, nunca por la vía del chat, que ya no existe.
 
   // ── 11. EL CANDADO ──────────────────────────────────────────────────────────
   console.log('\n[11] Candado de permisos');

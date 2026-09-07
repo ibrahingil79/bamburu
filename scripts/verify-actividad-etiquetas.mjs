@@ -23,7 +23,7 @@ import { randomBytes } from 'crypto';
 import http from 'node:http';
 import { runMigrations } from '../modules/erp/models.js';
 import { logActivity } from '../core/auth.js';
-import { ENTITY, TABLE_TO_ENTITY, entityForTable } from '../core/activity-entities.js';
+import { ENTITY, entityForTable } from '../core/activity-entities.js';
 
 const PORT = 3000;
 const TENANTS = ['desarrollo-bamburu', 'ibrahin-repuestos'];
@@ -99,21 +99,15 @@ try {
   const entidadesTipos = [...impSrc.matchAll(/entidad:\s*([^,}\n]+)/g)].map(m => m[1].trim());
   ok(entidadesTipos.length > 0 && entidadesTipos.every(e => e.startsWith('ENTITY.')),
     `y el mapa TIPOS del importador también: ${entidadesTipos.join(' · ') || '(no encontrado)'}`);
-  const disaSrc = readFileSync('modules/disa/index.js', 'utf8');
-  ok(/from '\.\.\/\.\.\/core\/activity-entities\.js'/.test(disaSrc), 'DISA importa el catálogo');
+  // ⚙️ 7 SEP 2026 (`sacar-disa-paso-2-borrado`) — AQUÍ SE LEÍA `modules/disa/index.js` para
+  // comprobar que importaba el catálogo y que toda tabla de su `WRITABLE_TABLES` (la vía genérica
+  // de escritura del chat) tenía entidad canónica. El fichero se ha borrado con el chat: no queda
+  // ninguna vía genérica de escritura que comprobar.
   ok(/from '\.\/activity-entities\.js'/.test(readFileSync('core/auth.js', 'utf8')), 'core/auth.js importa el catálogo');
-
-  // Toda tabla escribible por la vía genérica de DISA debe tener entidad canónica.
-  const bloque = disaSrc.slice(disaSrc.indexOf('WRITABLE_TABLES = new Set(['), disaSrc.indexOf('WRITABLE_TABLES = new Set([') + 700);
-  const tablas = [...bloque.matchAll(/^\s*'([a-z_]+)'/gm)].map(m => m[1])
-    .concat([...bloque.matchAll(/'([a-z_]+)',/g)].map(m => m[1]));
-  const vivas = [...new Set(tablas)].filter(t => !new RegExp(`//[^\\n]*'${t}'`).test(bloque));
-  const sinMapear = vivas.filter(t => !TABLE_TO_ENTITY[t]);
-  ok(sinMapear.length === 0, `todas las tablas escribibles tienen entidad canónica${sinMapear.length ? ' — FALTAN: ' + sinMapear.join(', ') : ' (' + vivas.length + ' tablas)'}`);
   ok(entityForTable('products') === ENTITY.PRODUCT && entityForTable('categories') === ENTITY.CATEGORY,
     "entityForTable traduce tabla → entidad ('products'→'product', 'categories'→'category')");
   ok(entityForTable('tabla_que_no_existe') === 'tabla_que_no_existe',
-    'una tabla sin mapear se degrada a su nombre crudo (no rompe la escritura de DISA)');
+    'una tabla sin mapear se degrada a su nombre crudo (no rompe la escritura)');
 
   // La pantalla del historial pintaba `user_name`, `action` y `entity` SIN escapar (solo `details`
   // pasaba por escHtml): un nombre de usuario con HTML se ejecutaba ahí. Se arregló al añadir el

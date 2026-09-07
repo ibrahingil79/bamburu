@@ -193,7 +193,7 @@ export const CATALOGO = {
   comercial: {
     familia: FAMILIA_CLIENTE,
     label: 'Seguimiento comercial y reenganche',
-    descripcion: 'Los que usa el CRM para mover una oportunidad, y el de "reenganche" que DISA te propone para un cliente que dejó de comprar.',
+    descripcion: 'Los que usa el CRM para mover una oportunidad, y el de "reenganche" que Bamburu te propone para un cliente que dejó de comprar.',
     tonos: [
       { clave: 'primer-contacto', label: 'Primer contacto' },
       { clave: 'seguimiento', label: 'Seguimiento' },

@@ -206,9 +206,9 @@ try {
   notas = await api('GET', '/api/erp/clients/' + CLI + '/notas');
   ok(!notas.some(n => n.id === n1.id), 'y se quita de la vista');
   ok(db.prepare('SELECT active FROM client_notes WHERE id=?').get(n1.id).active === 0, 'pero se ARCHIVA, no se destruye (regla permanente)');
-  const disaSrc = (await import('fs')).readFileSync(path.join(APP, 'modules/disa/index.js'), 'utf8');
-  const bloque = disaSrc.slice(disaSrc.indexOf('WRITABLE_TABLES = new Set('), disaSrc.indexOf('WRITABLE_TABLES = new Set(') + 2000);
-  ok(!/'client_notes'/.test(bloque), 'client_notes NO está en las tablas que DISA puede escribir');
+  // ⚙️ 7 SEP 2026 (`sacar-disa-paso-2-borrado`) — aquí se comprobaba que `client_notes` no estaba
+  // en la lista de escritura del chat (modules/disa/index.js). Borrado con todo su código: ya no
+  // hay ninguna vía de escritura del chat que comprobar.
   // La nota de siempre (el campo del cliente) sigue intacta.
   db.prepare("UPDATE clients SET notes='Nota de toda la vida' WHERE id=?").run(CLI);
   await irFicha(CLI);

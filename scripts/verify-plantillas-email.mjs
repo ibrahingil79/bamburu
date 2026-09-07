@@ -256,12 +256,10 @@ try {
   // El dueño sí, claro.
   ok((await app.request('/email-templates')).status === 200, 'el dueño sí administra las plantillas');
 
-  // ── 9. Fuera de WRITABLE_TABLES ─────────────────────────────────────────────
-  console.log('\n[9] DISA no reescribe los textos que tu negocio manda');
-  const disaSrc = readFileSync('modules/disa/index.js', 'utf8');
-  const bloque = disaSrc.slice(disaSrc.indexOf('const WRITABLE_TABLES'), disaSrc.indexOf('const WRITABLE_TABLES') + 1600);
-  const escribibles = bloque.split('\n').filter(l => !l.trim().startsWith('//')).join('\n');
-  ok(!/'email_templates'/.test(escribibles), 'email_templates NO está en WRITABLE_TABLES');
+  // ⚙️ 7 SEP 2026 (`sacar-disa-paso-2-borrado`) — AQUÍ IBA "[9] DISA no reescribe los textos que
+  // tu negocio manda": comprobaba que `email_templates` no estaba en la lista de escritura
+  // genérica del chat (modules/disa/index.js). Borrado con todo su código: no queda ninguna vía
+  // de escritura genérica que comprobar.
 
   // ── 10. Aislamiento entre negocios ──────────────────────────────────────────
   console.log('\n[10] Aislamiento');

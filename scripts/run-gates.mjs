@@ -91,7 +91,8 @@ const DEUDA = {
   'verify-permisos-coherencia':
     'exige un 403 literal y el empleado de prueba (usuario 3) está INACTIVO, así que el rechazo llega '
     + 'como 302/401 — más duro, no más flojo. COMPROBADO A MANO el 24 ago 2026: NO hay agujero de permisos.',
-  'verify-permisos-disa':      'misma familia y misma causa que la anterior (empleado de prueba inactivo).',
+  // ⚙️ 7 SEP 2026 — 'verify-permisos-disa' salió de esta lista: se borró con el chat de DISA
+  // (`sacar-disa-paso-2-borrado`); no queda fichero que excluir.
   'verify-invoice-over-stock-http': 'mismos 403 sobre el mismo empleado inactivo.',
   'verify-mostrador-overstock':     'ídem: el permiso se prueba contra un empleado que ya no está activo.',
   'verify-sustitutiva-browser':'espera un ticket sustituido concreto; el suyo ya no está.',
@@ -182,52 +183,19 @@ const ROJOS_CONOCIDOS = {
 
 // Excluidos por naturaleza, no por estar rotos: no son deuda, simplemente no van en un barrido.
 const EXCLUIDOS = {
-  // 24 ago 2026 · la última de las 99: llama al MODELO REAL para preguntar por el stock. Misma
-  // familia que las de arriba — ni determinista ni gratis, y en un barrido de madrugada que corre
-  // todas las noches el coste se multiplica por 365.
-  'verify-llm-disa-stock': 'llama al MODELO REAL (stock por chat). A mano, cuando se toque DISA.',
-  // 24 ago 2026 · NO ES UNA COMPROBACIÓN, y por eso no puede «entrar»: manda dos baterías de
-  // preguntas al MODELO REAL y escribe la transcripción LITERAL para que una persona la lea. No
-  // tiene ni una aserción, así que el corredor la leía como «salió 0 pero no demuestra nada» — y
-  // tenía razón. Es una herramienta de diagnóstico, y como tal se declara.
-  // 24 ago 2026 · MISMA FAMILIA: pregunta por el chat de DISA (`/api/disa/message`), o sea al MODELO
-  // REAL. Además esperaba «Carlos / PED-0005» del negocio de desarrollo, datos que ya no están.
-  // Ni determinista ni gratis, y en un barrido nocturno el coste se multiplica por 365.
-  'verify-pedidos-disa':
-    'pregunta al MODELO REAL por el chat de DISA. A mano, cuando se toquen los pedidos de DISA.',
-  'verify-disa-alcance':
-    'llama al MODELO REAL y escribe una transcripción para leerla; no afirma nada. Es diagnóstico, '
-    + 'no comprobación. A mano, cuando se toque el límite de tema de DISA.',
-  'verify-disa-pedidos-modelo-real': 'llama al MODELO REAL: ni determinista ni gratis. A mano.',
-  'gate-pago-voz-avisos': 'llama al MODELO REAL (misma familia). A mano y a conciencia.',
-  'gate-c2-captura':
-    'llama al MODELO REAL (visión) para LEER la factura: cuesta dinero y depende de la cuota de IA del mes. '
-    + 'Sin cuota ABORTA (código 2), no finge. La PANTALLA de revisión —que es lo que se rompe— sí va en el barrido: gate-c2-revision.',
-  'gate-disa-captura-chat':
-    'llama al MODELO REAL por el chat de DISA (misma familia). Sin cuota ABORTA. '
-    + 'Lo que no necesita modelo (superficies de adjuntar, aterrizaje precargado, archivo protegido) va en el barrido: gate-disa-adjuntar.',
+  // ⚙️ 7 SEP 2026 (`sacar-disa-paso-2-borrado`) — TODA ESTA FAMILIA SE HA IDO: diez comprobaciones
+  // que llamaban al MODELO REAL (por el chat de DISA o por la extracción de facturas) y que por eso
+  // vivían aquí, fuera del barrido — un gate que depende del saldo de una cuenta no puede vivir en
+  // un barrido de regresión. El chat y la extracción se han borrado enteros, así que no queda nada
+  // que llame al proveedor: 'verify-llm-disa-stock', 'verify-pedidos-disa', 'verify-disa-alcance',
+  // 'verify-disa-pedidos-modelo-real', 'gate-pago-voz-avisos', 'gate-c2-captura',
+  // 'gate-disa-captura-chat', 'verify-d5-create-product', 'verify-llm-migracion',
+  // 'verify-albaranes-disa'. Lo que las sustituye, si algo: `verify-sin-proveedor-ia` (RAPIDO,
+  // infra), estático, sin modelo — comprueba que no queda ninguna dirección del proveedor.
+
   // 22 ago 2026 · el número estaba rancio: son TRES aserciones en rojo, no una. Se corrige aquí
   // porque una cifra vieja en una declaración hace creer que el agujero es más pequeño de lo que es.
   'gate-avisos-pantalla': 'EN ROJO desde antes (3 aserciones, medidas el 22 ago 2026). Otro tema.',
-  // ── LAS TRES QUE FALTABAN DE ESTA MISMA FAMILIA (1 sep 2026) ──────────────────────────────
-  // Estaban DENTRO del barrido llamando al modelo real, y por eso salían en rojo cada pasada
-  // muriendo en 0-1 s. No estaban rotas: la cuenta del PROVEEDOR de IA se había quedado sin saldo,
-  // `callClaude` lanzaba `llm_provider_balance` (503), la respuesta llegaba `undefined` y el
-  // código hacía `.replace()` encima → `TypeError`. **Un TypeError disfraza «no hay saldo» de
-  // «esto está roto»**, y así es como se diagnostica mal durante días.
-  //
-  // Ahora las tres llaman a `requireLlmProvider()` y ABORTAN con código 2 diciendo por qué —«no he
-  // podido probarlo» no es «ha fallado»—, y salen del barrido por la regla de la cabecera de este
-  // fichero, que ya valía para las otras nueve: **un gate que depende del saldo de una cuenta no
-  // puede vivir en un barrido de regresión.**
-  'verify-d5-create-product':
-    'llama al MODELO REAL (DISA creando un producto y pidiendo la banda de IVA). Depende del saldo '
-    + 'del proveedor de IA, así que su rojo no dice nada del producto. A mano, cuando se toque DISA.',
-  'verify-llm-migracion':
-    'llama al MODELO REAL tres veces (store builder, registro y DISA) con la config exacta de cada '
-    + 'sitio. Es una comprobación buena y cara: a mano, y con saldo en la cuenta del proveedor.',
-  'verify-albaranes-disa':
-    'llama al MODELO REAL (albaranes y entregas por chat). Misma familia y misma dependencia.',
 
   'verify-pieza-c-http': 'gate FRÁGIL preexistente (redondeo de céntimos). Otro tema.',
 };
@@ -672,7 +640,8 @@ if (deuda) {
   console.log('\n🚧 DEUDA — ninguna. Los 7 gates de navegador que estaban muertos volvieron el 14-jul-2026:');
   console.log('     4 estaban CADUCADOS (el producto cambió y ellos no) → arreglados y dentro del barrido.');
   console.log('     2 dependían del MODELO REAL (cuota de IA agotada, no un fallo) → partidos: la pantalla');
-  console.log('       entra al barrido (gate-c2-revision, gate-disa-adjuntar) y la extracción real se corre a mano.');
+  console.log('       entraba al barrido y la extracción real se corría a mano.');
+  console.log('       (⚙️ 7 sep 2026: esos dos — gate-c2-revision y gate-disa-adjuntar — se borraron con el chat de DISA.)');
   console.log('     1 necesita Tailscale, que aquí no existe → declarado ENTORNO (arriba), aborta en vez de fingir.');
 }
 

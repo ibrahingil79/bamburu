@@ -16,7 +16,6 @@ import fs from 'fs';
 import { tenantDb, launchOpts } from './lib/gate-env.mjs';
 import { proponer, guardarPromocion, archivarPromocion, listarPromociones, promocionVigente,
          crearBono, consumirBono, deshacerConsumo, bonosDe, consumosDe } from '../modules/erp/descuentos.js';
-import { herramientasDeDescuentos } from '../modules/disa/informes.js';
 import { computeTotals } from '../modules/erp/routes/invoices.js';
 
 import { soltarAtaduras } from './lib/tirar-negocio.mjs';
@@ -154,23 +153,10 @@ try {
   ok(/caduc/i.test(msgCad), 'y un bono caducado no se puede usar', msgCad);
   ok(!bonosDe(db, cli, { soloVivos: true }).some(b => b.id === bCad.id), '  ni se ofrece como vivo');
 
-  console.log('\n[5] DISA LEE Y PROPONE, PERO NO APLICA');
-  const dtoDisa = herramientasDeDescuentos(db, { hasPerm: () => true });
-  const vistaDisa = dtoDisa.ver({ client_id: cli });
-  ok(vistaDisa.cliente && vistaDisa.cliente.descuento_fijo_pct === 10, 'DISA sabe el descuento fijo del cliente');
-  ok((vistaDisa.bonos || []).length >= 1, '  y sus bonos vivos', (vistaDisa.bonos || []).length + '');
-  ok(/no se descuenta de la factura/i.test(vistaDisa.nota_bonos || ''),
-     '  y avisa de que un bono no rebaja la factura, que es el malentendido fácil');
-  const calc = dtoDisa.calcular({ client_id: cli, importe: 200 });
-  ok(calc.descuento_total > 0 && /Descuentos…|factura/i.test(calc.nota || ''),
-     'calcula, y dice que aplicarlo se hace en la pantalla', calc.descuento_total + ' € · ' + (calc.enlace || ''));
-  const promsAntes = db.prepare('SELECT COUNT(*) n FROM promociones').get().n;
-  const bonosAntes = db.prepare('SELECT COUNT(*) n FROM bonos').get().n;
-  dtoDisa.ver({ client_id: cli }); dtoDisa.calcular({ client_id: cli, importe: 500 });
-  ok(db.prepare('SELECT COUNT(*) n FROM promociones').get().n === promsAntes
-     && db.prepare('SELECT COUNT(*) n FROM bonos').get().n === bonosAntes, '  y no ha escrito nada');
-  ok(!!herramientasDeDescuentos(db, { hasPerm: () => false }).ver().error,
-     'y sin permiso de facturas, no ve nada');
+  // ⚙️ 7 SEP 2026 (`sacar-disa-paso-2-borrado`) — AQUÍ IBA "[5] DISA LEE Y PROPONE, PERO NO
+  // APLICA": probaba `herramientasDeDescuentos` (modules/disa/informes.js), la herramienta de
+  // solo-lectura que el chat usaba para consultar descuentos y bonos de un cliente. Se retira
+  // con el chat — no escribía nada (solo leía), así que no deja nada que verificar aparte.
 
   // ══════════════════════════════════════════════════════════════════════════════════════════════
   console.log('\n[6] EN LA PANTALLA, PULSANDO — el descuento entra en la factura y el total baja');

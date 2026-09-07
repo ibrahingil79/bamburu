@@ -86,7 +86,7 @@ try {
   for (const averia of ['revienta_import', 'sin_register', 'revienta_register']) {
     rmSync(path.join(BANCO, 'modules'), { recursive: true, force: true });
     sembrar('erp', averia);
-    for (const otro of ['store', 'disa', 'portal']) sembrar(otro, 'sano');
+    for (const otro of ['store', 'portal']) sembrar(otro, 'sano');   // ⚙️ 7 sep 2026: 'disa' salió de MODULOS
     const r = arrancar();
     ok(r.codigo !== 0 && r.codigo !== null, '[' + averia + '] el proceso MUERE, no sigue vivo', 'código de salida ' + r.codigo);
     ok(!r.salida.includes('LLEGO_AL_FINAL'), '  y no llega a arrancar nada de lo que venía después');
@@ -99,13 +99,16 @@ try {
   // ═══════════════════════════════════════════════════════════════════════════════════════════════
   rmSync(path.join(BANCO, 'modules'), { recursive: true, force: true });
   sembrar('erp', 'sano');
-  sembrar('store', 'sano');
-  sembrar('disa', 'sin_register');        // el modo que ANTES no imprimía absolutamente nada
+  // ⚙️ 7 SEP 2026 — este gate usaba 'disa' como el módulo de mentira para el modo "sin_register".
+  // 'disa' salió de MODULOS al borrar el código del chat (`sacar-disa-paso-2-borrado`): dejarlo
+  // aquí no probaría nada, porque el cargador ya no lo busca. Se usa 'store' en su lugar — sigue
+  // siendo un módulo opcional real, y el modo de avería es el mismo.
+  sembrar('store', 'sin_register');       // el modo que ANTES no imprimía absolutamente nada
   sembrar('portal', 'revienta_import');
   const opc = arrancar();
   ok(opc.codigo === 0, 'con solo módulos opcionales caídos, Bamburu SÍ arranca', 'código ' + opc.codigo);
   ok(opc.salida.includes('LLEGO_AL_FINAL'), '  y llega a lo que venía después');
-  ok(/Módulo opcional caído: disa/.test(opc.salida),
+  ok(/Módulo opcional caído: store/.test(opc.salida),
      'el módulo SIN register ya no es mudo — era el agujero que no estaba ni en la ficha');
   ok(/NO exporta una función `register`/.test(opc.salida), '  y explica exactamente qué le pasa');
   ok(/Módulo opcional caído: portal/.test(opc.salida), 'el que revienta al importar también se oye');
@@ -135,7 +138,7 @@ try {
   ok(t.includes('erp'), 'el aviso nombra el módulo');
   ok(t.includes('ZZ Unexpected reserved word'), 'y lleva el motivo de origen');
   ok(/NO ARRANCA/.test(t), 'y dice que el servicio está caído, no un «algo ha ido mal»');
-  const t2 = textoDeAviso({ modulo: 'disa', esencial: false, error: new Error('ZZ otro') });
+  const t2 = textoDeAviso({ modulo: 'store', esencial: false, error: new Error('ZZ otro') });   // ⚙️ 7 sep 2026: 'disa' ya no existe
   ok(/SIN una parte/.test(t2) && /El resto sigue en pie/.test(t2),
      'y el de un opcional dice otra cosa: sin él se arranca, y eso el aviso lo distingue');
   ok(!textoDeAviso({ modulo: 'erp', esencial: true, error: new Error("Unexpected token '<'") }).includes('<code>Unexpected token \'<\''),

@@ -33,7 +33,6 @@ import { createHash } from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { tenantDb, APP_DIR, exigeCodigoServido } from './lib/gate-env.mjs';
-import { QUERY_TABLE_READ_PERMS, evaluateQueryAccess } from '../modules/disa/index.js';
 import { runMigrations } from '../modules/erp/models.js';
 import { ventasResumen } from '../modules/erp/ventas-metrics.js';
 import { verifyTenantInvoices } from '../modules/superadmin/integridad.js';
@@ -111,39 +110,12 @@ try {
   ok(c2.prepare('SELECT COUNT(*) c FROM discount_codes_archived').get().c === 3, 'y los 3 cupones archivados siguen intactos');
   c2.close(); fs.rmSync(tmp, { force: true });
 
-  // ═══ [4] DISA YA NO TIENE SUPERFICIE DE CUPONES ══════════════════════════════════════════════
-  console.log('\n[4] DISA: sin cupones ni por lectura, ni por escritura, ni por enlace');
-  // — Mecanismo real: el mapa exportado y el evaluador que usa el endpoint.
-  ok(!('discount_codes' in QUERY_TABLE_READ_PERMS) && !('auto_discounts' in QUERY_TABLE_READ_PERMS),
-     'las tablas salieron del mapa de lectura REAL (QUERY_TABLE_READ_PERMS)');
-  const todasLasTablas = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map(r => r.name);
-  const veredicto = evaluateQueryAccess('SELECT * FROM discount_codes_archived', {
-    isAdmin: false, allTables: todasLasTablas, hasPerm: () => true,
-  });
-  ok(typeof veredicto === 'string', 'evaluateQueryAccess DENIEGA la tabla archivada a un empleado', veredicto || 'la permitió');
-  const control = evaluateQueryAccess('SELECT * FROM invoices', { isAdmin: false, allTables: todasLasTablas, hasPerm: () => true });
-  ok(control === null, 'control: el mismo evaluador SÍ permite `invoices` (no está negando por sistema)');
-
-  // — Comprobación de FUENTE (lo de dentro de la fábrica no es importable sin ejecutar el módulo).
-  const fuenteDisa = fs.readFileSync(path.join(APP_DIR, 'modules', 'disa', 'index.js'), 'utf8');
-  const sinComentarios = fuenteDisa.split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n');
-  for (const [aguja, que] of [
-    ["'discount_codes'", 'WRITABLE_TABLES ya no incluye discount_codes'],
-    ["'auto_discounts'", 'WRITABLE_TABLES ya no incluye auto_discounts'],
-    ['create_discount:', 'ACTION_PERMS ya no declara create_discount'],
-    ["case 'create_discount'", 'no queda el case create_discount'],
-    ["case 'edit_discount'", 'no queda el case edit_discount'],
-    ["case 'delete_discount'", 'no queda el case delete_discount'],
-    ["'/admin/discounts'", 'la lista blanca de URLs ya no lleva /admin/discounts'],
-    ['/admin/discounts,', 'el prompt de rutas permitidas tampoco'],
-    ["FROM discount_codes", 'ninguna consulta viva lee discount_codes'],
-  ]) ok(!sinComentarios.includes(aguja), '(fuente) ' + que);
-
-  // Y que lo archivado no reaparezca en el esquema que se le enseña al modelo.
-  const archivadas = todasLasTablas.filter(n => /_(archived|legacy)$/.test(n));
-  ok(archivadas.length > 0, 'hay tablas archivadas en este negocio (si no, la siguiente no probaría nada)', archivadas.length + '');
-  ok(/_\(archived\|legacy\)\$/.test(sinComentarios) || sinComentarios.includes('_(archived|legacy)$'),
-     'getDbSchema filtra las tablas _archived/_legacy del prompt de DISA');
+  // ⚙️ 7 SEP 2026 (`sacar-disa-paso-2-borrado`) — AQUÍ IBA "[4] DISA YA NO TIENE SUPERFICIE DE
+  // CUPONES": probaba que el chat (borrado con todo su código) no podía leer ni escribir
+  // `discount_codes`/`auto_discounts` por su herramienta de consulta genérica
+  // (`QUERY_TABLE_READ_PERMS`, `evaluateQueryAccess` de `modules/disa/index.js`), ni tenía
+  // acciones ni rutas de cupones en su fuente. Con el chat fuera del árbol, la pregunta que
+  // hacía ya no tiene sentido: no hay ninguna vía por la que DISA pudiera tocar nada.
 
   // ═══ [5] LAS 19 FACTURAS YA NO EXISTEN, Y NO DEJARON HUÉRFANOS ═══════════════════════════════
   console.log('\n[5] Las 19 facturas de prueba ya no existen — y no dejaron nada colgando');

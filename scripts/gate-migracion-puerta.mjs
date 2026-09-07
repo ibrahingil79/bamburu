@@ -198,16 +198,10 @@ try {
   // Y lo que NO puede pasar: que al filtrar las fijas se le haya cerrado la ayuda o el inicio a nadie.
   ok(emp.pie.includes('/docs'), 'pero la ayuda le sigue estando: filtrar las fijas no le quitó lo que ya tenía');
 
-  // ══════════════════════════════════════════════════════════════════════════════════════════════
-  console.log('\n[5] B3 — DISA PUEDE ENLAZARLA, Y HACEN FALTA LAS DOS MITADES');
-  // ══════════════════════════════════════════════════════════════════════════════════════════════
-  // La lista blanca PERMITE la URL; el prompt es lo que le dice a DISA que existe. Con solo una de
-  // las dos, DISA nunca la enlaza (o la enlaza y el sanitizador se la borra). Se exigen las dos.
-  const disa = readFileSync(path.join(APP, 'modules/disa/index.js'), 'utf8');
-  const enBlanca = /DISA_ALLOWED_URLS[\s\S]{0,1600}?'\/admin\/migracion'/.test(disa);
-  const enPrompt = /URLs PERMITIDAS EN ARTIFACTS[\s\S]{0,900}?'\/admin\/migracion'/.test(disa);
-  ok(enBlanca, 'la URL está en la lista blanca del sanitizador (si no, DISA la propone y se le borra)');
-  ok(enPrompt, 'y en la lista del prompt (si no, DISA no sabe que existe y nunca la propone)');
+  // ⚙️ 7 SEP 2026 (`sacar-disa-paso-2-borrado`) — AQUÍ IBA "[5] B3 — DISA PUEDE ENLAZARLA": probaba
+  // que la URL de esta pantalla estaba en la lista blanca del sanitizador de DISA y en el prompt
+  // que le decía que existía, para que el chat pudiera enlazarla. El chat se ha borrado con todo su
+  // código: ya no hay ninguna vía por la que algo pudiera "enlazarla" en una conversación.
 
   // ══════════════════════════════════════════════════════════════════════════════════════════════
   console.log('\n[6] LAS OTRAS DOS PUERTAS SIGUEN, Y LA MIGRACIÓN POR DENTRO NO SE HA TOCADO');

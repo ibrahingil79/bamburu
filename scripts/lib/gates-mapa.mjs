@@ -59,19 +59,10 @@ export const RAPIDO = new Map([
   // familia: estático, <1 s, no escribe nada, y el daño se hace el mismo día — un stock escrito a
   // mano se evapora en el próximo recálculo y nadie sabe cuándo.
   ['censo-stock-fuera-del-libro', 'existencias escritas a pelo: se saltan las guardas y se evaporan (AUD-004)'],
-  // Y que ninguna consulta de DISA se quede sin tope ni reloj. Estático, <1 s: una consulta sin
-  // tope se lleva una tabla entera al proveedor de IA, y una lenta bloqueaba el servidor de todos.
-  ['censo-consultas-disa', 'una consulta de DISA sin tope ni plazo se lleva la tabla entera al proveedor (AUD-005)'],
-  // Y que la puerta de DISA siga puesta. Estático, <1 s: sin ella, una pagina ajena puede mandar a
-  // DISA en nombre del dueño — y el orden importa, porque el csrf delante del auth la deja inservible.
-  ['censo-disa-csrf', 'sin la puerta, una página ajena manda a DISA en tu nombre (AUD-006)'],
-  // Y que la cerradura de la confirmación no se relaje. Estático, <1 s, y saca la expresión DEL
-  // fichero para EJECUTARLA: quitar el ancla o añadir una palabra a la lista son retoques de una
-  // línea que no se ven raros al leerlos, y ejecutar de más es irreversible.
-  ['censo-disa-confirmacion', 'una confirmación relajada ejecuta acciones que el dueño no pidió (AUD-015)'],
-  // Y que el texto que no escribió el usuario siga llegando MARCADO. Estático, <1 s, y va en `lint`
-  // porque una de sus cuatro vías —el extractor de facturas— NO despierta al grupo `disa`.
-  ['censo-texto-ajeno', 'texto ajeno sin marcar: una orden dentro de un dato se lee como instrucción (AUD-016)'],
+  // ⚙️ 7 SEP 2026 (`sacar-disa-paso-2-borrado`) — AQUÍ IBAN `censo-consultas-disa`,
+  // `censo-disa-csrf`, `censo-disa-confirmacion` y `censo-texto-ajeno`: vigilaban el tope de las
+  // consultas del chat, su puerta CSRF, su cerradura de confirmación y el marcado de texto ajeno.
+  // Los cuatro se han borrado con el código que vigilaban.
   // Y que Bamburu ARRANQUE, que es la pregunta más básica de todas. Va en el rápido porque cuesta
   // 0,3 s y porque un arranque a medias ya pasó CINCO veces en 30 días sin que nadie se enterara.
   ['gate-arranque-modulos', '¿arranca Bamburu, o arranca a medias sin decirlo? (AUD-007)'],
@@ -124,10 +115,11 @@ export const RAPIDO = new Map([
   // claro NO se nota usando el producto: funciona igual de bien. Solo lo ve quien mire el fichero.
   // Mira los 12 ficheros de verdad y se pone rojo a sí mismo tres veces. ~4 s medidos.
   ['gate-cifrado-en-reposo', 'las bases: ¿siguen cifradas en el disco, y sin llave no se abren? (cifrado-en-reposo-bases)'],
-  // Y que Bamburu NO vuelva a llamar al proveedor de IA. Estático + ejecutado, <1 s. Va en el
-  // rápido porque volver a encenderla es una línea, y porque el daño de que se cuele no se nota
-  // usando el producto: se nota en la factura del proveedor a fin de mes.
-  ['censo-ia-apagada', '¿sigue Bamburu sin llamar al proveedor de IA? (decisión de Ibrahin, 6 sep 2026)'],
+  // ⚙️ 7 SEP 2026 (`sacar-disa-paso-2-borrado`) — AQUÍ IBA 'censo-ia-apagada'. Medía, ejecutando,
+  // que `core/llm.js` no llamara al proveedor — y hacía falta MIENTRAS ese código existía apagado,
+  // porque "apagado" se puede reencender con una línea. Ahora `core/llm.js` no existe: no hay
+  // código que reencender. El criterio de Ibrahin (7 sep, corregido) es más simple y ya basta:
+  // cero apariciones de la dirección del proveedor en el árbol. Lo comprueba `verify-sin-proveedor-ia`.
   // Y que el servidor CIERRE las bases que ya no sirven. Va en el rápido porque es lo que decide si
   // un barrido completo se puede creer: mientras el servicio acumule conexiones fantasma, se
   // deteriora durante la propia medición y los gates del final miden un servidor ya enfermo.
@@ -237,42 +229,38 @@ export const GRUPOS = {
     'gate-c1c-diferencias-cierre', 'test-c1c-diferencias-cierre',
     'verify-propuestas-pagos', 'gate-propuestas-pagos-permisos',
     // Gates de NAVEGADOR de compras: estaban en DEUDA (muertos) y volvieron el 14-jul-2026.
-    'gate-orden-compra-c1a', 'gate-recepciones-c1b', 'gate-devoluciones-proveedor', 'gate-c2-revision',
+    'gate-orden-compra-c1a', 'gate-recepciones-c1b', 'gate-devoluciones-proveedor',
+    // ⚙️ 7 SEP 2026 — 'gate-c2-revision' salió: probaba la pantalla de revisión de la captura
+    // de facturas por foto, retirada con el chat de DISA (`sacar-disa-paso-2-borrado`).
   ],
+  // ⚙️ 7 SEP 2026 (`sacar-disa-paso-2-borrado`) — SIGUE LLAMÁNDOSE «disa», Y ES A PROPÓSITO: el
+  // chat que le dio nombre a este grupo se ha borrado entero, pero lo que queda dentro (la voz, el
+  // vigía, el dibujo de gráficos, las propuestas y las etiquetas de actividad) sigue siendo una
+  // familia real, y renombrar el grupo por su cuenta no era parte de este encargo. Se retiran solo
+  // las comprobaciones cuyo código ya no existe: `censo-consultas-disa`, `censo-disa-csrf`,
+  // `censo-disa-confirmacion`, `censo-texto-ajeno`, `gate-disa-confirmacion`, `gate-disa-stock-libro`,
+  // `gate-disa-sql-limites`, `gate-disa-inyeccion`, `test-c2-captura`, `test-disa-captura-chat`,
+  // `test-disa-clientes-t5`, `test-disa-dictar-compra`, `test-disa-stock`, `test-llm-texto-respuesta`,
+  // `verify-disa-query-permisos`, `verify-disa-sin-pedidos`, `gate-nav-inicio-disa` (rojo «por
+  // diseño» desde el 7 sep, retirado con este encargo) y `gate-disa-adjuntar`.
   disa: [
-    // 3 sep 2026 · el centinela de AUD-002: va TAMBIÉN aquí porque `modules/disa` despierta a este
-    // grupo, y el borrado sin filtro vivía justo ahí. En `lint` corre siempre; aquí, cuando toca.
+    // 3 sep 2026 · el centinela de AUD-002: va TAMBIÉN aquí porque tocar `modules/erp/` despierta a
+    // este grupo, y el borrado sin filtro vivía en modules/disa/index.js. En `lint` corre siempre;
+    // aquí, cuando toca.
     'censo-borrado-sin-filtro',
     'censo-stock-fuera-del-libro',
-    'censo-consultas-disa',
-    'censo-disa-csrf',
-    'censo-disa-confirmacion',
-    'censo-texto-ajeno',
-    // ⛔ 6 SEP 2026 — RETIRADOS DEL BARRIDO AL APAGAR LA IA (decisión de Ibrahin). Los tres
-    // conducían a DISA por HTTP, o sea que **cada barrido completo pagaba una tanda de llamadas al
-    // proveedor**. Con la IA apagada medirían un simulacro de algo que se va a retirar, así que
-    // salen ahora y **se borrarán junto con el código de DISA**, en el encargo del borrado:
-    //   'gate-disa-borrado-conversaciones' · 'gate-disa-csrf' · 'gate-disa-dictar-compra'
-    // No se borran hoy porque apagar no es borrar, y el código que prueban sigue montado.
-    'gate-disa-confirmacion',
-    'gate-disa-stock-libro',
-    'gate-disa-sql-limites',
-    'gate-disa-inyeccion',
-    'test-c2-captura',
     // ↓ tres que ABORTABAN por pedir la ruta de la BD por parámetro (24 ago 2026): ya arrancan
     'verify-voz', 'verify-vigia', 'verify-dibujo',
     // ↓ de las 99 invisibles (24 ago 2026), medidas y en verde:
-    'gate-dibujo-pantalla', 'gate-voz-pantalla', 'test-dibujo', 'test-disa-captura-chat', 'test-disa-clientes-t5', 'test-disa-dictar-compra', 'test-disa-stock', 'test-llm-texto-respuesta', 'test-pago-voz-avisos', 'test-vigia', 'test-voz', // ⚙️ 1 sep 2026 · verify-albaranes-disa, verify-d5-create-product y verify-llm-migracion SALEN
-    // de este grupo: llaman al MODELO REAL y dependen del saldo de la cuenta del proveedor, así
-    // que su rojo no dice nada del producto. Declaradas con su motivo en EXCLUIDOS de
-    // run-gates.mjs, con las otras nueve de su misma familia.
+    'gate-dibujo-pantalla', 'gate-voz-pantalla', 'test-dibujo', 'test-pago-voz-avisos', 'test-vigia', 'test-voz',
+    // ⚙️ 1 sep 2026 · verify-albaranes-disa, verify-d5-create-product y verify-llm-migracion SALEN
+    // de este grupo: llamaban al MODELO REAL. Borradas con el chat el 7 sep 2026.
     'verify-propuestas-d5',
     'verify-propuestas-recurrentes', 'gate-propuestas-recurrentes',
     'verify-propuestas-dormidos', 'gate-propuestas-dormidos',
     'verify-propuestas-fiscales',
     'verify-propuestas-reposicion', 'gate-propuestas-reposicion',
-    'verify-disa-query-permisos', 'verify-disa-sin-pedidos', 'verify-actividad-etiquetas',
-    'gate-nav-inicio-disa', 'gate-disa-adjuntar',   // ⛔ 'gate-disa-dictar-compra' retirado el 6 sep 2026 (ver arriba)
+    'verify-actividad-etiquetas',
   ],
   inventario: [
     // ↓ de las 99 invisibles (24 ago 2026), medidas y en verde:
@@ -342,8 +330,8 @@ export const GRUPOS = {
                                      // que faltaban (cada uno contra su control), B10 y B12
     'gate-productos-parados',        // punto 9: el área de Catálogo parte del PRODUCTO, así que un
                                      // parado sale con cero en vez de no salir
-    'gate-disa-informes',            // punto 10: las dos puertas dan el mismo número y los mismos
-                                     // permisos; y el enlace que da DISA se abre de verdad
+    // ⚙️ 7 SEP 2026 — 'gate-disa-informes' salió: probaba la herramienta de informes del chat
+    // (modules/disa/informes.js), borrada con `sacar-disa-paso-2-borrado`.
     'gate-descuentos',               // punto 11: descuentos, promociones y bonos — el IVA baja en
                                      // proporción, y emite una factura de verdad en un negocio propio
     'gate-control-horario',          // punto 12: el registro de jornada — nada se borra, corregir
@@ -375,7 +363,7 @@ export const GRUPOS = {
   // 25 ago 2026 · Las dos del correo. `verify-correo-freno` prueba que el freno para de verdad al
   // llegar al tope; `verify-comprobaciones-sin-correo-real` vigila la norma del dueño: ninguna
   // comprobación vuelve a escribir a una bandeja real. Ver docs/censo-correos.md.
-  infra: ['gate-arranque-modulos', 'gate-cifrado-en-reposo', 'censo-ia-apagada', 'gate-conexiones-que-se-cierran', 'gate-permisos-por-ruta', 'gate-copia-completa', 'gate-disa-fuera-de-la-vista', 'gate-copias-cifradas', 'gate-restauracion-completa', 'gate-portal-sin-llave-en-url', 'gate-adjuntos-por-contenido', 'gate-aviso-copias', 'gate-csp-superficies-limpias', 'censo-bot-de-bamburu', 'censo-avisos-sin-fabrica', 'verify-correo-freno', 'verify-comprobaciones-sin-correo-real', 'verify-disco-perfiles', 'test-c6-secretos', 'gate-conciliacion-deshacer', 'verify-superadmin-escrituras', 'verify-tenant-lookup-readonly', 'verify-wal-acotado', 'verify-safe-error',
+  infra: ['gate-arranque-modulos', 'gate-cifrado-en-reposo', 'verify-sin-proveedor-ia', 'gate-conexiones-que-se-cierran', 'gate-permisos-por-ruta', 'gate-copia-completa', 'gate-disa-fuera-de-la-vista', 'gate-copias-cifradas', 'gate-restauracion-completa', 'gate-portal-sin-llave-en-url', 'gate-adjuntos-por-contenido', 'gate-aviso-copias', 'gate-csp-superficies-limpias', 'censo-bot-de-bamburu', 'censo-avisos-sin-fabrica', 'verify-correo-freno', 'verify-comprobaciones-sin-correo-real', 'verify-disco-perfiles', 'test-c6-secretos', 'gate-conciliacion-deshacer', 'verify-superadmin-escrituras', 'verify-tenant-lookup-readonly', 'verify-wal-acotado', 'verify-safe-error',
           'verify-xss-escape', 'gate-xss-escape', 'gate-csp-estricta',
           // PUNTO 2 (24 ago 2026) — dar de baja a alguien del equipo: borrar si no dejó rastro,
           // archivar si lo dejó, y decirlo ANTES de pulsar. Antes daba un 500 seco.
@@ -408,7 +396,7 @@ export const GRUPOS = {
   //     arriba por el mismo motivo por el que ellos entraron: una herramienta que nadie ejecuta
   //     deja de cazar cosas.
   //   · lint-js-servido    — pide cada pantalla y compila su JavaScript en línea (~324 pantallas)
-  lint: ['lint-plantillas', 'censo-ventanitas', 'censo-borrado-sin-filtro', 'censo-stock-fuera-del-libro', 'censo-consultas-disa', 'censo-disa-csrf', 'censo-disa-confirmacion', 'censo-texto-ajeno', 'censo-bot-de-bamburu', 'censo-avisos-sin-fabrica', 'gate-arranque-modulos', 'lint-js-servido', 'verify-nombre-documentos', 'verify-menu-completo',
+  lint: ['lint-plantillas', 'censo-ventanitas', 'censo-borrado-sin-filtro', 'censo-stock-fuera-del-libro', 'censo-bot-de-bamburu', 'censo-avisos-sin-fabrica', 'gate-arranque-modulos', 'lint-js-servido', 'verify-nombre-documentos', 'verify-menu-completo',
          'verify-barrido-no-infla-ventas', 'verify-deuda-una-sola-cuenta',
          'verify-factura-exenta', 'test-oficio', 'verify-libro-sin-huerfanos', 'verify-contabilidad-backfill',
          // PUNTO 5 (24 ago 2026) — el dinero y las fechas, como en España. Se mide sobre lo
@@ -469,9 +457,8 @@ export const EMPIEZAN_DE_CERO = new Set([
   'gate-migracion-puerta',         // negocio nuevo: es la condición del encargo («creas uno de cero»)
   'gate-agenda-visual',            // negocio nuevo: el lienzo de la agenda
   'gate-inicio-arranque',          // negocio RECIÉN CREADO: es justo lo que prueba
-  // 3 sep 2026 — se trae DOS negocios, y no podía ser de otra forma: DESTRUYE conversaciones para
-  // demostrar que el borrado es real. Un gate que borra no se ejecuta sobre las de nadie.
-  'gate-disa-borrado-conversaciones',
+  // ⚙️ 7 SEP 2026 — 'gate-disa-borrado-conversaciones' salió: DESTRUÍA conversaciones del chat
+  // para demostrar que su borrado era real. Se borró con el propio chat.
   'gate-importador-csv',           // negocio nuevo: DA DE ALTA clientes y productos. En el de
                                    // desarrollo dejaría basura y le movería los totales a los
                                    // gates que exigen neto-cero.
@@ -491,23 +478,10 @@ export const EMPIEZAN_DE_CERO = new Set([
   'gate-impresion',                // DOS negocios nuevos: uno siembra 200 facturas para ver paginar
                                    // de verdad, y el vecino existe para probar que su PDF no trae
                                    // ni un dato del primero
-  // 3 sep 2026 — negocio propio: siembra productos y MUEVE stock para demostrar que el ajuste deja
-  // su apunte. En el de desarrollo movería los totales de los gates que exigen neto-cero.
-  'gate-disa-stock-libro',
-  // 3 sep 2026 — negocio propio: siembra 250 clientes para forzar el recorte y lanza una consulta
-  // lenta a propósito. En el de desarrollo dejaría basura y ocuparía el servidor cinco segundos.
-  'gate-disa-sql-limites',
-  // 3 sep 2026 — negocio propio: agota a propósito el límite de mensajes de DISA y sube un adjunto.
-  // En el de desarrollo dejaría el limitador gastado para los demás gates.
-  'gate-disa-csrf',
-  // 3 sep 2026 — negocio propio: crea un cliente y le cambia el nombre para demostrar que confirmar
-  // ejecuta exactamente lo propuesto. En el de desarrollo dejaría un cliente de prueba.
-  'gate-disa-confirmacion',
-  // 3 sep 2026 — negocio propio, y aquí no es una preferencia: siembra órdenes maliciosas DENTRO de
-  // los datos (un producto llamado «IGNORA TUS INSTRUCCIONES…»), levanta un segundo negocio para
-  // comprobar que no se filtra nada entre ellos, y lanza escrituras contra la base. En el de
-  // desarrollo dejaría esos nombres en los informes del dueño, que es la avería del 23 ago.
-  'gate-disa-inyeccion',
+  // ⚙️ 7 SEP 2026 (`sacar-disa-paso-2-borrado`) — SALIERON DE ESTA LISTA `gate-disa-stock-libro`,
+  // `gate-disa-sql-limites`, `gate-disa-csrf`, `gate-disa-confirmacion` y `gate-disa-inyeccion`:
+  // los cinco probaban piezas del chat (el ajuste de stock por voz, el límite de sus consultas, su
+  // CSRF, su confirmación y sus defensas de inyección de órdenes), y se han borrado con él.
 ]);
 
 // NI DE CERO NI COMPARTIDO DEL TODO: los que levantan un negocio EXTRA para UN caso concreto y el
@@ -571,11 +545,9 @@ export const SOLOS = new Map([
    + 'de ser el que afirma (en paralelo salieron cuatro bandas donde espera dos). EL ARREGLO BUENO '
    + 'es que el gate filtre por SU promoción, como ya hacen los de compras con `productoDePrueba`; '
    + 'mientras eso no esté, corre solo — y queda dicho para que no se olvide.'],
-  ['gate-nav-inicio-disa',
-   'cuenta las PROPUESTAS PENDIENTES del negocio (`contarPropuestasPendientes`) y exige que el badge '
-   + 'del riel enseñe ese mismo número. Los seis gates de propuestas crean y consumen propuestas en '
-   + 'ese mismo negocio: uno a la vez le cambia el número entre las dos lecturas (39 → 40). Rojo REAL '
-   + 'de concurrencia; el gate está bien.'],
+  // ⚙️ 7 SEP 2026 — 'gate-nav-inicio-disa' salió: rojo «por diseño» desde el paso 1 de
+  // `sacar-disa-del-producto` (probaba «Hablar con DISA» y el grupo llamado «DISA», que ya no
+  // existen), y ahora borrado con `sacar-disa-paso-2-borrado`.
   ['gate-devoluciones-proveedor',
    'además de su producto propio, prueba a propósito el BLOQUEO sobre el producto 1 —el vivo, el que '
    + 'tiene traslados— y afirma que su stock y su WAC vuelven al valor de partida. Ese producto es de '

@@ -36,12 +36,10 @@ try {
   // Se miran las líneas de CÓDIGO, no los comentarios: esta misma explicación menciona la etiqueta
   // vieja, y un grep ingenuo se casaría con ella.
   const codigo = txt => txt.split('\n').filter(l => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n');
-  const disaSrc = codigo(readFileSync('modules/disa/index.js', 'utf8'));
   const rutaSrc = codigo(readFileSync('modules/erp/routes/stock-transfers.js', 'utf8'));
-  const i = disaSrc.indexOf("case 'transfer_stock'");
-  const casoDisa = disaSrc.slice(i, i + 1600);
-  ok(casoDisa.includes('TRANSFER_ENTITY'), 'la acción transfer_stock de DISA usa la constante');
-  ok(!/'stock_transfers'/.test(casoDisa), "la acción de DISA ya NO teclea 'stock_transfers' a mano");
+  // ⚙️ 7 SEP 2026 (`sacar-disa-paso-2-borrado`) — AQUÍ SE COMPROBABA que la acción `transfer_stock`
+  // del chat (modules/disa/index.js) usaba esta misma constante en vez de teclear 'stock_transfers'
+  // a mano. Borrado con todo su código: solo queda el camino del panel, que es el de abajo.
   // Por línea: `logActivity(db, c.get('session'), …)` lleva paréntesis dentro, así que [^)]* no vale.
   const llamadasConConstante = rutaSrc.split('\n').filter(l => /logActivity\(/.test(l) && /TRANSFER_ENTITY/.test(l));
   ok(llamadasConConstante.length === 2, `las dos rutas del panel (crear y anular) usan la constante (${llamadasConConstante.length})`);

@@ -2465,57 +2465,20 @@ export function runMigrations(db) {
     migrate();
   }
 
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS disa_conversations (
-      id         INTEGER PRIMARY KEY AUTOINCREMENT,
-      messages   TEXT NOT NULL DEFAULT '[]',
-      context    TEXT DEFAULT '',
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )
-  `);
-
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS disa_usage (
-      month      TEXT NOT NULL,
-      count      INTEGER NOT NULL DEFAULT 0,
-      PRIMARY KEY (month)
-    )
-  `);
-
-  // Gasto de Anthropic de ESTE negocio por mes natural (freno de gasto por-negocio, 5 €/mes).
-  // En € (1 USD = 1 EUR a propósito; ver core/llm.js). La suma global vive en control.db.
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS disa_spend (
-      month      TEXT PRIMARY KEY,
-      eur        REAL NOT NULL DEFAULT 0
-    )
-  `);
+  // ⚙️ 7 SEP 2026 (`sacar-disa-paso-2-borrado`) — AQUÍ SE CREABAN `disa_conversations`,
+  // `disa_usage`, `disa_spend` y `disa_profile` (con su fila semilla). Eran del chat de DISA,
+  // borrado con su código. Se quita SOLO lo que empieza por `disa_`: `platform_limits`, que
+  // vivía intercalada aquí, se queda tal cual — la sigue leyendo y escribiendo superadmin.
+  // Las tablas YA EXISTENTES no se tocan por dejar de crearlas: siguen en el disco hasta que
+  // el Commit 2 (datos) las vuelca y archiva.
 
   // Límites de plataforma por-negocio que fija el SUPERADMIN (escritura sancionada desde el panel).
-  // Hoy solo 'ai_cap_eur' (tope de gasto de IA/mes). Ausente = se usa el default de core/llm.js.
   db.exec(`
     CREATE TABLE IF NOT EXISTS platform_limits (
       key   TEXT PRIMARY KEY,
       value REAL
     )
   `);
-
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS disa_profile (
-      id           INTEGER PRIMARY KEY CHECK(id = 1),
-      business_type TEXT DEFAULT '',
-      sector       TEXT DEFAULT '',
-      description  TEXT DEFAULT '',
-      goals        TEXT DEFAULT '',
-      preferences  TEXT DEFAULT '',
-      decisions    TEXT DEFAULT '',
-      notes        TEXT DEFAULT '',
-      updated_at   DATETIME DEFAULT CURRENT_TIMESTAMP
-    )
-  `);
-
-  db.exec(`INSERT OR IGNORE INTO disa_profile (id) VALUES (1)`);
 
   // ── PERMISOS (ACL) ──────────────────────────────────────────────────────────────────────────
   // B12 · 23 ago 2026 — AQUÍ SE CREABAN TAMBIÉN `roles`, `role_permissions` y `user_roles`, y se
@@ -2645,150 +2608,13 @@ export function runMigrations(db) {
   // y el reparto que describía queda además escrito en el TABLERO, por si algún día se decide
   // construir permisos por rol de verdad: sería el punto de partida, no un dato perdido.
 
-  // DISA — Multi-agentes
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS disa_agents (
-      id              INTEGER PRIMARY KEY AUTOINCREMENT,
-      name            TEXT UNIQUE NOT NULL,
-      slug            TEXT UNIQUE NOT NULL,
-      specialization  TEXT NOT NULL,
-      system_prompt   TEXT NOT NULL,
-      description     TEXT,
-      icon            TEXT DEFAULT '🤖',
-      active          INTEGER DEFAULT 1,
-      created_at      DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-
-    CREATE TABLE IF NOT EXISTS disa_agent_instructions (
-      id               INTEGER PRIMARY KEY AUTOINCREMENT,
-      agent_id         INTEGER NOT NULL,
-      instruction_text TEXT NOT NULL,
-      priority         INTEGER DEFAULT 0,
-      FOREIGN KEY (agent_id) REFERENCES disa_agents(id)
-    );
-  `);
-
-  addCol(db, 'disa_conversations', 'agent_id', 'INTEGER DEFAULT 1');
-
-  // DISA — Threads (conversaciones separadas tipo ChatGPT)
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS disa_conversation_threads (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      title TEXT NOT NULL DEFAULT 'Nueva conversación',
-      user_id INTEGER,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      is_active INTEGER DEFAULT 1
-    );
-    CREATE INDEX IF NOT EXISTS idx_threads_updated
-      ON disa_conversation_threads(updated_at DESC);
-  `);
-
-  // ⚙️ 3 SEP 2026 — `pinned` LLEVABA AQUÍ FUERA DESDE QUE SE ESCRIBIÓ, Y LA LISTA DE CONVERSACIONES
-  // DE DISA ESTABA MUERTA EN TODOS LOS NEGOCIOS MENOS UNO.
-  //
-  // La columna se añadía en `modules/disa/index.js`, dentro de `register(app, db)`:
-  //     try { db.prepare('ALTER TABLE ... ADD COLUMN pinned ...').run(); } catch {}
-  // `register` corre UNA vez al arrancar y el `db` que recibe es el PROXY por tenant de
-  // `core/db.js`, que fuera de una petición LANZA. O sea: ese ALTER no se ejecutó nunca — el
-  // `catch {}` vacío se comía el error en cada arranque, en silencio.
-  //
-  // Coste medido el 3 sep 2026: de 87 bases con la tabla, **86 no tenían la columna** —
-  // `peluqueria-gil`, `duniya` y `rachibra` entre ellas—, y `GET /api/disa/threads` pide
-  // `t.pinned`: HTTP 500 y lista vacía. Solo funcionaba en `desarrollo-bamburu`, donde la columna
-  // se había añadido a mano, que es justo por lo que nadie lo veía.
-  //
-  // Aquí sí corre: `runMigrations` se dispara con la primera petición de CADA negocio. Aditiva, con
-  // su valor por defecto — no toca ni un dato. Lo destapó `gate-disa-borrado-conversaciones` al
-  // pedir la pantalla en un negocio recién nacido, que es el estado en el que vive todo el mundo.
-  addCol(db, 'disa_conversation_threads', 'pinned', 'INTEGER DEFAULT 0');
-
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS disa_quick_chips (
-      user_id INTEGER PRIMARY KEY,
-      chips TEXT NOT NULL DEFAULT '[]',
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )
-  `);
-
-  addCol(db, 'disa_conversations', 'thread_id', 'INTEGER');
-
-  // Migrar mensajes sin thread → thread histórico
-  db.prepare(`
-    INSERT INTO disa_conversation_threads (title, created_at)
-      SELECT 'Conversaciones previas', mindate
-      FROM (SELECT MIN(created_at) AS mindate FROM disa_conversations WHERE thread_id IS NULL)
-      WHERE mindate IS NOT NULL
-  `).run();
-
-  db.prepare(`
-    UPDATE disa_conversations
-      SET thread_id = (SELECT id FROM disa_conversation_threads ORDER BY id LIMIT 1)
-      WHERE thread_id IS NULL
-  `).run();
-
-  // Seed agentes predefinidos
-  const agentsData = [
-    {
-      slug: 'disa_admin',
-      name: 'DISA Administración',
-      specialization: 'Configuración, usuarios, reportes',
-      icon: '⚙️',
-      system_prompt: `Eres el asistente administrativo de Bamburu. Tu rol es ayudar con:
-- Configuración de empresa (nombre, país, moneda)
-- Gestión de usuarios y roles
-- Generación de reportes
-- Análisis de rendimiento
-
-Sé directo, eficiente y proactivo. Si el usuario pregunta sobre ventas o productos, canaliza a DISA Ventas.`,
-    },
-    {
-      slug: 'disa_ventas',
-      name: 'DISA Ventas',
-      specialization: 'Pedidos, clientes, descuentos',
-      icon: '📊',
-      system_prompt: `Eres el jefe de ventas de Bamburu. Tu rol es ayudar con:
-- Gestión de pedidos (crear, editar, cambiar estado)
-- Gestión de clientes (crear, editar, analizar)
-- Descuentos y promociones
-- Análisis de ventas y tendencias
-
-Enfócate en aumentar ingresos y satisfacción del cliente.`,
-    },
-    {
-      slug: 'disa_web',
-      name: 'DISA Web',
-      specialization: 'Tienda, productos, categorías',
-      icon: '🛒',
-      system_prompt: `Eres el gerente de ecommerce de Bamburu. Tu rol es ayudar con:
-- Gestión de productos (crear, editar, categorizar)
-- Variantes de producto (tallas, colores, etc.)
-- Inventario y stock
-- Catálogo de la tienda
-
-Enfócate en la experiencia del cliente y las conversiones.`,
-    },
-    {
-      slug: 'disa_finanzas',
-      name: 'DISA Finanzas',
-      specialization: 'Ingresos, gastos, impuestos',
-      icon: '💰',
-      system_prompt: `Eres el contador de Bamburu. Tu rol es ayudar con:
-- Análisis de ingresos y gastos
-- Cálculo de impuestos
-- Reportes financieros
-- Flujo de caja
-
-Sé preciso con los números y siempre redondea correctamente.`,
-    },
-  ];
-
-  for (const agent of agentsData) {
-    db.prepare(`
-      INSERT OR IGNORE INTO disa_agents (name, slug, specialization, system_prompt, icon)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(agent.name, agent.slug, agent.specialization, agent.system_prompt, agent.icon);
-  }
+  // ⚙️ 7 SEP 2026 (`sacar-disa-paso-2-borrado`) — AQUÍ VIVÍA "DISA — Multi-agentes": las tablas
+  // `disa_agents` y `disa_agent_instructions`, la columna `agent_id` de `disa_conversations`,
+  // los threads (`disa_conversation_threads` + su columna `pinned`), `disa_quick_chips`, la
+  // columna `thread_id` de `disa_conversations` con su migración de mensajes huérfanos a un
+  // thread histórico, y la siembra de los cuatro agentes (DISA Administración/Ventas/Web/
+  // Finanzas). Todo era del chat, y se ha ido con él. Las tablas ya existentes no se tocan por
+  // dejar de crearlas: siguen en el disco hasta que el Commit 2 (datos) las vuelca y archiva.
 
   // ── D1 — ARCHIVAR clúster viejo de ventas + cuentas de tienda (rename → _archived, idempotente) ──
   // "Eliminar" = archivar, NUNCA DROP. Solo renombra si la tabla existe y su _archived aún NO. Va al
