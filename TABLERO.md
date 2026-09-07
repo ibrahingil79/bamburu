@@ -460,7 +460,7 @@ familia entera en verde: `test-contabilidad` 38 · `verify-contabilidad-diario-m
 > cuándo no se corre— y se espera un sí. Si dice que no, queda pendiente aquí y se vuelve a
 > proponer al abrir la siguiente sesión.
 
-- **Último barrido completo:** 2026-09-06 · `35f5dcc` · **141/228** · 945 s
+- **Último barrido completo:** 2026-09-07 · `55c177f` · **176/229** · 1388 s
 - **Estado:** ✅ al día
 
 <!-- BARRIDO:FIN -->
@@ -9712,14 +9712,24 @@ escenarios y los dos casos incómodos, con relojes de prueba de Stripe) ·
 >
 > **⚙️ CADUCADO LA MADRUGADA DEL 7 SEP 2026, y por dos motivos.** Primero: ese día entraron **dos
 > fichas nuevas al bloque** —`apagar-disa-paso-1` (hecha) y `conexiones-que-no-se-cierran`
-> (pendiente)—, así que **el bloque ya no tiene 18 fichas: tiene 20, y van 18 hechas.**
+> ~~(pendiente)—, así que **el bloque ya no tiene 18 fichas: tiene 20, y van 18 hechas.**~~
+> **⚙️ CORREGIDO EL 7 SEP 2026 (madrugada), CONTÁNDOLO: son 22 fichas, 19 hechas y 3 pendientes.**
 >
-> 🔺 **Y LA SIGUIENTE NO ES `permisos-paso-1-censo-rutas`: es `conexiones-que-no-se-cierran`.** La
+> ~~🔺 **Y LA SIGUIENTE NO ES `permisos-paso-1-censo-rutas`: es `conexiones-que-no-se-cierran`.** La
 > subió Ibrahin ese mismo día con el motivo escrito: **bloquea la verificación de cualquier tarea
-> posterior.** El servidor abre bases de negocio y no las cierra nunca; en una sola pasada del barrido
-> acumula **92 conexiones a ficheros ya borrados** y **se deteriora mientras se le mide**, así que
-> ninguna tarea que venga detrás se va a poder dar por comprobada. Detrás quedan
-> `permisos-paso-1-censo-rutas` y `retencion-backup-fallo-parcial`.
+> posterior.**~~ **⚙️ HECHA ESA MISMA MADRUGADA (7 sep 2026).** El bloqueo se levantó: el barrido
+> completo terminó con **0 conexiones muertas y 0 rancias** (antes: 30 y 2) y pasó de **141/228 a
+> 176/229**. **Un barrido completo ya se puede creer.**
+>
+> 🔺 **ASÍ QUEDA EL BLOQUE 2, CONTADO SOBRE EL DOCUMENTO (líneas 9766-11449): 22 fichas, 19 hechas,
+> 3 PENDIENTES** — `captura-facturas-sin-ia`, `permisos-paso-1-censo-rutas` y
+> `retencion-backup-fallo-parcial`, y con esa última se cierra el bloque.
+>
+> ⚙️ **Y se corrige de paso el recuento que este mismo puntero traía desde el 7 sep: decía «20 fichas,
+> 18 hechas», y ni el total ni el reparto cuadraban.** Faltaba `captura-facturas-sin-ia` —la ficha del
+> lector de facturas sin modelo de lenguaje, que entró ese mismo día— y sobraba dar por hecho que
+> `permisos-paso-1-censo-rutas` vivía fuera del bloque. **Las tres pendientes son las de arriba, y el
+> recuento sale de contar las fichas del bloque, no de la memoria de la sesión anterior.**
 >
 > Se tacha en vez de borrarse, que es lo que manda este documento — y porque un puntero rancio manda
 > al siguiente chat al sitio equivocado con toda la confianza del mundo.
@@ -11079,8 +11089,8 @@ llamadas salientes—, y se deja escrito, con número, por qué el otro no se pu
 ## TAREA — Bamburu abre bases y no las cierra nunca (y lo mismo con Chromium)
 
 - **id:** conexiones-que-no-se-cierran
-- **estado:** pendiente
-- **prioridad:** 🔺 **LA SIGUIENTE DEL BLOQUE 2.** Subida por Ibrahin el 7 sep 2026, y el motivo está
+- **estado:** ✅ HECHA — 7 sep 2026 (madrugada)
+- **prioridad:** ~~🔺 LA SIGUIENTE DEL BLOQUE 2.~~ **HECHA.** Subida por Ibrahin el 7 sep 2026, y el motivo está
   escrito: **bloquea la verificación de cualquier tarea posterior.** Mientras esto siga, un barrido
   completo no da un número fiable —el servidor se deteriora durante la propia medición— así que
   ninguna tarea que venga detrás se va a poder dar por comprobada. Va delante de
@@ -11089,11 +11099,20 @@ llamadas salientes—, y se deja escrito, con número, por qué el otro no se pu
 
 ### Criterios de HECHO
 
-1. **El servidor deja de acumular fantasmas.** Un barrido completo tiene que terminar con **cero**
-   conexiones a ficheros de base borrados. Hoy termina con **92**, empezando en 0.
-2. **Y con él, los Chromium**: `bamburu.service` no puede terminar el día con procesos de navegador
-   colgando. Hoy son **13, y 1.020 MB**.
-3. **⚠️ RECLASIFICAR LOS 39 ROJOS SIN ATRIBUIR, Y DEJAR LA LISTA ESCRITA.** Tras el arreglo se
+> **Escritos ANTES de construir, la madrugada del 7 sep 2026, y fijados por Ibrahin tras el Paso 0.**
+> Los cuatro primeros se miden **con el mismo método del Paso 0** —contar descriptores del proceso en
+> `/proc/<pid>/fd`— y **partiendo de un reinicio limpio del servicio**, para no arrastrar las 30
+> muertas del barrido anterior. **Sin ese reinicio el número no significa nada.**
+
+1. **Cero conexiones a ficheros de base que YA NO EXISTEN**, tras un barrido completo. Cero, no
+   «pocas». Hoy termina con **92**, empezando en 0.
+2. **Cero conexiones RANCIAS sobre negocios VIVOS**, tras un barrido completo. Rancia = la base está
+   en disco **y** en `control.db`, pero lo que el servicio sostiene por debajo ya murió. **Es el
+   fallo de sesión del 6 sep**, y en el Paso 0 del 7 sep había **2 puestas** (`desarrollo-bamburu` y
+   `peluqueria-gil`) después de un reinicio limpio.
+3. **Los ficheros abiertos al terminar NO crecen con el número de negocios recorridos.**
+4. **El desglose queda ESCRITO: muertas, rancias, sanas — antes y después.**
+5. **⚠️ RECLASIFICAR LOS 39 ROJOS SIN ATRIBUIR, Y DEJAR LA LISTA ESCRITA.** Tras el arreglo se
    ejecuta el barrido completo y se separan uno a uno: cuáles eran del fantasma y cuáles son defectos
    de producto de verdad. **La ficha NO se cierra sin esa lista escrita** — son los 39 que quedaron
    colgando al cerrar `apagar-disa-paso-1`, y si no se reclasifican se convierten en deuda que nadie
@@ -11128,7 +11147,118 @@ descartadas (el cifrado, el centinela de red y `gate-registro-alta`) llegar al d
 no el número**. Pero las dos cosas crecen con cada negocio que se da de alta y de baja, y ninguna se
 suelta sola.
 
-**ES EL MISMO PATRÓN QUE LOS 13 CHROMIUM, y por eso van juntas.** `bamburu.service` tiene **13
+### ✅ HECHA — 7 sep 2026 (madrugada)
+
+**EL SERVIDOR YA CIERRA LAS BASES QUE NO SIRVEN. Los cuatro criterios de medida, cumplidos, y con el
+método que exigían: contar descriptores del proceso partiendo de un REINICIO LIMPIO.**
+
+| | Antes (6 sep) | Después (7 sep) |
+|---|---|---|
+| Bases abiertas al terminar el barrido | **35** | **3** |
+| 🔴 muertas (el fichero ya no existe) | **30** | **0** |
+| 🟠 rancias (la base vive, su diario murió) | **2** | **0** |
+| 🟢 sanas | 3 | 3 |
+| Descriptores del proceso | 28 → **132** | 29 → **36** |
+| El barrido | 141/228 · 945 s | **176/229 · 1.388 s** |
+
+- **Criterio 1 — cero conexiones a ficheros que ya no existen: CUMPLIDO.** 0, no «pocas».
+- **Criterio 2 — cero conexiones rancias sobre negocios vivos: CUMPLIDO.**
+- **Criterio 3 — los ficheros abiertos no crecen con los negocios recorridos: CUMPLIDO.** El barrido
+  recorre decenas de negocios de prueba y el servicio termina con **3 bases abiertas**, +7
+  descriptores. Antes: +104.
+- **Criterio 4 — el desglose escrito:** esta tabla, y `node scripts/censo-conexiones-bases.mjs` lo
+  dice en cualquier momento.
+- **Criterio 5 — los 39 reclasificados:** `docs/barridos/2026-09-07-reclasificacion-de-los-39.md`.
+  **31 eran del fantasma** (verdes solos, sin tocar producto) · **3 son secuela del apagado de la IA**
+  y van al encargo de retirada · **5 son defectos de producto de verdad**, con nombre y síntoma.
+
+**QUÉ SE CONSTRUYÓ, todo en `core/tenant-middleware.js`** (que es donde estaba el caché, **no** en
+`core/sqlite-bamburu/`):
+
+- **Cierre cuando la base desaparece.** Es lo que arregla los 92. Antes no existía **ninguna** forma
+  de sacar un slug del caché en todo el árbol (`tenantConnections.delete` → 0 resultados).
+- **Detección y reapertura de la conexión rancia**, comparando **inodos** del `.db` y del `-shm`. El
+  criterio es recuperarse, no encontrar al culpable.
+- **Caducidad a los 20 minutos** sin uso. Es la pieza del día a día.
+- **Tope de 200 bases a la vez**, red de seguridad y no el arreglo. **Motivo: la MEMORIA** —cada base
+  abierta sostiene su caché de páginas y, desde el cifrado, la llave—. **No el límite de ficheros:**
+  medido, `LimitNOFILE` es 524.288 y una base cuesta 3,1 descriptores, así que por ahí la caída está
+  a ~169.000 negocios. Citarlo habría sido falso.
+- **Censo consultable** de los tres estados, dentro (`censoConexiones()`) y fuera
+  (`scripts/censo-conexiones-bases.mjs`, que lee `/proc` sin sudo).
+- **Cierre ordenado de las bases al parar**, colgado de `exit` —síncrono, no intercepta ninguna
+  señal— **para no tocar la señal de apagado en general**, que es otra ficha.
+
+**ROJO PROVOCADO POR LOS DOS LADOS**, en `scripts/gate-conexiones-que-se-cierran.mjs` (**22 ✓ · 0 ✗**,
+en RAPIDO + infra): se carga una copia del middleware con el cierre desactivado y otra con la
+detección desactivada, y se exige que las comprobaciones **caigan y digan cuál**. Provocando el
+huerfanato de verdad —borrando el diario y dejando que otro proceso lo recree—, no simulándolo.
+
+**DOS COSAS QUE CAZÓ EL PROPIO GATE, Y NO YO:**
+1. **Mi primer diseño tenía un hueco.** Puse un freno de 1 s a la revisión para ahorrar `stat`s, y eso
+   permitía entregar una conexión rancia durante ese segundo. Medí el coste real de quitarlo —**14,6 µs
+   por petición**, 8,8 ms por minuto al tope del limitador— y lo quité. El freno no compraba nada.
+2. **El parche del rojo provocado dejó de encajar** al cambiar la firma de una función, y **avisó en
+   vez de dar verde sobre nada**. Es exactamente para lo que estaba puesto.
+
+### Fuera de alcance — APUNTADO, NO CONSTRUIDO (7 sep 2026)
+
+Sale del encargo de construcción de Ibrahin. Se escribe aquí para que no se pierda, no para hacerlo:
+
+- 🖥️ **Los Chromium colgados de `bamburu.service`.** Mismo patrón —se abre y no se cierra—,
+  **ficha propia**. ⚙️ **La cifra ha subido: eran 13 el 6 sep y hoy 7 sep, tras el barrido, son 23.**
+  Se deja el número nuevo porque el viejo ya no describe el problema: **crece con cada pasada**.
+- 🔻 **Bamburu no atiende la señal de apagado.** El cierre ordenado que SÍ se ha construido en esta
+  tarea es **solo el de las bases**, colgado de `exit` (que es síncrono y no intercepta ninguna
+  señal) precisamente para no tocar la señal en general. **Ficha propia.**
+- 🧹 **Quedan 7 negocios `gate-*` vivos en `control.db`** del barrido anterior: `gate-360-6bc4be`,
+  `gate-c5bis-b4f8f9`, `gate-mapa-8ce716`, `gate-margen-ec2099`, `gate-vigia-agenda-5bc7de`,
+  `gos-d69ac6-clinica`, `peluqueria-arranque-3787cf`. Van al encargo de limpieza.
+- ❓ **QUIÉN HUÉRFANA LA CONEXIÓN LA PRIMERA VEZ SIGUE SIN MEDIR — ficha aparte.** Se buscó en caja
+  acotada, como mandó Ibrahin, y **cerró en negativo**: de los 36 sitios del árbol que borran un
+  `-wal`, **todos lo hacen sobre su propio negocio de prueba**; `verify-wal-acotado` solo LEE los
+  vivos y borra sus copias; y se descartó por ensayo el reloj horario (`bamburu-caducar-reservas`
+  abre y cierra las 15 bases cada hora, y **el `-wal` de una base que otro tiene abierta sobrevive**).
+  **No hace falta saberlo para que el sistema aguante:** con la detección y la reapertura puestas se
+  recupera solo. Pero conviene encontrarlo, porque cada huerfanato **destruye escrituras** (ver abajo).
+- 💾 **EL BARRIDO NO GUARDA SU SALIDA, y la promesa de que sí lleva escrita desde el 1 sep.** El
+  documento `docs/barridos/2026-09-01-los-113-rojos.md` dice *«desde hoy la salida entera se guarda
+  (`logs/barrido-<fecha>.log`)»*, y **no es cierto**: `run-gates.mjs` no escribe ese fichero —los de
+  `logs/` que llevan ese nombre son de 761 bytes y solo contienen la ayuda de uso—. **Consecuencia
+  medida hoy:** la lista de los 87 rojos del 6 sep NO existe en ninguna parte, solo su contador, así
+  que la reclasificación de esta ficha ha tenido que hacerse contra la línea base del 1 sep y
+  ejecutando gates uno a uno. La salida de HOY sí se ha guardado, a mano, en
+  `docs/barridos/2026-09-07-salida-completa.log`. **Apuntado, no construido.**
+- 📄 **Reconstruir la lectura de facturas con Textract/Parseur** (de la ficha de DISA). Sigue sin
+  construir.
+
+### ⚠️ HALLAZGO QUE NO BUSCÁBAMOS: UN HUERFANATO NO SOLO CIEGA, DESTRUYE
+
+Medido el 7 sep 2026 en tres ensayos aislados, fuera de Bamburu, mientras se construía esto. **Es
+peor de lo que decía el diagnóstico del 6 sep**, que hablaba solo de «deja de ver lo que escriben los
+demás»:
+
+1. **Borrar un `-wal` vivo destruye lo que aún no se había volcado.** El primer ensayo se quedó sin la
+   tabla que acababa de crear (`no such table`).
+2. **Mientras la conexión huérfana siga abierta, la base queda partida en dos y lo que escriban OTROS
+   procesos SE PIERDE PARA SIEMPRE** — también después de cerrarla, porque al cerrarse ella vuelca su
+   versión encima. Medido: 0 filas de 1, y seguían siendo 0 tras cerrar la huérfana y reabrir.
+3. **Lo que escribió la propia huérfana NO se pierde** al cerrarla: se vuelca. Por eso el reinicio del
+   7 sep a las 06:09 **no se llevó nada** de `desarrollo-bamburu` ni de `peluqueria-gil`, que llevaban
+   horas huérfanas.
+
+**Y esto cambió el diseño mientras se construía:** una conexión rancia **no puede esperar** los 5 s de
+gracia que sí tienen las demás; se cierra **en el acto**. Entre reventar con un 500 una petición que
+ya estaba leyendo un fantasma, y perder escrituras de otros procesos, se elige el 500. Queda escrito
+en `CLAUDE.md` para cualquier sesión futura.
+
+> ⚙️ **EL CRITERIO DE LOS CHROMIUM QUEDA FUERA DE ALCANCE — Ibrahin, 7 sep 2026.** Era el criterio 2
+> de esta ficha («`bamburu.service` no puede terminar el día con procesos de navegador colgando; hoy
+> son 13, y 1.020 MB»). **Sale al dar el encargo de construcción: «Los 13 Chromium colgados y que
+> Bamburu no atienda la señal de apagado. Mismo patrón, fichas propias.»** Se tacha con su motivo en
+> vez de borrarse, y el párrafo de abajo se queda como el diagnóstico que dio origen a esas fichas.
+
+~~**ES EL MISMO PATRÓN QUE LOS 13 CHROMIUM, y por eso van juntas.**~~ `bamburu.service` tiene **13
 procesos de Chromium colgando, 1.020 MB**, hijos del propio servicio — el motor de PDF que se abre y
 no se cierra. Medido el 6 sep 2026. **Se abre y no se cierra**: una base, un navegador, da igual. La
 tarea es la misma.
@@ -12780,6 +12910,28 @@ negocio suspendido NO deja escribir— necesitan un negocio suspendido y tienen 
 - [ ] **Cifrado en reposo de las bases de negocio.**
 - [ ] **Permisos Paso 1:** recorrer las rutas y dejar escrito qué permiso exige cada una. Desbloquea el Paso 2 (DISA administrando permisos). **⚙️ CIFRA NO REPRODUCIBLE, 1 sep 2026:** ~~600 de 1.025 rutas~~ — no se ha podido reproducir con ningún conteo sobre el árbol (salen 1.995 declaraciones de ruta y 464 guardas visibles). **La proporción del problema se sostiene —la mayoría de rutas no enseña su permiso en la línea— pero la cifra concreta no vale como criterio de HECHO.** Quien la construya tiene que empezar por fijar el método de conteo, y ese método es parte de la entrega.
 - [ ] **Roles heredados.** Hoy son permisos casilla por casilla y persona por persona: 55 filas para 9 usuarios. Las tablas `roles`/`role_permissions`/`user_roles` no existen.
+- [ ] 🆕 **CINCO DEFECTOS DE PRODUCTO DESTAPADOS AL RECLASIFICAR LOS 39** (7 sep 2026). Estaban
+  escondidos detrás del fallo de conexiones: mientras el servidor se envenenaba durante el barrido no
+  se podía saber si eran suyos o del producto. Medidos uno a uno **sobre un servidor sano**, así que
+  ahora sí tienen dueño. Detalle en `docs/barridos/2026-09-07-reclasificacion-de-los-39.md`.
+  - `gate-c5bis-rescate-duenyo` — «al marcar "he guardado", se desbloquea: el JS corre».
+  - `gate-csp-estricta` — «la rejilla pintó sus celdas · 40» (259 ✓ · 1 ✗). La agenda no pinta.
+  - `gate-impresion` — «los OCHO ofrecen imprimir, descargar y enviar — 2/15» (74 ✓ · 1 ✗).
+  - `test-manifiesto-copias` — «(criterio 7) cada bloque de subida anota "sha256 $sha" — 3». Deuda
+    anterior: la introdujo el commit `2cf81b2` del 3 sep, no esta tarea.
+  - `verify-libro-sin-huerfanos` — `desarrollo-bamburu`: **2 asientos sin documento y sin anular**
+    (`supplier_payment` ×2). Es el único de los cinco que toca DATOS, no pantalla.
+- [ ] 🆕 **BAJA DE UN NEGOCIO, CON BORRADO DE SUS DATOS.** **Hoy no existe, y está medido** (Paso 0 de
+  `conexiones-que-no-se-cierran`, 7 sep 2026): **no hay ni una ruta del panel ni del superadmin que
+  dé de baja un negocio y elimine sus datos.** Los únicos sitios de todo el árbol que borran un
+  negocio son **las comprobaciones** —33 ficheros hacen `DELETE FROM tenants`, casi todos por
+  `scripts/lib/tirar-negocio.mjs`—, y eso es una herramienta de pruebas, no una función del producto.
+  **Hoy no molesta porque todos los negocios son de prueba. El día que haya clientes de pago es una
+  obligación legal:** quien se da de baja tiene derecho a que se borren sus datos, y hoy no hay forma
+  de hacerlo. Va junto a la entrada de RGPD de aquí abajo —es la otra mitad del mismo problema: esa
+  es el derecho de borrado de un CLIENTE de un negocio, esta es el de un NEGOCIO entero— y arrastra
+  la misma decisión pendiente de Ibrahin sobre cómo convive con la regla de no destruir datos y con
+  la inmutabilidad fiscal. **Apuntada, no construida** (fuera del alcance de `conexiones-que-no-se-cierran`).
 - [ ] ⛔ **NO CONVERTIBLE — lo dice la propia entrada.** **RGPD como función:** exportar, borrar y anonimizar los datos de un cliente. Verificado el 1 sep 2026: no existe nada de esto en el árbol. **Pero requiere decidir antes cómo convive con la regla de no destruir datos y con la inmutabilidad fiscal**, y esa decisión es de Ibrahin: cambia lo que Bamburu le promete al cliente.
 - [ ] **2FA obligatoria para `owner`/`admin`.** Hoy es opcional, con mínimo de 8 caracteres.
 - [ ] **Sesión de 24 h fijas sin renovación por actividad.** ~~(`core/auth.js:74`)~~ **⚙️ LÍNEA CORREGIDA EL 1 SEP 2026: en la 74 está `BCRYPT_COST`. El plazo real vive en `core/auth.js:107` (`const expires = now + 24 * 60 * 60`).** El defecto es cierto: 24 h fijas, sin renovación por actividad. Revisar.

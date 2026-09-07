@@ -187,6 +187,25 @@ no un bug.
   —usa `node scripts/db-revisar.mjs <fichero>`—; y (2) la API de copia (`db.backup()`) escribe el
   destino SIN llave, así que **de una base cifrada saca una copia EN CLARO**: para snapshots va
   `VACUUM INTO`, que hereda el cifrado (ver `scripts/db-snapshot.mjs`).
+- 🔌 **LAS CONEXIONES A BASES DE NEGOCIO SE CIERRAN SOLAS desde el 7 sep 2026** (ficha
+  `conexiones-que-no-se-cierran`). El caché vive en `core/tenant-middleware.js` (`tenantConnections`),
+  **no** en `core/sqlite-bamburu/`. Sigues llamando a `getTenantDb(tenant)` igual que siempre; por
+  dentro, ahora, en cada petición comprueba por INODO que la conexión sigue valiendo, y hay un repaso
+  cada 30 s que cierra lo que sobra (base borrada, conexión rancia, 20 min sin uso, tope de 200).
+  `node scripts/censo-conexiones-bases.mjs` dice cuántas hay abiertas y en qué estado.
+
+  ⚠️ **LO QUE MUERDE, Y ES CARO: NUNCA BORRES EL `-wal` NI EL `-shm` DE UNA BASE QUE ALGUIEN TIENE
+  ABIERTA.** Medido el 7 sep 2026, en tres ensayos aislados:
+  1. **Borrar un `-wal` vivo destruye lo que aún no se había volcado.** El primer ensayo se quedó sin
+     la tabla que acababa de crear (`no such table`).
+  2. **Mientras la conexión huérfana siga abierta, esa base queda partida en dos y lo que escriban
+     OTROS procesos se pierde para siempre** — también después de cerrarla, porque al cerrarse ella
+     vuelca su versión encima. (Lo que escribió la propia huérfana sí se salva.)
+  3. **No da error, no falla `integrity_check` y la base está sana.** Lo único que pasa es que el
+     proceso mira a otro sitio. Eso es lo que tumbó el panel entero el 6 sep 2026 y costó un
+     diagnóstico completo con tres hipótesis descartadas.
+
+  Si una herramienta necesita limpiar ficheros de una base, que **cierre la conexión primero**.
 - **Auth:** `admin_users` está en cada BD de tenant, NO en control.db. bcrypt + 2FA TOTP.
 - **Emails:** Resend SDK → devuelve `{ data, error }`, NO lanza excepciones (hay que checkear `error`).
 - **Secretos:** en `/etc/bamburu.env` (fuera del repo). NUNCA hardcodear claves ni subirlas.

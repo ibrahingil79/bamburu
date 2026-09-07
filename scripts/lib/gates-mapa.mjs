@@ -128,6 +128,11 @@ export const RAPIDO = new Map([
   // rápido porque volver a encenderla es una línea, y porque el daño de que se cuele no se nota
   // usando el producto: se nota en la factura del proveedor a fin de mes.
   ['censo-ia-apagada', '¿sigue Bamburu sin llamar al proveedor de IA? (decisión de Ibrahin, 6 sep 2026)'],
+  // Y que el servidor CIERRE las bases que ya no sirven. Va en el rápido porque es lo que decide si
+  // un barrido completo se puede creer: mientras el servicio acumule conexiones fantasma, se
+  // deteriora durante la propia medición y los gates del final miden un servidor ya enfermo.
+  // ~6 s medidos, con sus dos rojos provocados dentro.
+  ['gate-conexiones-que-se-cierran', '¿cierra el servidor las bases que ya no sirven? (conexiones-que-no-se-cierran)'],
 ]);
 
 // La velocidad de UNA comprobación. No hay tercer estado: o está declarada arriba o es del completo.
@@ -363,7 +368,7 @@ export const GRUPOS = {
   // 25 ago 2026 · Las dos del correo. `verify-correo-freno` prueba que el freno para de verdad al
   // llegar al tope; `verify-comprobaciones-sin-correo-real` vigila la norma del dueño: ninguna
   // comprobación vuelve a escribir a una bandeja real. Ver docs/censo-correos.md.
-  infra: ['gate-arranque-modulos', 'gate-cifrado-en-reposo', 'censo-ia-apagada', 'gate-copias-cifradas', 'gate-restauracion-completa', 'gate-portal-sin-llave-en-url', 'gate-adjuntos-por-contenido', 'gate-aviso-copias', 'gate-csp-superficies-limpias', 'censo-bot-de-bamburu', 'censo-avisos-sin-fabrica', 'verify-correo-freno', 'verify-comprobaciones-sin-correo-real', 'verify-disco-perfiles', 'test-c6-secretos', 'gate-conciliacion-deshacer', 'verify-superadmin-escrituras', 'verify-tenant-lookup-readonly', 'verify-wal-acotado', 'verify-safe-error',
+  infra: ['gate-arranque-modulos', 'gate-cifrado-en-reposo', 'censo-ia-apagada', 'gate-conexiones-que-se-cierran', 'gate-copias-cifradas', 'gate-restauracion-completa', 'gate-portal-sin-llave-en-url', 'gate-adjuntos-por-contenido', 'gate-aviso-copias', 'gate-csp-superficies-limpias', 'censo-bot-de-bamburu', 'censo-avisos-sin-fabrica', 'verify-correo-freno', 'verify-comprobaciones-sin-correo-real', 'verify-disco-perfiles', 'test-c6-secretos', 'gate-conciliacion-deshacer', 'verify-superadmin-escrituras', 'verify-tenant-lookup-readonly', 'verify-wal-acotado', 'verify-safe-error',
           'verify-xss-escape', 'gate-xss-escape', 'gate-csp-estricta',
           // PUNTO 2 (24 ago 2026) — dar de baja a alguien del equipo: borrar si no dejó rastro,
           // archivar si lo dejó, y decirlo ANTES de pulsar. Antes daba un 500 seco.
