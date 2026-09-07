@@ -363,7 +363,10 @@ export const GRUPOS = {
   // 25 ago 2026 · Las dos del correo. `verify-correo-freno` prueba que el freno para de verdad al
   // llegar al tope; `verify-comprobaciones-sin-correo-real` vigila la norma del dueño: ninguna
   // comprobación vuelve a escribir a una bandeja real. Ver docs/censo-correos.md.
-  infra: ['gate-arranque-modulos', 'gate-cifrado-en-reposo', 'verify-sin-proveedor-ia', 'gate-conexiones-que-se-cierran', 'gate-permisos-por-ruta', 'gate-copia-completa', 'gate-disa-fuera-de-la-vista', 'gate-copias-cifradas', 'gate-restauracion-completa', 'gate-portal-sin-llave-en-url', 'gate-adjuntos-por-contenido', 'gate-aviso-copias', 'gate-csp-superficies-limpias', 'censo-bot-de-bamburu', 'censo-avisos-sin-fabrica', 'verify-correo-freno', 'verify-comprobaciones-sin-correo-real', 'verify-disco-perfiles', 'test-c6-secretos', 'gate-conciliacion-deshacer', 'verify-superadmin-escrituras', 'verify-tenant-lookup-readonly', 'verify-wal-acotado', 'verify-safe-error',
+  // ⚙️ 8 sep 2026 (`barrera-de-permisos`) — `gate-barrera-permisos` arranca `index.js` DE VERDAD
+  // cinco veces (puerto propio, Telegram apagado): ~15-20 s medidos, no un gate «rápido». Va aquí,
+  // con el resto de infra, no en RAPIDO.
+  infra: ['gate-arranque-modulos', 'gate-cifrado-en-reposo', 'verify-sin-proveedor-ia', 'gate-conexiones-que-se-cierran', 'gate-permisos-por-ruta', 'gate-barrera-permisos', 'gate-copia-completa', 'gate-disa-fuera-de-la-vista', 'gate-copias-cifradas', 'gate-restauracion-completa', 'gate-portal-sin-llave-en-url', 'gate-adjuntos-por-contenido', 'gate-aviso-copias', 'gate-csp-superficies-limpias', 'censo-bot-de-bamburu', 'censo-avisos-sin-fabrica', 'verify-correo-freno', 'verify-comprobaciones-sin-correo-real', 'verify-disco-perfiles', 'test-c6-secretos', 'gate-conciliacion-deshacer', 'verify-superadmin-escrituras', 'verify-tenant-lookup-readonly', 'verify-wal-acotado', 'verify-safe-error',
           'verify-xss-escape', 'gate-xss-escape', 'gate-csp-estricta',
           // PUNTO 2 (24 ago 2026) — dar de baja a alguien del equipo: borrar si no dejó rastro,
           // archivar si lo dejó, y decirlo ANTES de pulsar. Antes daba un 500 seco.

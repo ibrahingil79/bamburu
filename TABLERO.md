@@ -460,7 +460,7 @@ familia entera en verde: `test-contabilidad` 38 · `verify-contabilidad-diario-m
 > cuándo no se corre— y se espera un sí. Si dice que no, queda pendiente aquí y se vuelve a
 > proponer al abrir la siguiente sesión.
 
-- **Último barrido completo:** 2026-09-07 · `ff2ddcb` · **166/212** · 1213 s
+- **Último barrido completo:** 2026-09-07 · `5f1a342` · **153/213** · 1275 s
 - **Estado:** ✅ al día
 
 <!-- BARRIDO:FIN -->
@@ -9503,6 +9503,234 @@ del chat, incluidos en el borrado) y **solo 3 nombres nuevos**, los tres investi
 4. ✅ Cero apariciones de `api.anthropic.com` en el árbol — `verify-sin-proveedor-ia`: **4 ✓ · 0 ✗**.
 5. ✅ Barrido completo sin rojos nuevos causados por el borrado (detalle arriba); `gate-registro-alta`
    se deja rojo, tal cual, con su ficha propia.
+
+---
+
+## 🔺🔺 LAS TRES DE SEGURIDAD — 8 sep 2026, van delante de todo lo demás
+
+**Las tres se decidieron el 8 sep 2026, después de que Ibrahin rechazara aplazar la seguridad. Van
+antes que cualquier otra cosa del tablero, incluida la corrupción de desarrollo-bamburu y las
+funciones nuevas.**
+
+1. `barrera-de-permisos` — **HECHA hoy mismo, ver ficha justo abajo.** Iba primera porque sin ella
+   las otras dos se deshacen solas: se cierran 38 pantallas hoy y en dos semanas hay 12 nuevas
+   abiertas.
+2. `cerrar-las-38-rutas-abiertas` — las que mueven o enseñan datos del negocio pidiendo solo «estar
+   dentro» (censo del 7 sep, recontado hoy contra el árbol sin DISA: **90** rutas quedan marcadas
+   `pendiente_revisar` en `docs/seguridad/permisos-declarados.json` — la cifra sube desde 38 porque
+   el recuento de hoy es más ancho que el ejemplo original, no porque haya empeorado nada; ver la
+   ficha de `barrera-de-permisos` para el detalle). Ejemplos: emitir una factura, mandarla al
+   cliente, importar datos en masa, ver el fichaje de otra persona, cambiar el Inicio, abrir los
+   ajustes. **LLEVA DECISIÓN DE PRODUCTO DE IBRAHIN: qué puede hacer un empleado y qué solo el
+   dueño. No se arranca sin esa decisión.** Estado: pendiente.
+3. `rgpd-baja-y-borrado-de-negocio` — dar de baja un negocio y borrar sus datos. Hoy no existe
+   forma. Obligación legal en cuanto haya un cliente real: sin esto no se puede cobrar. 30 días de
+   gracia, exportación previa, y lo que obliga a conservar la ley (facturas emitidas, cadena
+   Verifactu) verificado en fuente oficial ANTES de diseñar el borrado — ver el Paso 0 completo en
+   su ficha, más abajo. Estado: pendiente (solo Paso 0 hecho; sin construir por orden expresa —
+   "no investigues más, apunta y sigue" para dar paso a `barrera-de-permisos`).
+
+---
+
+## ✅ TAREA — `barrera-de-permisos` (1ª de las tres de seguridad)
+
+- **id:** barrera-de-permisos
+- **estado:** ✅ HECHA — 8 sep 2026
+- **origen:** encargo de Ibrahin, 8 sep 2026 — convertir el censo del 7 sep (foto) en un portero
+  (barrera)
+
+**PASO 0, medido:**
+1. **¿Retrasa el arranque de forma notable?** El censo COMPLETO (con `fichero:línea` vía el
+   inspector de Node) cuesta 741 ms extra sobre los 653 ms que ya cuesta montar la app — pero esa
+   parte cara **no hace falta para la barrera**: la clasificación (¿permiso, sesión o nada?) sale de
+   leer `fn.bamburuGuarda`, una propiedad de la función. Medido de verdad, cinco pasadas seguidas
+   sobre las 573 rutas de hoy: **34-49 ms** (el coste real es de recorrer y llamar
+   `Function.prototype.toString` en cada eslabón de cada ruta, no del inspector). Frente a los
+   653 ms de montar la app, es un 5-7 % más — no un problema para un arranque, que no es un camino
+   caliente.
+2. **¿Dónde arranca?** Justo antes de `serve()`, después de `export { app }` — reutilizando el
+   aviso de Telegram del Bloque 2 (`core/aviso-arranque.js`, `avisarArranqueRoto`), tal como pedía
+   el encargo: "úsala, no montes otra". Lanza (`throw`) en vez de `process.exit()`, mismo motivo que
+   `core/loader.js`: bajo systemd la salida estándar es un socket con escrituras asíncronas, y un
+   `exit()` inmediato puede cortar el mensaje justo antes de que se imprima.
+3. **¿Hay rutas registradas DESPUÉS del arranque?** **Sí, una: `app.all('/admin/disa/*', ...)`**,
+   la redirección que dejó `sacar-disa-paso-2-borrado` anoche, añadida DESPUÉS de
+   `loadModules(app, db)`. Por eso la barrera NO va pegada a `loadModules` (que es donde vive el
+   corte del Bloque 2): va al final de todo, justo antes de `serve()`, para que esa ruta también
+   cuente.
+
+**Lo construido:**
+- `core/mapa-rutas.js` — la clasificación de permisos (antes duplicada dentro del script de censo),
+  sacada a un tercer sitio que importan los dos: el generador de la declaración y el arranque real.
+- `docs/seguridad/permisos-declarados.json` — la declaración: las 573 rutas de hoy, con su
+  veredicto, y `pendiente_revisar: true` en las de "solo sesión"/"sin guarda" que no son de la
+  propia cuenta (90 hoy — ver ficha `cerrar-las-38-rutas-abiertas`). Se regenera a mano con
+  `node scripts/censo-permisos-rutas.mjs --declarar docs/seguridad/permisos-declarados.json`
+  DESPUÉS de mirar qué cambió — **el arranque nunca la toca ni la regenera.**
+- `core/barrera-permisos.js` — compara la app real contra la declaración: ruta nueva sin declarar o
+  ruta que pide MENOS → no arranca, con un mensaje en español llano (qué pantalla, qué se esperaba,
+  qué hay, qué hacer); ruta que pide MÁS → arranca y avisa.
+- `scripts/gate-barrera-permisos.mjs` — gate permanente: arranca `index.js` DE VERDAD como hijo (en
+  un puerto propio, con Telegram apagado) para los tres escenarios más la prueba en rojo. 10 ✓ · 0 ✗.
+
+**Los 5 criterios de verde, medidos:**
+1. ✅ Con la declaración al día, arranca normal (probado contra el servicio real, con `systemctl`).
+2. ✅ Ruta nueva sin declarar → NO arranca. Probado dos veces: contra el servicio real (systemd,
+   ciclo de `Restart=on-failure` observado) y en el gate permanente.
+3. ✅ Quitar el permiso a una ruta → NO arranca. Mismo doble probado.
+4. ✅ Añadir permiso a una ruta → arranca y avisa. Mismo doble probado.
+5. ✅ Coste: 34-49 ms, medido cinco veces — dato arriba, en el Paso 0.
+6. ✅ REGLA DE SEGURIDAD respondida — ver más abajo.
+7. ⚠️ **Barrido completo: 153/213** (antes de esta tarea: 166/212). **Los 15 "nuevos" no son de esta
+   tarea** — comprobado uno a uno, no supuesto: `gate-barrera-permisos` (el gate de esta propia
+   tarea) pasa **10 ✓ · 0 ✗**. El resto se reparte en dos causas AJENAS al código de hoy:
+   - **Residuo de pruebas acumulado en `desarrollo-bamburu`, creciendo toda la noche.** La mayoría
+     de los 15 fallan con el MISMO error, `Falta confirmar la clasificación fiscal de una línea
+     antes de emitir` — productos de gates de sesiones anteriores sin `fiscal_treatment` fijado.
+     Medido con `node scripts/limpiar-residuo-gates.mjs`: el residuo (recepciones, facturas de
+     proveedor, asientos contables) ha crecido de una pasada a otra esta misma noche. No se ha
+     limpiado (`--hazlo` muta datos de un negocio real de pruebas, y no era el encargo de hoy) —
+     queda dicho para quien retome `investigar-corrupcion-desarrollo-bamburu` o abra una ficha de
+     limpieza aparte.
+   - **`gate-disa-fuera-de-la-vista` ABORTÓ** (no falló) por el mismo mecanismo de seguridad que me
+     mordió a mí durante la construcción: OTRO gate (no el de esta tarea — el suyo usa la
+     instantánea, verificado) dejó el árbol con un fichero más nuevo que el proceso vivo a mitad
+     del barrido. Es el propio `gate-env.mjs` protegiendo contra un falso verde, funcionando como
+     debe.
+   La primera corrida de este barrido (110/212) SÍ fue un falso positivo mío: mis propios ensayos
+   de parche-y-revierte tocaron el `mtime` de `index.js` sin volver a desplegar, y `gate-env.mjs`
+   abortó decenas de gates en cadena. Redesplegado y confirmado en verde uno a uno antes de repetir
+   el barrido completo — la cifra de arriba (153/213) es la segunda corrida, ya limpia de ese fallo.
+
+**PRUEBA EN ROJO:** con la barrera desactivada a propósito, la MISMA rebaja de permiso (quitar
+`requirePerm('admin.manage_users')` de `GET /admin/activity`) deja arrancar el servicio SIN decir
+una palabra — comprobado contra el servicio real y en el gate. Con la barrera reactivada, la
+comprobación [3] de arriba la caza. Ambas veces, código devuelto a su sitio y verificado con
+`git diff` limpio.
+
+**⚠️ Un incidente de verdad durante la propia construcción, y va en la REGLA DE SEGURIDAD de abajo
+porque es justo lo que esa regla pide que no pase en silencio:** la primera versión del gate tenía
+una "red de seguridad" que, si algo quedaba sin revertir al terminar, hacía `git checkout` sobre el
+fichero. **Eso está mal cuando el fichero tiene trabajo legítimo sin commitear** — que es
+exactamente el caso de `index.js` hoy mismo — y una ejecución de esa primera versión **borró de
+verdad el cableado de la propia barrera** (26 líneas de código de esta misma tarea) al confundir
+"tiene diferencias con git HEAD" con "algo salió mal". Se cazó comprobando el fichero después de
+cada paso, se restauró a mano desde lo que quedaba en el contexto de esta sesión, y el gate se
+reescribió para comparar contra una INSTANTÁNEA tomada al empezar — nunca contra git. Aparte, y
+ya sin relación con el gate: un `timeout` externo de una invocación manual mató al proceso a mitad
+de una prueba y dejó `GET /admin/activity` **sin su permiso, en el árbol real, varios minutos**,
+hasta que se detectó a mano y se corrigió. Los dos hallazgos están arreglados y probados de nuevo;
+se cuentan aquí porque no contarlos sería precisamente el hábito que la REGLA DE SEGURIDAD viene a
+cortar.
+
+**REGLA DE SEGURIDAD (RITUAL.md), respondida:**
+1. **¿Qué permiso exige cada ruta nueva o tocada?** `docs/seguridad/permisos-declarados.json` (una
+   sola nueva desde `arreglar-alta-publica`: `POST /api/registro/crear`, pública a propósito — el
+   alta pública). Nada más se ha tocado.
+2. **¿Qué datos personales toca, dónde se guardan y cómo se borran?** Ninguno. La barrera solo lee
+   `app.routes` (en memoria, nunca se persiste) y un fichero de configuración del repositorio
+   (rutas y permisos, cero datos de negocio ni de personas).
+3. **¿Qué pasa si falla a medias?** Si `compararConDeclaracion` lanza una excepción inesperada, el
+   arranque entero se cae (no hay un `try` que la trague) — el fallo es RUIDOSO, nunca silencioso,
+   que es la propiedad que esta tarea entera persigue. El incidente de construcción de arriba fue
+   exactamente esta pregunta respondida en vivo: un fallo a medias SÍ pudo dejar datos (código)
+   rotos, y la corrección fue dejar de fiarse de una comparación contra git y comparar contra lo
+   que de verdad había antes de empezar.
+
+**FUERA DE ALCANCE — respetado:** no se ha cambiado ni un permiso de las 90 pendientes, no se ha
+tocado la corrupción de `desarrollo-bamburu`. Solo se ha puesto el portero.
+
+**Commit:** ver el de cierre, con las tres fichas y RITUAL.md.
+
+---
+
+## TAREA — `cerrar-las-38-rutas-abiertas` (2ª de las tres de seguridad)
+
+- **id:** cerrar-las-38-rutas-abiertas
+- **estado:** pendiente — **bloqueada por una decisión de producto de Ibrahin, no por código**
+- **origen:** censo `permisos-paso-1-censo-rutas` (7 sep 2026), recontado hoy tras `barrera-de-
+  permisos` sobre el árbol sin DISA
+
+**Qué hay que decidir, y por qué no se puede construir sin decidirlo primero:** de las rutas que
+hoy solo exigen "estar dentro" (sesión) y NO son cosas de la propia cuenta, `docs/seguridad/
+permisos-declarados.json` marca **90** como `pendiente_revisar`. La cifra no es comparable 1:1 con
+el "38" del censo original: aquel conteo era sobre 610 rutas (con DISA todavía dentro) y con un
+juicio manual, ruta a ruta; el de hoy es automático, por patrón de camino, sobre las 573 rutas de
+después de `sacar-disa-paso-2-borrado` — más ancho a propósito, para no dejar fuera nada que no sea
+inequívocamente de la propia cuenta. **Declarar no es aprobar**, y esta cifra tampoco: hay que
+repasarla ruta a ruta antes de tocar un permiso.
+
+Ejemplos que ya llamaban la atención en el censo original y siguen igual hoy: `POST /api/erp/
+propuestas/:id/emitir` (emite una factura), `.../enviar` (la manda al cliente),
+`.../preparar-compra`; `POST /api/erp/importar/importar` (importa datos en masa) y
+`.../:id/deshacer`; `GET /api/erp/fichaje/historial/:userId/:fecha` (ve el fichaje de otra
+persona); `PUT`/`DELETE /api/erp/inicio/empresa` (cambia el Inicio de todo el negocio);
+`POST /api/erp/listados/:clave/enviar`; `GET /admin/settings`.
+
+**No se arranca a construir sin que Ibrahin decida, ruta por ruta o por criterio, qué puede hacer
+un empleado y qué solo el dueño** — es una promesa del producto, no una decisión de construcción
+(RITUAL.md). Con `barrera-de-permisos` ya puesta, cerrarlas ahora es seguro: cualquier permiso que
+se añada queda protegido para siempre por el portero, y no hace falta volver a mirar esto en dos
+semanas por miedo a que se reabra solo.
+
+---
+
+## TAREA — `rgpd-baja-y-borrado-de-negocio` (3ª de las tres de seguridad)
+
+- **id:** rgpd-baja-y-borrado-de-negocio
+- **estado:** pendiente — **solo el Paso 0 hecho**, por orden expresa de Ibrahin ("no investigues
+  más, apunta y sigue" para dejar paso a `barrera-de-permisos`)
+- **origen:** encargo de Ibrahin, 8 sep 2026 — obligación legal (RGPD) antes de tener un cliente real
+
+**PASO 0, publicado el 8 sep 2026 (íntegro, para no repetir la investigación cuando se retome):**
+
+**1. `modules/erp/usuarios-baja.js` — qué hace y qué NO hace.** Da de baja a un EMPLEADO dentro de
+un negocio (archiva si dejó rastro, borra si no). No conoce el concepto de "negocio entero": no hay
+ninguna función para borrar un tenant. Se reutiliza como referencia de estilo (transacción, listas
+HUELLA/SUYO explícitas), no como código.
+
+**2. Qué queda fuera de `data/tenants/<slug>.db` al borrar un negocio — medido, tabla por tabla:**
+
+| Sitio | Qué hay | Cómo se referencia |
+|---|---|---|
+| `control.db` → `tenants` | la fila del negocio | — |
+| `control.db` → `tenant_sessions`, `tenant_suscripciones` | sesiones, suscripción (con `stripe_cliente_id`, `stripe_metodo_pago_id`, `stripe_suscripcion_id`) | FK a `tenants.id` — las encuentra `soltarAtaduras()` |
+| `control.db` → `security_events`, `error_log`, `rate_limit_summaries`, `integrity_checks` | IPs, mensajes de error, contadores | **`tenant_slug` en TEXTO plano, SIN FK** — `soltarAtaduras()` no las ve; encontradas leyendo columna a columna |
+| `control.db` → `tenant_access_links` | enlaces de acceso pendientes | por **email**, no por tenant |
+| `data/uploads/<slug>/` | ficheros subidos | fuera de cualquier base, en disco |
+| Drive (`gdrive_cif:daily` + secundaria) | copias cifradas diarias | **rotan solas a los 14 días** (`RETENTION_DAYS`) — no se puede borrar selectivamente de una copia ya hecha sin reescribirla entera |
+| Stripe | el objeto Cliente (nombre, email, tarjeta) | `core/stripe.js` tiene `cancelarSuscripcion`/`desasociarMetodo`, **pero NO existe llamada para borrar el Cliente** — hueco real |
+| journald (`bamburu.service`) | lo que se mande a consola | rotación del propio sistema, fuera del control del producto |
+
+Lo que no está en esta lista no se borra.
+
+**3. Lo que la ley obliga a CONSERVAR — verificado en la sede de la AEAT, no de memoria:** **4 años**
+de prescripción fiscal (art. 29.2.e Ley 58/2003 General Tributaria + art. 165.1 Ley 37/1992 IVA),
+contados desde que cierra el período fiscal, no desde la fecha de la factura
+([sede.agenciatributaria.gob.es](https://sede.agenciatributaria.gob.es/Sede/iva/facturacion-registro/facturacion-iva/obligacion-conservar-facturas.html)).
+El reglamento Verifactu exige integridad, conservación, accesibilidad e inalterabilidad de los
+registros de facturación durante todo ese plazo mientras el sistema no transmita en tiempo real a
+la AEAT — que es el caso hoy
+([sede.agenciatributaria.gob.es](https://sede.agenciatributaria.gob.es/Sede/iva/sistemas-informaticos-facturacion-verifactu/preguntas-frecuentes/sistemas-verifactu.html)).
+**Esto cambia el diseño, como avisaba el encargo:** un "borrado total" no puede tocar
+`invoices`/`invoice_items`/la cadena Verifactu ni antes ni después de los 30 días.
+
+**Decisión de diseño ya tomada con Ibrahin para cuando se construya:** tabla propia
+`retencion_legal_facturas` en `control.db` (fuera de la base del negocio, así que un borrado del
+negocio no se la lleva por delante) — `tenant_slug`, `tenant_name`, `invoice_json` (factura completa
+serializada), `conservar_hasta` (+4 años) y `motivo`. Se copian las filas legalmente obligatorias
+ANTES de borrar el negocio, y de ahí no salen hasta cumplir el plazo. Sin acceso desde el producto.
+
+**Hallazgo importante para el diseño:** ya existe una "bóveda" en el código
+(`core/suscripcion-datos.js`, `core/suscripcion-rescate.js`), pero es de IMPAGO, con la regla
+CONTRARIA a la de aquí: *"en ningún momento se destruye información… ni en la bóveda"* — un negocio
+que deja de pagar nunca se borra, se congela por si vuelve. **No es reutilizable como código para
+esta tarea** — el RGPD sí exige borrar, pasado el plazo de gracia. También hay columnas ya creadas
+(`descarga_estado`, `descarga_fichero`, `descarga_resumen`) pensadas para una exportación a fichero,
+pero nunca se rellenan: no hay generador construido, hay que hacerlo desde cero.
+
+**Nada de esto se ha construido.** Se para aquí por orden expresa, con el Paso 0 completo para no
+tener que rehacerlo cuando le toque el turno.
 
 ---
 
