@@ -100,13 +100,16 @@ try {
 
   // ── 2. Resumen-primero: el resumen NO descarta nada ─────────────────────────
   // 20-ago-2026 · EL CUADRO DE MANDO. Esto se disparaba desde la tarjeta «¿Qué requiere mi atención?»
-  // del CHAT del Inicio, y ese chat ya no está ahí (vive en /admin/disa). Lo que este gate protege
-  // NO era la tarjeta: era que **pedir el resumen no marca los avisos como vistos** — el bug que
-  // pisaba la huella entera y borraba los «no visto» que el usuario había puesto a mano. El endpoint
-  // sigue existiendo, así que se le pide DIRECTAMENTE y se comprueba lo mismo. Si algún día se
-  // vuelve a enganchar a un botón, la protección ya está puesta.
+  // del CHAT del Inicio. Lo que este gate protege NO era la tarjeta: era que **pedir el resumen no
+  // marca los avisos como vistos** — el bug que pisaba la huella entera y borraba los «no visto»
+  // que el usuario había puesto a mano. El endpoint sigue existiendo, así que se le pide
+  // DIRECTAMENTE y se comprueba lo mismo. Si algún día se vuelve a enganchar a un botón, la
+  // protección ya está puesta.
+  // ⚙️ 7 sep 2026 (`sacar-disa-paso-2-borrado`) — la ruta vivía en `modules/disa/index.js`
+  // (`POST /api/disa/alerts/open`) y se fue con el chat. Su lógica (`resumirAvisos`, determinista,
+  // sin IA) era y es de `modules/erp/avisos.js`: se movió a `POST /api/erp/avisos/resumen`.
   const reply = await page.evaluate(async () => {
-    const r = await fetch('/api/disa/alerts/open', { method: 'POST',
+    const r = await fetch('/api/erp/avisos/resumen', { method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-csrf-token': window.CSRF_TOKEN } });
     const d = await r.json();
     return d.reply || '';

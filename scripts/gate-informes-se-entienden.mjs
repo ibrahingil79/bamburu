@@ -15,7 +15,11 @@
 //      devuelve null sin enseñar nada. Aquí se simula neutralizándolas y se exige que el producto
 //      siga funcionando, no que se disculpe.
 //   4. SE MIRA LA CAPTURA. Se hace una y se comprueba sobre PÍXELES lo que solo se ve mirando: que el
-//      aviso no queda debajo de la burbuja de DISA y que el nombre del índice está a la izquierda.
+//      aviso pinta con un z-index por encima de todo y que el nombre del índice está a la izquierda.
+//      ⚙️ 7 sep 2026 (`sacar-disa-paso-2-borrado`) — aquí se comprobaba ADEMÁS que el aviso no
+//      quedaba debajo de la burbuja de DISA (`#disaFab`). La burbuja se borró con todo el chat: no
+//      hay con qué solapar. Retirado, no heredado — si algún día vuelve un elemento flotante fijo,
+//      ese gate se escribe de cero contra lo que sea entonces.
 import puppeteer from 'puppeteer';
 import Database from 'better-sqlite3';
 import { randomBytes } from 'crypto';
@@ -309,19 +313,15 @@ try {
   await dormir(400);
   const pintura = await page.evaluate(() => {
     const t = [...document.querySelectorAll('body > div')].find(e => (e.textContent || '').trim() === 'Informe guardado');
-    const fab = document.getElementById('disaFab');
-    const rt = t && t.getBoundingClientRect(), rf = fab && fab.getBoundingClientRect();
-    const solapa = rt && rf ? !(rt.right < rf.left || rt.left > rf.right || rt.bottom < rf.top || rt.top > rf.bottom) : null;
     const fila = document.querySelector('.inf-fila');
     const n = fila && fila.querySelector('.inf-n').getBoundingClientRect();
     const v = fila && fila.querySelector('.inf-v').getBoundingClientRect();
-    return { hayToast: !!t, solapa, zToast: t ? getComputedStyle(t).zIndex : null,
+    return { hayToast: !!t, zToast: t ? getComputedStyle(t).zIndex : null,
              nombreX: n ? Math.round(n.left) : null, flechaX: v ? Math.round(v.left) : null,
              filaX: fila ? Math.round(fila.getBoundingClientRect().left) : null };
   });
   ok(pintura.hayToast, 'el aviso se pinta');
-  ok(pintura.solapa === false, 'EL AVISO YA NO QUEDA DEBAJO DE LA BURBUJA DE DISA', pintura.solapa === false ? 'no se tocan' : 'SE SOLAPAN');
-  ok(Number(pintura.zToast) > 99999, '  y además queda por encima si alguien arrastra la burbuja', 'z-index ' + pintura.zToast);
+  ok(Number(pintura.zToast) > 99999, '  y queda por encima de cualquier otro elemento flotante', 'z-index ' + pintura.zToast);
   ok(pintura.nombreX !== null && pintura.nombreX < pintura.flechaX,
      'EL ÍNDICE: el nombre a la izquierda y la flechita a la derecha',
      `nombre en x=${pintura.nombreX} · flecha en x=${pintura.flechaX}`);

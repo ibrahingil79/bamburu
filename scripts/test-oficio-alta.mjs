@@ -7,7 +7,7 @@
 //       (esto es la prueba 1 del encargo, ya sobre el alta real: provisionTenant);
 //   [3] el paso saltado, el texto libre y un oficio inventado caen en «Otro», y «Otro» nace como
 //       nacía antes (los negocios que ya existen no se rompen);
-//   [4] `business_sector` y `disa_profile.sector` NO se tocan ni se leen para esto;
+//   [4] `business_sector` NO se toca ni se lee para esto;
 //   [5] los mandos de Ajustes: cambiar de oficio no siembra solo, y sembrar solo añade lo que falta.
 // Crea tenants de prueba en la control.db REAL y los borra al terminar, como test-registro-alta.
 import path from 'path';
@@ -108,15 +108,18 @@ try {
     db.close();
   }
 
-  console.log('\n[4] business_sector y disa_profile.sector no se tocan ni se leen para esto');
+  console.log('\n[4] business_sector no se toca ni se lee para esto');
+  // ⚙️ 7 sep 2026 (`sacar-disa-paso-2-borrado`) — AQUÍ SE COMPROBABA ADEMÁS que `disa_profile.sector`
+  // seguía vacío, para probar que el oficio y el perfil del chat eran cosas distintas. `disa_profile`
+  // ya no es una tabla viva (archivada a `disa_profile_archived` con todo el chat): retirado, no
+  // heredado. Lo que queda demuestra lo mismo que hacía falta demostrar aquí — que el oficio no pisa
+  // el texto libre de `business_sector`.
   {
     const { db } = await alta('salud', 'sectores');
     const bs = db.prepare("SELECT value FROM settings WHERE key='business_sector'").get();
     check('business_sector sigue guardando el texto libre del chat, intacto',
       (bs?.value || '') === 'lo que el usuario escribió en el chat, en texto libre', bs?.value);
     check('…y NO se ha copiado el oficio encima', (bs?.value || '') !== 'salud');
-    const dp = db.prepare('SELECT sector, business_type FROM disa_profile WHERE id=1').get();
-    check('disa_profile.sector sigue vacío (nadie lo ha tocado)', (dp?.sector || '') === '' && (dp?.business_type || '') === '');
     check('y aun así el oficio es salud: son cosas distintas', oficioDe(db) === 'salud');
     db.close();
   }

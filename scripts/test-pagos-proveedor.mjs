@@ -2,8 +2,15 @@
 // servicios de factura recibida: vencimiento desde el plazo del proveedor, estados de pago
 // (pendiente/parcial/pagada/vencida + tramos), pago parcial/total, SOBREPAGO rechazado,
 // guarda de duplicado, anular (inmutable) y su efecto en la deuda, torre de control
-// (openPayables), y la creación AUTOMÁTICA de la factura recibida desde la captura C2.
+// (openPayables).
 // Ejecuta sobre BD :memory: con el runMigrations real. No toca la BD real.
+//
+// ⚙️ 7 SEP 2026 (`sacar-disa-paso-2-borrado`) — AQUÍ HABÍA dos bloques («10. Auto desde captura
+// C2» y «11. Captura sin importe») que probaban `confirmCaptureSvc`, la creación AUTOMÁTICA de la
+// factura recibida desde la captura de facturas por IA. Esa captura era exclusivamente del chat
+// de DISA y se borró con todo su código (`modules/erp/routes/purchases-capture.js` quedó reducido
+// a lo que sigue vivo sin IA). Retirados, no heredados: si algún día vuelve una captura sin IA
+// (ficha `captura-facturas-sin-ia`), sus pruebas se escriben de cero contra ese código nuevo.
 //
 //   node scripts/test-pagos-proveedor.mjs
 import Database from 'better-sqlite3';
@@ -17,7 +24,6 @@ import {
   deleteSupplierPaymentSvc, supplierInvoiceDuplicate, getSupplierInvoice, eligibleOriginsForSupplier,
   EXPENSE_CATEGORIES, registerSupplierRefundSvc,
 } from '../modules/erp/routes/supplier-invoices.js';
-import { confirmCaptureSvc } from '../modules/erp/routes/purchases-capture.js';
 import { createSupplierReturnSvc, cancelSupplierReturnSvc } from '../modules/erp/routes/supplier-returns.js';
 import { isRefundable } from '../modules/erp/pagos.js';
 import { createDirectPurchaseSvc } from '../modules/erp/routes/purchases.js';
@@ -200,51 +206,6 @@ console.log('9. Deuda + torre de control');
   eq(torre.total, 180, 'total global debido = 100 (A) + 80 (B)');
   // Orden: más vencida arriba. a1 (vence 2026-04-01) más vencida que b1 (2026-05-01).
   eq([torre.rows[0].supplier_invoice_id, torre.rows[1].supplier_invoice_id], [a1.id, b1.id], 'ordena por más vencida arriba');
-  db.close();
-}
-
-// ── 10. Creación AUTOMÁTICA desde la captura C2 ─────────────────────────────
-console.log('10. Auto desde captura C2');
-{
-  const db = freshDb();
-  const sup = addSupplier(db, { term: 15 });
-  const prod = addProduct(db);
-  const d = {
-    target_mode: 'direct', supplier_mode: 'existing', supplier_id: sup,
-    reference: 'PROV-77', date: '2026-06-05', notes: '',
-    lines: [{ product_mode: 'existing', product_id: prod, quantity: 4, unit_cost: 10 }],
-    inv_base: 40, inv_tax: 8.4, inv_total: 48.4, confirm_excess: false,
-  };
-  const r = confirmCaptureSvc(db, d);
-  eq(r.entity_type, 'purchase', 'aterriza como compra directa');
-  ok(r.supplier_invoice && r.supplier_invoice.id > 0, 'crea la factura recibida (deuda) automáticamente');
-  const inv = db.prepare('SELECT * FROM supplier_invoices WHERE id=?').get(r.supplier_invoice.id);
-  eq([inv.total, inv.supplier_invoice_number, inv.entity_type, inv.entity_id], [48.4, 'PROV-77', 'purchase', r.entity_id], 'factura con total CON IVA, número del proveedor y enlace a la compra');
-  eq(inv.due_date, '2026-06-20', 'vencimiento = fecha + plazo (15 días)');
-  // El stock se movió igualmente (no se tumbó).
-  eq(db.prepare('SELECT stock FROM products WHERE id=?').get(prod).stock, 4, 'el stock aterrizó (4 uds.)');
-  // Re-confirmar la MISMA factura (mismo número) → no duplica la deuda (skip), pero el stock vuelve a entrar.
-  const r2 = confirmCaptureSvc(db, d);
-  ok(r2.supplier_invoice && r2.supplier_invoice.skipped === true, 'segunda captura del mismo número NO duplica la deuda (skip)');
-  eq(db.prepare("SELECT COUNT(*) n FROM supplier_invoices WHERE supplier_invoice_number='PROV-77'").get().n, 1, 'sigue habiendo UNA sola factura recibida con ese número');
-  db.close();
-}
-
-// ── 11. Sin total (voz sin importes) → no crea deuda ────────────────────────
-console.log('11. Captura sin importe');
-{
-  const db = freshDb();
-  const sup = addSupplier(db);
-  const prod = addProduct(db);
-  const r = confirmCaptureSvc(db, {
-    target_mode: 'direct', supplier_mode: 'existing', supplier_id: sup,
-    reference: '', date: '2026-06-05', notes: '',
-    lines: [{ product_mode: 'existing', product_id: prod, quantity: 2, unit_cost: 5 }],
-    confirm_excess: false,
-  });
-  ok(r.supplier_invoice == null, 'sin inv_total no se crea factura recibida');
-  eq(db.prepare('SELECT COUNT(*) n FROM supplier_invoices').get().n, 0, 'no hay deuda creada');
-  eq(db.prepare('SELECT stock FROM products WHERE id=?').get(prod).stock, 2, 'el stock sí aterrizó');
   db.close();
 }
 

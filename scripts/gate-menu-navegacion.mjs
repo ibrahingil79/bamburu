@@ -29,9 +29,13 @@ const PASS = 'Gate.Menu.' + RID + '!';
 // Escrita a mano a partir del inventario medido ANTES de tocar nada (17 ago 2026). Es el contrato:
 // esta lista NO se toca al añadir una función nueva sin actualizarla a conciencia, y cualquier
 // entrada que desaparezca del menú pone este gate rojo.
+// ⚙️ 7 sep 2026 (`sacar-disa-paso-2-borrado`) — el área se llamaba «DISA» con dos entradas
+// («Propuestas» y la acción «Hablar con DISA»); el paso 1 (ba7142a, 6 sep 2026) ya había renombrado
+// el área a «Propuestas» al sacar todo rastro visible del chat. Esta lista se había quedado con el
+// nombre viejo (y con la acción del chat, que ya no existe) sin que nadie lo notara: lo tapaba una
+// excepción anterior en la lectura del pin de Inicio. Puesta al día, no heredada.
 const BASE_RAIL = [
-  ['DISA', 'Propuestas', '/admin/propuestas'],
-  ['DISA', 'Hablar con DISA', null],                                    // acción, no pantalla
+  ['Propuestas', 'Propuestas', '/admin/propuestas'],
   ['Ventas', 'Facturas', '/admin/invoices'],
   ['Ventas', 'Presupuestos', '/admin/quotes'],
   ['Ventas', 'Recurrentes', '/admin/recurrentes'],
@@ -93,7 +97,7 @@ const BASE_RAIL = [
   // si mañana desaparece, esta línea la echa de menos.
   ['Catálogo', 'Etiquetas', '/admin/tags'],
   ['Analítica', 'Informes', '/admin/analytics'],
-  ['Analítica', 'Vigía (DISA)', '/admin/vigia'],
+  ['Analítica', 'Vigía', '/admin/vigia'],
 ];
 // ── LAS SEIS MUDADAS — la sección propia dentro de la configuración del negocio ─────────────────
 // Mismo contrato que BASE_RAIL: nombre nuevo, nombre VIEJO (el que hay que seguir encontrando en el
@@ -214,7 +218,10 @@ const leerMenu = page => page.evaluate(() => {
   });
   return {
     areas,
-    pin: { label: txt(sb.querySelector('.disa-pin .nav-label')), href: sb.querySelector('.disa-pin').getAttribute('href') },
+    // ⚙️ 7 sep 2026 — el pin de Inicio perdió su clase `.disa-pin` en el paso 1 del apagado de DISA
+    // (ba7142a, "ni un rastro visible"): pasó a `.pin-inicio`. No es del chat, es el pin fijo de
+    // Inicio arriba del rail; el selector se había quedado con el nombre viejo.
+    pin: { label: txt(sb.querySelector('.pin-inicio .nav-label')), href: sb.querySelector('.pin-inicio').getAttribute('href') },
     // EL PIE SON VARIAS desde el 23 ago 2026. Antes esto estaba cableado a `/docs`, así que una
     // entrada nueva al pie no la habría visto nadie — ni para bien ni para mal. Ahora se leen todas.
     pies: [...nav.querySelectorAll(':scope > a.nav-item')].map(a => ({
@@ -467,18 +474,10 @@ try {
   ok(rotosViejo.length === 0, 'y sus rutas VIEJAS siguen respondiendo 200: un enlace guardado sigue llegando',
      rotosViejo.length ? 'ROTAS: ' + rotosViejo.join(' | ') : BASE_CONFIG.map(x => x[2]).join(' · '));
 
-  // «Hablar con DISA» no es pantalla: abre el chat de siempre. Se comprueba pulsándola.
-  await page.goto(BASE + '/admin/clients', { waitUntil: 'networkidle0' });
-  const hilosAntes = db.prepare('SELECT COUNT(*) n FROM disa_conversation_threads').get().n;
-  await page.evaluate(() => {
-    const g = document.getElementById('disaRailBtn').closest('.navg');
-    window.openFly(g);
-    [...g.querySelectorAll('.flyout .fly-item')].find(el => el.textContent.trim() === 'Hablar con DISA').click();
-  });
-  await page.waitForFunction(() => !!document.querySelector('#disaModal.open'), { timeout: 5000 }).catch(() => {});
-  const chat = await page.evaluate(() => ({ abierto: !!document.querySelector('#disaModal.open'), widgets: document.querySelectorAll('#disaFab').length }));
-  ok(chat.abierto && chat.widgets === 1, '"Hablar con DISA" sigue abriendo el chat flotante de siempre');
-  ok(db.prepare('SELECT COUNT(*) n FROM disa_conversation_threads').get().n === hilosAntes, 'y no crea ningún hilo nuevo');
+  // ⚙️ 7 sep 2026 (`sacar-disa-paso-2-borrado`) — AQUÍ SE COMPROBABA que «Hablar con DISA» abría el
+  // chat flotante sin crear un hilo nuevo en `disa_conversation_threads`. El chat se borró con todo
+  // su código (bubble, panel y la tabla, archivada a `disa_conversation_threads_archived`); la
+  // entrada del menú no existe desde el paso 1. Retirado, no heredado.
 
   // Las de cuenta, pulsadas también (salvo Cerrar sesión, que se pulsa al final, y /docs, que se sirve fuera).
   const rotosCuenta = [];
@@ -792,7 +791,7 @@ try {
      v.join(' '));
 
   // ── Persiste al recargar, y sobrevive a cerrar sesión ─────────────────────────────────────────
-  await page.evaluate(async () => { await api('PUT', '/api/erp/menu/orden', { areas: ['analitica', 'disa', 'ventas', 'clientes', 'proyectos', 'agenda', 'compras', 'contabilidad', 'inventario', 'catalogo'] }); });
+  await page.evaluate(async () => { await api('PUT', '/api/erp/menu/orden', { areas: ['analitica', 'propuestas', 'ventas', 'clientes', 'proyectos', 'agenda', 'compras', 'contabilidad', 'inventario', 'catalogo'] }); });
   await page.click('#acctBtn'); await dormir(120);
   await Promise.all([page.waitForNavigation({ waitUntil: 'networkidle0' }), page.click('.acct-menu a[href="/admin/logout"]')]);
   await page.type('#email', email); await page.type('#password', PASS);

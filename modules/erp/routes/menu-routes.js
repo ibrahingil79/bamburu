@@ -27,8 +27,12 @@ export function createMenuRoutes(db) {
   const quien = c => ({ role: c.get('session')?.role || '', perms: c.get('userPerms') || [], userId: c.get('session')?.userId });
 
   // El rail de este usuario, tal y como lo pintaría una carga de página. `activa` es la pantalla en la
-  // que está (solo se compara, para marcar lo actual). El badge de DISA se recalcula igual que en el
-  // layout: si no, al repintar se perdería el número hasta la siguiente recarga.
+  // que está (solo se compara, para marcar lo actual). El badge de Propuestas se recalcula igual que
+  // en el layout: si no, al repintar se perdería el número hasta la siguiente recarga.
+  // ⚙️ 7 sep 2026 (`sacar-disa-paso-2-borrado`) — el grupo se llamaba «disa» y pasó a «propuestas» en
+  // el paso 1 (ba7142a, 6 sep 2026). `layout.js` (la carga de página completa) se actualizó entonces;
+  // este repintado por AJAX (arrastrar entradas, guardar orden) se quedó con el id viejo, así que
+  // comparaba contra un área que ya no existe y el badge no volvía a aparecer tras un repintado.
   function railDe(c, userId, activa) {
     const menu = menuDeUsuario(db, quien(c));
     const anclas = anclasDeUsuario(db, userId, menu);
@@ -37,7 +41,7 @@ export function createMenuRoutes(db) {
       const tipos = tiposVisiblesPara(c, can);
       if (tipos.length) pend = contarPropuestasPendientes(db, tipos);
     } catch { pend = 0; }
-    const verPropuestas = menu.areas.some(a => a.id === 'disa' && a.todos.some(i => i.key === 'propuestas'));
+    const verPropuestas = menu.areas.some(a => a.id === 'propuestas' && a.todos.some(i => i.key === 'propuestas'));
     const disaBadge = verPropuestas
       ? `<span class="rail-count" id="propCount"${pend ? '' : ' style="display:none"'}>${pend || ''}</span>`
       : '';

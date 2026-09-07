@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { safeError } from '../../../core/errors.js';
 import { rateLimit } from '../../../core/rate-limit.js';
 import { adminLayout, skeletonRows, can, fuentesPermitidas } from '../layout.js';
-import { estadoAvisos, avisoKey, aplicarVisto, hoyLocal, detalleAviso } from '../avisos.js';
+import { estadoAvisos, avisoKey, aplicarVisto, hoyLocal, detalleAviso, resumirAvisos } from '../avisos.js';
 import { pagoModalHtml, pagoCuentaModalHtml, pagoModalScript } from '../views/pago-modal.js';
 import { cobroModalHtml, cobroModalScript } from '../views/cobro-modal.js';
 import { stockModalHtml, stockModalScript } from '../views/stock-modal.js';
@@ -145,6 +145,21 @@ export function createAvisosRoutes(db) {
         today: today(), userId: c.get('session')?.userId, tipos: fuentesPermitidas(c) });
       return c.json(comoJson(est));
     } catch (e) { return c.json({ error: safeError(e) }, 500); }
+  });
+
+  // POST /api/erp/avisos/resumen — RESUMEN DE CONTEOS determinista (sin detalle, sin ofrecer
+  // acciones): "Tienes N que mirar" por fuente. NO marca nada como visto — eso lo decide el usuario
+  // en la pantalla o en la campana; un resumen no es descartar.
+  // ⚙️ 7 sep 2026 (`sacar-disa-paso-2-borrado`) — este endpoint vivía en `modules/disa/index.js`
+  // como `POST /api/disa/alerts/open`, colgado del badge del Inicio. Al borrar el chat se fue con
+  // él la ruta, pero NO su lógica: `resumirAvisos` es y era de `modules/erp/avisos.js`, cien por
+  // cien determinista (cuenta, no pregunta a ningún modelo) — nunca dependió de `core/llm.js`.
+  // Se movió aquí, con el resto de avisos, en vez de quedar huérfana o resucitar un módulo DISA.
+  api.post('/resumen', frenoAvisos, c => {
+    try {
+      const r = resumirAvisos(db, today(), c.get('session')?.userId, fuentesPermitidas(c));
+      return c.json(r);
+    } catch (e) { return c.json({ reply: 'No pude cargar tus avisos ahora mismo.' }, 500); }
   });
 
   // GET /admin/avisos — la pantalla. Sin requirePerm: muestra exactamente lo que ya cuenta el
