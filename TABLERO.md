@@ -10766,7 +10766,7 @@ mide pulsando, no cargando.
 ## ✅ HECHA (2026-09-06) — Cifrado en reposo de las bases de cada negocio
 
 - **id:** cifrado-en-reposo-bases
-- **estado:** hecha
+- **estado:** ✅ HECHA — 6 sep 2026 · commits `6e2041f` + `ef99996`
 - **firma:** Ibrahin
   > **Decisión de Ibrahin (1 sep 2026), con sus palabras:** **si se pierde la llave se pierde el negocio vivo, no solo las copias. Eso es mío.**
   > Construir el cifrado es técnico. **Custodiar la llave no**: aquí no se pierde una copia, se pierde el negocio en marcha. Es la misma decisión que Ibrahin tomó para las copias el 1 sep —llave en el servidor **y** una copia para él, por pantalla, una sola vez— pero con una consecuencia peor, así que la toma él otra vez y no se hereda por parecido.
@@ -10973,7 +10973,7 @@ sanas (`integrity_check` ok en las 12, comprobado tras el SIGKILL), que es lo qu
 ## ✅ HECHA (2026-09-06) — Apagar DISA · paso 1 de 2: el apagado
 
 - **id:** apagar-disa-paso-1
-- **estado:** hecha
+- **estado:** ✅ HECHA — 7 sep 2026 (madrugada) · commit `5b0ad3f`
 - **firma:** Ibrahin
   > **DECISIÓN DE IBRAHIN, 6 SEP 2026: Bamburu deja de usar IA. DISA sale del producto.**
   > Esto es el primer paso, el del apagado. **El borrado del código va después y como encargo aparte** —
@@ -11096,7 +11096,7 @@ llamadas salientes—, y se deja escrito, con número, por qué el otro no se pu
 ## TAREA — Bamburu abre bases y no las cierra nunca (y lo mismo con Chromium)
 
 - **id:** conexiones-que-no-se-cierran
-- **estado:** ✅ HECHA — 7 sep 2026 (madrugada)
+- **estado:** ✅ HECHA — 7 sep 2026 (madrugada) · commit `d03f7e6`
 - **prioridad:** ~~🔺 LA SIGUIENTE DEL BLOQUE 2.~~ **HECHA.** Subida por Ibrahin el 7 sep 2026, y el motivo está
   escrito: **bloquea la verificación de cualquier tarea posterior.** Mientras esto siga, un barrido
   completo no da un número fiable —el servidor se deteriora durante la propia medición— así que
@@ -11328,7 +11328,7 @@ el guardián tiene que aprender a distinguirlos**, no ampliarse para dejar pasar
 ## TAREA — Permisos · Paso 1 — dejar escrito qué permiso exige cada ruta
 
 - **id:** permisos-paso-1-censo-rutas
-- **estado:** ✅ HECHA — 7 sep 2026
+- **estado:** ✅ HECHA — 7 sep 2026 (tarde) · commit `6dc2b83`
 - **origen:** TABLERO.md §Backlog 31 ago 2026 · Seguridad y datos
 
 Recorrer las rutas y **dejar escrito qué permiso exige cada una**. **Desbloquea el Paso 2**, que es
@@ -11425,7 +11425,7 @@ propósito antes de montar nada.
 ## ✅ HECHA (2026-09-02) — Manifiesto de huellas del histórico de copias · `920ec83`
 
 - **id:** manifiesto-huellas-backups
-- **estado:** hecha
+- **estado:** ✅ HECHA — 2 sep 2026 · commit `920ec83`
 - **origen:** TABLERO.md §Backlog 31 ago 2026 · Seguridad y datos
 
 Hoy **solo se verifica la copia del día**: una copia de hace cinco días se puede editar y **nadie
@@ -11512,7 +11512,7 @@ ningún tipo.
 ## TAREA — La retención del backup borra si la subida falló a medias
 
 - **id:** retencion-backup-fallo-parcial
-- **estado:** ✅ HECHA — 7 sep 2026
+- **estado:** ✅ HECHA — 7 sep 2026 (tarde) · commit `590df73`
 - **origen:** TABLERO.md §Backlog 31 ago 2026 · Seguridad y datos
 
 `scripts/bamburu-backup.sh:164` borra lo más viejo que N días **sin exigir que la subida haya salido
