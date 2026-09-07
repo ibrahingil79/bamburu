@@ -43,7 +43,7 @@ Ibrahin mandó no tocar. Están en `docs/barridos/2026-09-07-salida-completa.log
 | `test-disa-captura-chat` | excepción: «Ese archivo no es una imagen ni un PDF» | **Por diseño** — prueba la captura por chat, retirada |
 | `gate-c5bis-rescate-duenyo` | «al marcar "he guardado", se desbloquea — el JS corre» | **PRODUCTO DE VERDAD** |
 | `gate-csp-estricta` | «la rejilla pintó sus celdas · 40» (259 OK · 1 ✗) | **PRODUCTO DE VERDAD** |
-| `test-manifiesto-copias` | «(criterio 7) cada bloque de subida anota "sha256 $sha" — 3» | **PRODUCTO DE VERDAD** (deuda anterior, commit `2cf81b2` del 3 sep) |
+| ~~`test-manifiesto-copias`~~ | «(criterio 7) cada bloque de subida anota "sha256 $sha" — 3» | ⚙️ **CORREGIDO EL 7 SEP (tarde): NO era del producto — la aserción estaba caducada.** Ver abajo. |
 | `verify-libro-sin-huerfanos` | «desarrollo-bamburu: 2 asientos sin documento (supplier_payment×2)» | **PRODUCTO DE VERDAD** |
 | `gate-impresion` | «los OCHO ofrecen imprimir, descargar y enviar — 2/15» (74 OK · 1 ✗) | **PRODUCTO DE VERDAD** |
 
@@ -68,9 +68,30 @@ Se dejaron nombrados el 7 sep: `gate-nav-inicio-disa`, `gate-registro-alta` y
   Lo que sí es nominal y medido uno a uno son los 8 que siguen rojos.
 - **8 siguen rojos y ya tienen dueño:** 3 son secuela del apagado de la IA y van al encargo de
   retirada (`gate-adjuntos-por-contenido`, `gate-disa-adjuntar`, `test-disa-captura-chat`); y
-  **5 son defectos de producto de verdad**, que pasan a deuda técnica con su nombre y su síntoma:
-  `gate-c5bis-rescate-duenyo`, `gate-csp-estricta`, `gate-impresion`, `test-manifiesto-copias` y
-  `verify-libro-sin-huerfanos`.
+  ~~**5 son defectos de producto de verdad**~~ **⚙️ CORREGIDO EL 7 SEP 2026 (tarde): son CUATRO.**
+  `gate-c5bis-rescate-duenyo`, `gate-csp-estricta`, `gate-impresion` y `verify-libro-sin-huerfanos`
+  pasan a deuda técnica con su nombre y su síntoma.
+
+## ⚙️ Corrección del mismo día: `test-manifiesto-copias` NO era un defecto del producto
+
+Se catalogó por la mañana como «producto de verdad» **sin abrir la aserción que fallaba**, y eso
+estuvo mal. Al tocar ese fichero por la tarde (ficha `retencion-backup-fallo-parcial`) se vio lo que
+exigía de verdad:
+
+```js
+const conSha = (src.match(/— sha256 \$sha"/g) || []).length;
+check('… cada bloque de subida (BD y uploads) anota "sha256 $sha" …', conSha === 2, conSha);
+```
+
+**Exigía exactamente DOS**, porque cuando se escribió había dos bloques de subida. El 3 de septiembre
+entró un TERCERO —el tar del entorno y los certificados (`2cf81b2`)— que **también anota su huella,
+como debe**. O sea: **el script estaba bien y la comprobación se había quedado vieja.** Un número
+fijo en una aserción caduca solo.
+
+Arreglado sin número fijo: ahora exige que **toda línea que dice haber «subido, verificado y restore
+OK» lleve su huella**. Y ese arreglo también estuvo mal a la primera —conté TODAS las líneas del
+resumen, incluida la que avisa de que el entorno NO se incluye cuando el destino va en claro, que no
+debe llevar huella— y **lo cazó la propia prueba**. `test-manifiesto-copias`: **116 ✓ · 0 ✗**.
 
 ## Cómo se midió cada uno, para que se pueda repetir
 

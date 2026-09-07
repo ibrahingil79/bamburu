@@ -9724,11 +9724,13 @@ escenarios y los dos casos incómodos, con relojes de prueba de Stripe) ·
 > ~~🔺 **ASÍ QUEDA EL BLOQUE 2, CONTADO SOBRE EL DOCUMENTO: 22 fichas, 19 hechas, 3 PENDIENTES** —
 > `captura-facturas-sin-ia`, `permisos-paso-1-censo-rutas` y `retencion-backup-fallo-parcial`.~~
 >
-> 🔺 **⚙️ ACTUALIZADO ESE MISMO DÍA (7 sep 2026, tarde) al cerrar `permisos-paso-1-censo-rutas`:
-> 22 fichas, 20 HECHAS, 2 PENDIENTES** — `captura-facturas-sin-ia` (**lleva la firma de Ibrahin**:
-> decide él qué se le promete al cliente y con qué proveedor de fuera) y
-> `retencion-backup-fallo-parcial`, con la que se cierra el bloque. Contado sobre el documento, entre
-> `## BLOQUE 2` y `## BLOQUE 3`, no de memoria.
+> ~~🔺 **⚙️ ACTUALIZADO ESE MISMO DÍA (7 sep 2026, tarde): 22 fichas, 20 HECHAS, 2 PENDIENTES.**~~
+>
+> 🎯 **⚙️ Y OTRA VEZ ESA MISMA TARDE, al cerrar `retencion-backup-fallo-parcial`: 22 fichas,
+> 21 HECHAS, 1 PENDIENTE.** La única que queda es **`captura-facturas-sin-ia`**, y **lleva la firma
+> de Ibrahin**: decide él qué se le promete al cliente (poder fotografiar una factura y no teclearla)
+> y con qué proveedor de fuera se hace. **Con esa, el BLOQUE 2 se cierra entero.** Contado sobre el
+> documento, entre `## BLOQUE 2` y `## BLOQUE 3`, no de memoria.
 >
 > ⚙️ **Y se corrige de paso el recuento que este mismo puntero traía desde el 7 sep: decía «20 fichas,
 > 18 hechas», y ni el total ni el reparto cuadraban.** Faltaba `captura-facturas-sin-ia` —la ficha del
@@ -11510,7 +11512,7 @@ ningún tipo.
 ## TAREA — La retención del backup borra si la subida falló a medias
 
 - **id:** retencion-backup-fallo-parcial
-- **estado:** pendiente
+- **estado:** ✅ HECHA — 7 sep 2026
 - **origen:** TABLERO.md §Backlog 31 ago 2026 · Seguridad y datos
 
 `scripts/bamburu-backup.sh:164` borra lo más viejo que N días **sin exigir que la subida haya salido
@@ -11527,6 +11529,53 @@ viejas buenas mientras la del día está incompleta.
 
 **Lo que hay que hacer:** condicionar el borrado al éxito **de todos** los ficheros, no de al menos
 uno. Y como son DOS copias con la misma pieza, el arreglo vale para las dos a la vez.
+
+### ✅ HECHA — 7 sep 2026
+
+> ⚙️ **Y LA PREMISA DE ESTA FICHA TAMBIÉN ERA FALSA — la tercera seguida.** Decía que el hueco era el
+> fallo PARCIAL: «se sube un fichero, falla otro, `uploaded` vale 1, el guardián pasa y la retención
+> se ejecuta igual». **Medido sobre el script real, en banco:** todos los caminos de fallo llaman a
+> `fail_exit`, que hace `exit 1`. Con una base rota → **salida 1, la retención no corre, la copia
+> vieja intacta.** Ese hueco no existe.
+
+**PERO HAY OTRO, Y ES PEOR.** La lista de bases se arma con un comodín sobre `data/tenants/*.db`: el
+script **solo puede copiar lo que ve, y no tenía forma de saber lo que DEBERÍA ver**. Medido en banco
+antes del arreglo, con tres negocios y quitando el fichero de uno:
+
+```
+  salida del script: 0
+  correo:            «backup completado correctamente (4 archivos)»
+  ¿nombró al que falta?   NI UNA PALABRA
+  ¿la retención corrió?   SÍ
+  ¿sobrevivió su copia vieja?   NO — BORRADA
+```
+
+**Ese negocio se queda sin ninguna copia, en ningún sitio, y nadie se entera.** En pocos días la
+ventana de retención se lleva todo lo que quedaba de él. Es una pérdida de datos silenciosa y sin
+vuelta atrás, no un aviso que falta.
+
+**EL ARREGLO.** La lista de lo que debe existir no está en la carpeta: está en `control.db`, que es
+lo que dice qué negocios tiene Bamburu. `scripts/lib/bases-esperadas.mjs` la lee, y
+`scripts/bamburu-backup.sh` compara antes de la retención. Si falta alguna, **se aborta ahí mismo**,
+nombrando al negocio, y **las copias viejas quedan intactas** — que es lo único irreversible. Lo que
+sí se pudo subir se queda subido. Si la `control.db` no tiene tabla de negocios (bancos de prueba),
+lo dice en el registro en vez de callarlo. **Y sí: como son DOS copias con la misma pieza, esto vale
+para las dos a la vez.**
+
+**COMPROBADO CON LOS DATOS REALES**, corriendo el script de verdad contra un destino local (sin tocar
+Drive ni el estado de la copia buena): *«bases esperadas: 18 negocios en control.db, todos
+copiados»*, 19 artefactos, salida 0.
+
+**GATE `gate-copia-completa`** (grupo `infra`, **18 ✓ · 0 ✗**): corre el `bamburu-backup.sh` REAL
+cuatro veces contra destinos locales. Con todo en su sitio la retención hace su trabajo; con un
+negocio sin base, no borra nada y lo nombra; una `control.db` sin tabla de negocios no rompe nada. Y
+**rojo provocado**: con la comprobación quitada, la copia incompleta se da por buena y **la última
+copia del negocio que falta desaparece**.
+
+**DE PASO, UN ROJO QUE NO ERA LO QUE YO DIJE.** `test-manifiesto-copias` llevaba días en rojo y esta
+misma mañana lo catalogué como «defecto de producto de verdad». **No lo era: la aserción estaba
+caducada** y la clasifiqué sin abrirla. Corregido arriba, en su lista, y en
+`docs/barridos/2026-09-07-reclasificacion-de-los-39.md`. **116 ✓ · 0 ✗.**
 
 
 
@@ -12997,8 +13046,13 @@ negocio suspendido NO deja escribir— necesitan un negocio suspendido y tienen 
   - `gate-c5bis-rescate-duenyo` — «al marcar "he guardado", se desbloquea: el JS corre».
   - `gate-csp-estricta` — «la rejilla pintó sus celdas · 40» (259 ✓ · 1 ✗). La agenda no pinta.
   - `gate-impresion` — «los OCHO ofrecen imprimir, descargar y enviar — 2/15» (74 ✓ · 1 ✗).
-  - `test-manifiesto-copias` — «(criterio 7) cada bloque de subida anota "sha256 $sha" — 3». Deuda
-    anterior: la introdujo el commit `2cf81b2` del 3 sep, no esta tarea.
+  - ~~`test-manifiesto-copias`~~ **⚙️ CORREGIDO EL 7 SEP 2026 (tarde): NO era un defecto del
+    producto, y catalogarlo así fue un error mío de la mañana** — se clasificó sin abrir la aserción.
+    Exigía **exactamente dos** bloques con huella porque cuando se escribió había dos; el 3 de
+    septiembre entró un tercero legítimo (el tar del entorno y los certificados, `2cf81b2`) que
+    también anota la suya. **El script estaba bien; la comprobación se había quedado vieja.** Ya no
+    cuenta contra un número fijo: exige que toda subida verificada lleve su huella. **116 ✓ · 0 ✗.**
+    **Así que de los cinco de esta lista, quedan CUATRO.**
   - `verify-libro-sin-huerfanos` — `desarrollo-bamburu`: **2 asientos sin documento y sin anular**
     (`supplier_payment` ×2). Es el único de los cinco que toca DATOS, no pantalla.
 - [ ] 🆕 **BAJA DE UN NEGOCIO, CON BORRADO DE SUS DATOS.** **Hoy no existe, y está medido** (Paso 0 de

@@ -621,8 +621,22 @@ function probarMundo(modo) {
 function comprobarCorreoEstatico() {
   imprimir('\n[estático] El correo de éxito lleva el SHA-256 de cada artefacto y la cabeza');
   const src = readFileSync(BACKUP_SH, 'utf8');
+  // ⚙️ 7 SEP 2026 — ESTA ASERCIÓN ESTABA CADUCADA, y llevaba días en rojo por eso.
+  // Exigía `conSha === 2` porque cuando se escribió había DOS bloques de subida (las bases y los
+  // uploads). El 3 de septiembre entró un TERCERO —el tar del entorno y los certificados
+  // (`copias-cifradas-con-entorno-y-certificados`, `2cf81b2`)— que también anota su huella, como
+  // debe. O sea: el script estaba bien y la comprobación se había quedado vieja.
+  // **Ahora no cuenta contra un número fijo: exige que TODOS los bloques que añaden una línea al
+  // resumen anoten su huella.** Es la propiedad que de verdad se quería, y no caduca al añadir el
+  // cuarto.
+  // Y OJO con el «todos»: hay una línea del resumen que NO es una subida — la que avisa de que el
+  // entorno NO se incluye porque el destino va en claro. Esa no debe llevar huella, y exigírsela
+  // fue mi primer intento de arreglar esto, que también estaba mal (lo cazó esta misma prueba).
+  // La propiedad correcta: **toda línea que dice haber SUBIDO Y VERIFICADO lleva su huella.**
+  const subidas = (src.match(/subido, verificado y restore OK/g) || []).length;
   const conSha = (src.match(/— sha256 \$sha"/g) || []).length;
-  check('(criterio 7) cada bloque de subida (BD y uploads) anota "sha256 $sha" para el correo', conSha === 2, conSha);
+  check('(criterio 7) TODA subida verificada anota su "sha256 $sha" para el correo',
+        subidas > 0 && conSha === subidas, `${conSha} huellas para ${subidas} subidas`);
   const idx = src.indexOf('✅ Backup Bamburu');
   const bloque = idx === -1 ? '' : src.slice(idx, idx + 600);
   check('(criterio 7) el correo de éxito incluye $SUMMARY (huellas de hoy)', bloque.includes('$SUMMARY'));

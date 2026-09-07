@@ -98,6 +98,7 @@ LAST_OK="$STATE_DIR/last-success$SUFFIX"
 MANIFIESTO="$STATE_DIR/manifiesto$SUFFIX.jsonl"
 MANIF_ESTADO="$STATE_DIR/manifiesto$SUFFIX.estado.json"
 MANIFHELPER="$APP_DIR/scripts/lib/manifiesto-copias.mjs"
+ESPERADAS_HELPER="$APP_DIR/scripts/lib/bases-esperadas.mjs"
 MAILTO="ibrahingil@gmail.com"
 TELEGRAM_CLI="${TELEGRAM_CLI:-$APP_DIR/scripts/avisar-telegram.mjs}"
 MAILFROM="Bamburu <noreply@bamburu.com>"
@@ -399,6 +400,43 @@ LEEME
 fi
 
 [ "$uploaded" -gt 0 ] || fail_exit "no se subió ningún archivo"
+
+# --- ¿ESTÁN TODAS LAS BASES QUE DEBEN ESTAR? (retencion-backup-fallo-parcial) -----------------
+#
+# **El guardián de arriba pide AL MENOS UNA, y con eso no basta.** La ficha decía que el hueco era
+# el fallo PARCIAL —«se sube un fichero, falla otro, `uploaded` vale 1 y la retención se ejecuta
+# igual»—. **Se midió el 7 sep 2026 sobre este mismo script, y esa premisa es FALSA:** todos los
+# caminos de fallo llaman a `fail_exit`, que hace `exit 1`, así que un fichero que falla aborta la
+# copia entera y nunca se llega a la retención. Comprobado en banco: tres negocios, uno con la base
+# rota → salida 1, la retención no corre, la copia vieja sigue ahí.
+#
+# **El hueco de verdad es otro, y es peor.** La lista de bases se arma con un comodín sobre
+# `data/tenants/*.db`, así que el script **solo puede copiar lo que ve**, y no tiene ni idea de lo
+# que DEBERÍA ver. Si el fichero de un negocio no está en la carpeta, ese negocio desaparece de la
+# copia **sin una palabra**: medido en banco, salida 0, correo «backup completado correctamente
+# (4 archivos)», el nombre del que falta no aparece por ningún lado, y **la retención borra su
+# última copia vieja esa misma noche**. En pocos días ese negocio no tiene copia en ninguna parte.
+#
+# La lista de lo que debe existir no está en la carpeta: está en `control.db`. Se compara, y si
+# falta alguna **se aborta ANTES de la retención** — que es lo único que hay que impedir a toda
+# costa, porque borrar lo viejo cuando lo nuevo está incompleto no tiene vuelta atrás.
+ESPERADAS="$("$NODE" "$ESPERADAS_HELPER" "$DATA_DIR/control.db" 2>&1)" \
+  || fail_exit "no se pudo leer de control.db qué negocios debe llevar la copia: $ESPERADAS"
+if [ "$ESPERADAS" = "SIN_TABLA_TENANTS" ]; then
+  # Una control.db que no es la de Bamburu (banco de pruebas): no hay expectativa que comprobar,
+  # y se dice en el log en vez de callarlo.
+  log "bases esperadas: esta control.db no tiene tabla de negocios — no se comprueba la lista"
+else
+  FALTAN=""
+  while IFS= read -r base; do
+    [ -n "$base" ] || continue
+    grep -q "^${base}-${DATE}\.db " "$ARTEFACTOS" || FALTAN="$FALTAN $base"
+  done <<< "$ESPERADAS"
+  if [ -n "$FALTAN" ]; then
+    fail_exit "la copia está INCOMPLETA: control.db dice que hay negocios cuya base NO se ha copiado —$FALTAN. La retención NO se ha ejecutado, así que las copias viejas siguen intactas. Revisa si esos ficheros existen en $DATA_DIR/tenants."
+  fi
+  log "bases esperadas: $(printf '%s\n' "$ESPERADAS" | wc -l) negocios en control.db, todos copiados"
+fi
 
 # --- Manifiesto de huellas del histórico (manifiesto-huellas-backups) -------
 # Va DESPUÉS de que todo esté subido y verificado, y ANTES de la retención — ese orden es
