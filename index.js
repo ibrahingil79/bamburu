@@ -1662,6 +1662,15 @@ app.notFound((c) => {
 // escuchando ahí un segundo arranque moría con EADDRINUSE: no había forma de levantar una copia
 // restaurada en la misma máquina sin parar producción. Sin `PORT` puesto sigue siendo 3000, byte
 // por byte lo de siempre. `hostname` no se toca: sigue atado a 127.0.0.1, no sale de la máquina.
+// ⚙️ 7 SEP 2026 (`permisos-paso-1-censo-rutas`) — LA APP SE EXPORTA, y es una línea inerte.
+// Hono lleva dentro su propia tabla de rutas (`app.routes`), con el camino COMPLETO ya resuelto de
+// cada `route()` anidado. Es la única lista de rutas que no hay que adivinar: es la que el servidor
+// sirve de verdad. Sin este `export` no hay forma de leerla desde fuera, y el censo tendría que
+// volver a contar rutas con expresiones regulares — que es justo lo que hizo que la cifra vieja
+// («600 de 1.025») no fuera reproducible por nadie. Añadir un `export` a un módulo ESM no cambia
+// cuándo ni cómo se ejecuta: el servidor arranca exactamente igual.
+export { app };
+
 const PUERTO = Number(process.env.PORT) || 3000;
 const servidor = serve({ fetch: app.fetch, port: PUERTO, hostname: '127.0.0.1' }, (info) => {
   console.log('🚀 Bamburu listo en http://localhost:' + info.port);

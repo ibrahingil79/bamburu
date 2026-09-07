@@ -43,8 +43,14 @@ export function denegarPermiso(c, { titulo, mensaje, accion, href } = {}) {
                            { action: accion || 'Volver al panel', href: href || '/admin' }), 403);
 }
 
+// ⚙️ 7 SEP 2026 (`permisos-paso-1-censo-rutas`) — LA GUARDA DICE QUÉ PERMISO EXIGE.
+// El `perm` se quedaba encerrado en el cierre: desde fuera, este middleware era una función anónima
+// indistinguible de cualquier otra, y la única forma de saber qué permiso pedía cada ruta era leer
+// el código con expresiones regulares. De ahí salió la cifra irreproducible de «600 de 1.025 rutas».
+// Con la etiqueta puesta, `scripts/censo-permisos-rutas.mjs` lee el mapa de la aplicación EN MARCHA.
+// Es una propiedad en una función: no cambia lo que hace ni cuándo.
 export function requirePerm(perm) {
-  return async (c, next) => {
+  const guarda = async (c, next) => {
     const s = c.get('session');
     if (!s) return c.redirect('/admin/login');
     if (s.role === 'owner' || s.role === 'admin') return next();
@@ -60,6 +66,8 @@ export function requirePerm(perm) {
 
     return denegarPermiso(c);
   };
+  guarda.bamburuGuarda = { tipo: 'permiso', permiso: perm };
+  return guarda;
 }
 
 function hashPasswordLegacy(password) {
@@ -242,7 +250,7 @@ export function cleanupExpiredSessions(db) {
 // ── Middleware ─────────────────────────────────────────────────
 
 export function adminAuth(db) {
-  return async (c, next) => {
+  const guarda = async (c, next) => {
     const session = getAdminSession(db, c.req);
     if (!session) {
       if (c.req.path.startsWith('/api/')) return c.json({ error: 'No autorizado' }, 401);
@@ -274,6 +282,12 @@ export function adminAuth(db) {
     }
     return next();
   };
+  // Etiqueta para el censo de permisos (ver `requirePerm`). `adminAuth` NO es un permiso: solo
+  // exige SESIÓN y deja en el contexto quién eres (`isOwner`, `isAdmin`, tus permisos). Se marca
+  // aparte a propósito, porque confundir «hay que estar dentro» con «hay que tener permiso» es
+  // justo el agujero que este censo tiene que sacar a la luz.
+  guarda.bamburuGuarda = { tipo: 'sesion', permiso: null };
+  return guarda;
 }
 
 export function getCsrfToken(c) {
@@ -336,7 +350,7 @@ export async function changeOwnPassword(db, session, { current = '', nuevo = '',
 // El DUEÑO sí entra por su rol: es el responsable del tratamiento de los datos ante la ley, y no
 // puede quedarse fuera del historial de su propio centro.
 export function requireHistorial() {
-  return async (c, next) => {
+  const guarda = async (c, next) => {
     const s = c.get('session');
     if (!s) return c.redirect('/admin/login');
     if (s.role === 'owner') return next();            // el responsable ante la ley, sí
@@ -359,6 +373,10 @@ export function requireHistorial() {
       accion: 'Volver al panel', href: '/admin',
     });
   };
+  // Etiqueta para el censo de permisos (ver `requirePerm`). Es el ÚNICO permiso que no perdona el
+  // rol de `admin`: por eso se nombra aparte y no se confunde con un `requirePerm('historial.read')`.
+  guarda.bamburuGuarda = { tipo: 'permiso', permiso: 'historial.read', noPerdonaRolAdmin: true };
+  return guarda;
 }
 
 // La misma decisión, para PINTAR o no pintar (la pestaña, un botón). Sin sesión, no.

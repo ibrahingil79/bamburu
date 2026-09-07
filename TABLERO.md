@@ -9721,9 +9721,14 @@ escenarios y los dos casos incómodos, con relojes de prueba de Stripe) ·
 > completo terminó con **0 conexiones muertas y 0 rancias** (antes: 30 y 2) y pasó de **141/228 a
 > 176/229**. **Un barrido completo ya se puede creer.**
 >
-> 🔺 **ASÍ QUEDA EL BLOQUE 2, CONTADO SOBRE EL DOCUMENTO (líneas 9766-11449): 22 fichas, 19 hechas,
-> 3 PENDIENTES** — `captura-facturas-sin-ia`, `permisos-paso-1-censo-rutas` y
-> `retencion-backup-fallo-parcial`, y con esa última se cierra el bloque.
+> ~~🔺 **ASÍ QUEDA EL BLOQUE 2, CONTADO SOBRE EL DOCUMENTO: 22 fichas, 19 hechas, 3 PENDIENTES** —
+> `captura-facturas-sin-ia`, `permisos-paso-1-censo-rutas` y `retencion-backup-fallo-parcial`.~~
+>
+> 🔺 **⚙️ ACTUALIZADO ESE MISMO DÍA (7 sep 2026, tarde) al cerrar `permisos-paso-1-censo-rutas`:
+> 22 fichas, 20 HECHAS, 2 PENDIENTES** — `captura-facturas-sin-ia` (**lleva la firma de Ibrahin**:
+> decide él qué se le promete al cliente y con qué proveedor de fuera) y
+> `retencion-backup-fallo-parcial`, con la que se cierra el bloque. Contado sobre el documento, entre
+> `## BLOQUE 2` y `## BLOQUE 3`, no de memoria.
 >
 > ⚙️ **Y se corrige de paso el recuento que este mismo puntero traía desde el 7 sep: decía «20 fichas,
 > 18 hechas», y ni el total ni el reparto cuadraban.** Faltaba `captura-facturas-sin-ia` —la ficha del
@@ -11321,7 +11326,7 @@ el guardián tiene que aprender a distinguirlos**, no ampliarse para dejar pasar
 ## TAREA — Permisos · Paso 1 — dejar escrito qué permiso exige cada ruta
 
 - **id:** permisos-paso-1-censo-rutas
-- **estado:** pendiente
+- **estado:** ✅ HECHA — 7 sep 2026
 - **origen:** TABLERO.md §Backlog 31 ago 2026 · Seguridad y datos
 
 Recorrer las rutas y **dejar escrito qué permiso exige cada una**. **Desbloquea el Paso 2**, que es
@@ -11338,6 +11343,81 @@ que no da ni 600 ni 1.025 por ningún camino.
 método de conteo, y ese método es parte de la entrega**: sin él, no hay forma de saber cuándo está
 terminado. Es exactamente la lección de `CLAUDE.md` §«un inventario con "~" y "..." NO es una lista
 cerrada»: solo vale un inventario `fichero:línea` verificado contra el código de HOY.
+
+### ✅ HECHA — 7 sep 2026
+
+**EL MAPA EXISTE, Y NO ESTÁ ESCRITO A MANO: SE LE PREGUNTA AL PROGRAMA.** Documento en
+`docs/seguridad/permisos-por-ruta.md`; el inventario ruta por ruta, con su `fichero:línea`, en
+`docs/seguridad/permisos-por-ruta-inventario.md` (610 filas, regenerable).
+
+**EL MÉTODO DE CONTEO, que era la mitad del encargo.** No se puede contar rutas leyendo el código:
+hay **110** objetos `new Hono()` con nombres distintos (`app`, `api`, `sa`, `r`, `router`, `views`,
+`puerta`…), se anidan, y **el camino final de una ruta no está escrito en ninguna línea** — se compone
+al montar. Por eso dos personas sacaban dos cifras. `scripts/censo-permisos-rutas.mjs` monta Bamburu
+entera igual que el servidor y lee `app.routes`, la tabla interna de Hono, con el camino COMPLETO ya
+resuelto. **Cuatro reglas escritas** (qué es una ruta y qué un middleware · el orden de registro manda
+· una guarda se reconoce por lo que HACE, no por su nombre · sesión no es permiso), y **2 s** de
+ejecución.
+
+**LA CIFRA VIEJA QUEDA SUSTITUIDA, y no se parece a ninguna de las dos que decía:**
+
+| | |
+|---|---|
+| entradas en la tabla de Hono | **1.188** (una por manejador — contarlas era una forma de inflar) |
+| **RUTAS (método + camino)** | **610** |
+| 🔐 exigen un permiso con nombre | **441** · 57 permisos distintos |
+| 🔎 lo comprueban por dentro | **12** (el permiso no se ve en la línea) |
+| 👤 solo exigen SESIÓN | **143** |
+| ⚠️ sin guarda ninguna | **14**, y son las puertas públicas, comprobadas una a una |
+
+**LO QUE HUBO QUE ABRIR PARA QUE EL MÉTODO EXISTA.** `requirePerm(perm)` guardaba el permiso dentro
+del cierre: desde fuera era una función anónima. Las cuatro guardas de `core/` llevan ahora una
+etiqueta (`fn.bamburuGuarda = { tipo, permiso }`). Es una propiedad en una función: no cambia lo que
+hacen ni cuándo. Y `index.js` exporta `app` — un `export` en un módulo ESM no cambia cuándo se ejecuta
+nada.
+
+**EL CENSO SE EQUIVOCÓ TRES VECES MIENTRAS SE CONSTRUÍA, y las tres las cazó la realidad, no el
+razonamiento.** Se deja escrito porque es lo que hace creíble el número:
+1. **Declaró «sin guarda» las 22 rutas del superadmin** —las que suspenden negocios y lanzan copias—
+   porque solo miraba las etiquetas de `core/` y `superadminAuth` no lleva ninguna. Se cazó
+   **pidiéndoselas al servidor vivo: las 22 redirigen a `/superadmin/login`.**
+2. **Ignoraba el orden de registro.** Un `use()` solo alcanza a lo registrado después de él (medido
+   con Hono a mano); sin eso, daba por guardadas rutas públicas.
+3. **Creía que `/x/*` no alcanza a `/x` pelado.** Sí lo alcanza.
+
+**COMPROBADO EN LAS DOS DIRECCIONES sobre el servidor vivo:** las públicas responden 200; de una
+muestra de 12 que el censo da por guardadas, **las 12 deniegan** sin sesión. Y hubo que cambiar
+`fetch` por `node:http` en el gate: **el `fetch` de Node borra la cabecera `Host`**, así que todas
+las peticiones llegaban sin negocio y contestaban 404 — el gate habría dado por abiertas rutas que
+redirigen.
+
+**GATE `gate-permisos-por-ruta`** (RAPIDO + infra, **15 ✓ · 0 ✗**): las guardas siguen diciendo qué
+exigen · **no hay rutas públicas nuevas** (las 14 están fijadas por nombre; una nueva es rojo y hay
+que decidirla a propósito) · lo que el censo dice, el servidor lo cumple. **Rojo provocado:** se mete
+una ruta pública inventada y se exige que la cace.
+
+### ⚠️ LO QUE ESTE CENSO DESTAPA Y **NO** SE HA TOCADO — es para Ibrahin
+
+De las 143 que solo exigen sesión, **105 son cosas de tu propia cuenta** (entrar, salir, 2FA, tu
+perfil, tus avisos, tu fichaje, cómo ordenas tu Inicio) y con sesión basta. **Las otras 38 mueven o
+enseñan datos del NEGOCIO, y hoy basta con estar dentro.** Que eso esté mal **es un juicio, no una
+medida**: cambia lo que un empleado puede hacer, o sea una promesa del producto, así que **lo decide
+Ibrahin**. Las que más llaman la atención:
+
+- `POST /api/erp/propuestas/:id/emitir` — **emite una factura**
+- `POST /api/erp/propuestas/:id/enviar` — la manda al cliente
+- `POST /api/erp/importar/importar` y `/:id/deshacer` — **importa datos en masa**, y los deshace
+- `GET /api/erp/fichaje/historial/:userId/:fecha` — ve el fichaje **de otra persona**
+- `PUT`/`DELETE /api/erp/inicio/empresa` — cambia el Inicio **de todo el negocio**
+- `POST /api/erp/listados/:clave/enviar` — manda un listado por correo
+- `GET /admin/settings` — los ajustes del negocio
+
+Las otras 14 son el asistente (`/admin/disa/*`), **apagado desde el 7 sep**.
+
+**Y una cosa que hice mal, y la cuento:** la primera pasada del censo, sin cargar `/etc/bamburu.env`,
+tumbó el arranque de la copia y **mandó un aviso de verdad al Telegram de Ibrahin**. Un censo es una
+herramienta de lectura y no puede despertar a nadie: ahora el censo **apaga el aviso a Telegram** a
+propósito antes de montar nada.
 
 
 ## ✅ HECHA (2026-09-02) — Manifiesto de huellas del histórico de copias · `920ec83`

@@ -33,11 +33,14 @@ export function checkPermission(db, session, module, action) {
 // la única aparición de `permissionMiddleware` en todo el repo es esta definición), pero está
 // exportada y a un `import` de resucitar, así que se arregla igual en vez de dejarla esperando.
 export function permissionMiddleware(db, module, action) {
-  return async (c, next) => {
+  const guarda = async (c, next) => {
     const session = c.get('session');
     if (!checkPermission(db, session, module, action)) {
       return denegarPermiso(c);
     }
     return next();
   };
+  // Etiqueta para el censo de permisos (ver `requirePerm` en `core/auth.js`).
+  guarda.bamburuGuarda = { tipo: 'permiso', permiso: `${module}.${action}` };
+  return guarda;
 }
