@@ -3,7 +3,7 @@ import { safeError } from '../../core/errors.js';
 import { rateLimit } from '../../core/rate-limit.js';
 import { autologinStore } from '../../core/autologin-store.js';
 import { randomBytes } from 'crypto';
-import { callClaude, hasAnthropicKey, textFromResponse } from '../../core/llm.js';   // helper único de IA: clave + transporte centralizados
+import { callClaude, hasAnthropicKey, textFromResponse, iaApagada } from '../../core/llm.js';   // helper único de IA: clave + transporte centralizados
 import { createTenantSvc, validateSignupDraft, emailTaken } from '../../core/tenant-signup.js';
 import { OFICIOS, normalizaOficio } from '../erp/oficios.js';   // PASO 8 — los seis oficios del alta
 import { checkEmailFormat } from '../../core/signup-schema.js';
@@ -89,6 +89,20 @@ export function register(app) {
   app.post('/api/registro/disa',
     rateLimit({ windowMs: 60000, max: 20, keyPrefix: 'onboarding' }),
     async (c) => {
+      // ⛔ IA APAGADA (Ibrahin, 6 sep 2026). El alta por CONVERSACIÓN se retira; el alta en sí NO —
+      // `provisionTenant` nunca necesitó el modelo, y el catálogo de arranque por oficio tampoco.
+      // Se contesta con 200 y un texto en el mismo campo `reply` que usaba el modelo, para que la
+      // página lo pinte igual y quien se esté dando de alta LEA qué hacer en vez de encallarse.
+      if (iaApagada()) {
+        return c.json({
+          reply: 'El alta por chat está retirada: Bamburu ya no usa inteligencia artificial.\n\n'
+               + 'Puedes darte de alta rellenando el formulario, que es igual de rápido y pide lo mismo: '
+               + 'el nombre de tu negocio, tu nombre, tu correo y una contraseña.',
+          ia_apagada: true,
+          done: false,
+        });
+      }
+
       let body;
       try { body = await c.req.json(); } catch { return c.json({ error: 'Petición inválida.' }, 400); }
 

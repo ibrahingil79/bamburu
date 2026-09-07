@@ -460,7 +460,7 @@ familia entera en verde: `test-contabilidad` 38 · `verify-contabilidad-diario-m
 > cuándo no se corre— y se espera un sí. Si dice que no, queda pendiente aquí y se vuelve a
 > proponer al abrir la siguiente sesión.
 
-- **Último barrido completo:** 2026-09-06 · `181795e` · **179/230** · 1402 s
+- **Último barrido completo:** 2026-09-06 · `35f5dcc` · **141/228** · 945 s
 - **Estado:** ✅ al día
 
 <!-- BARRIDO:FIN -->
@@ -9704,11 +9704,25 @@ escenarios y los dos casos incómodos, con relojes de prueba de Stripe) ·
 > documento — y porque un puntero rancio manda al siguiente chat al sitio equivocado con toda la
 > confianza del mundo.
 >
-> **⚙️ AL DÍA EL 6 SEP 2026, contado otra vez sobre el documento:** el BLOQUE 2 tiene **18 fichas**,
+> ~~**⚙️ AL DÍA EL 6 SEP 2026, contado otra vez sobre el documento:** el BLOQUE 2 tiene **18 fichas**,
 > de las que van **17 hechas**. Hoy se cerró **`cifrado-en-reposo-bases`**: las 12 bases vivas
 > (`control.db` + 11 negocios) están cifradas en el disco, con la llave generada y custodiada por
 > Ibrahin. **La siguiente es `permisos-paso-1-censo-rutas`**, y detrás
-> `retencion-backup-fallo-parcial` — con la que se cerraría el bloque.
+> `retencion-backup-fallo-parcial` — con la que se cerraría el bloque.~~
+>
+> **⚙️ CADUCADO LA MADRUGADA DEL 7 SEP 2026, y por dos motivos.** Primero: ese día entraron **dos
+> fichas nuevas al bloque** —`apagar-disa-paso-1` (hecha) y `conexiones-que-no-se-cierran`
+> (pendiente)—, así que **el bloque ya no tiene 18 fichas: tiene 20, y van 18 hechas.**
+>
+> 🔺 **Y LA SIGUIENTE NO ES `permisos-paso-1-censo-rutas`: es `conexiones-que-no-se-cierran`.** La
+> subió Ibrahin ese mismo día con el motivo escrito: **bloquea la verificación de cualquier tarea
+> posterior.** El servidor abre bases de negocio y no las cierra nunca; en una sola pasada del barrido
+> acumula **92 conexiones a ficheros ya borrados** y **se deteriora mientras se le mide**, así que
+> ninguna tarea que venga detrás se va a poder dar por comprobada. Detrás quedan
+> `permisos-paso-1-censo-rutas` y `retencion-backup-fallo-parcial`.
+>
+> Se tacha en vez de borrarse, que es lo que manda este documento — y porque un puntero rancio manda
+> al siguiente chat al sitio equivocado con toda la confianza del mundo.
 >
 > **Y una nota sobre la FIRMA, porque la regla y el encargo se cruzaron.** La ficha llevaba
 > `firma: Ibrahin`, que manda construir en `tarea/<id>` y esperar **fuera de producción**; el encargo
@@ -10938,6 +10952,241 @@ no lo causa el cifrado, pero significa que **cada reinicio corta en seco**. Las 
 sanas (`integrity_check` ok en las 12, comprobado tras el SIGKILL), que es lo que WAL promete. Va a
 §Deuda técnica.
 
+
+## ✅ HECHA (2026-09-06) — Apagar DISA · paso 1 de 2: el apagado
+
+- **id:** apagar-disa-paso-1
+- **estado:** hecha
+- **firma:** Ibrahin
+  > **DECISIÓN DE IBRAHIN, 6 SEP 2026: Bamburu deja de usar IA. DISA sale del producto.**
+  > Esto es el primer paso, el del apagado. **El borrado del código va después y como encargo aparte** —
+  > apagar no es borrar, y por eso aquí no se ha quitado ni una línea de DISA.
+- **origen:** encargo «Apagar DISA (paso 1 de 2)», 6 sep 2026
+
+**EL INVENTARIO ES LA PIEZA QUE QUEDA, y está en el repositorio:** `docs/disa/inventario-uso-de-ia.md`.
+Es la base del encargo siguiente y del de Textract.
+
+**LO QUE DESTAPÓ EL INVENTARIO, y cambió el encargo:**
+- **Solo TRES módulos llamaban al modelo**, no los siete que aparecen al buscar `core/llm.js`:
+  `modules/disa`, `modules/registro` y `purchases-capture`. Los otros cuatro **solo lo mencionan en
+  comentarios** — apagarlos no habría hecho nada.
+- **Y `modules/erp/` no llama al modelo. Ni un fichero.** El encargo pedía apuntar los automatismos
+  que pasaran por el modelo sin necesitarlo, para rehacerlos sin IA. **No hay ninguno**: los
+  recordatorios de impago, la reposición, las recurrentes, los dormidos, los vencimientos fiscales y
+  los avisos son cálculo y regla puros. **Se llaman «Propuestas de DISA» y no las hace DISA**: es el
+  nombre de la bandeja (`disa_proposals`). Ese trabajo del encargo siguiente **no existe**.
+- **DISA tenía UN solo camino vivo al modelo**, no dos: `/store-message` (el constructor de tienda)
+  devolvía 404 en su primera línea desde que se desmontó el editor.
+
+**EL APAGADO, y dónde vive.** El interruptor está en `core/llm.js` —`export const IA_APAGADA = true`—
+y `callClaude()` corta en su **primera línea**, antes de leer la clave y antes del `fetch`. Es una
+**constante, no una variable de entorno**, y eso es deliberado: una variable de entorno es una puerta,
+y basta con ponerla en un `.env` para que el producto vuelva a llamar sin que nadie lo decida.
+**Corta incluso con un `fetchImpl` inyectado** — decisión de Ibrahin: *«sin excepciones, el guardián
+queda sin puertas abiertas»*.
+
+**LAS PANTALLAS LO DICEN, Y NO DAN ERROR:**
+- **La burbuja de DISA** lo dice **al abrirse**, no después de que escribas —enterarse solo tras
+  teclear una pregunta no es «decirlo con claridad»— y deja el campo bloqueado. Se corrigió también
+  el rótulo de su cabecera: un punto verde con «Asistente IA» encima de «está apagada» es una
+  contradicción en pantalla.
+- **La captura de facturas** enseña «Esta función está retirada», explica por qué, dice que **lo ya
+  capturado no se ha tocado** y ofrece el botón de registrar a mano.
+- **El alta por chat** contesta **200 con un texto**, no un error, y manda al formulario.
+
+**EL GUARDIÁN, Y CÓMO MIDE.** `scripts/censo-ia-apagada.mjs`, en RÁPIDO e `infra`.
+**Palabras de Ibrahin al encargarlo:** *«que ninguna comprobación consiga una llamada saliente al
+proveedor, medido de verdad, no por nombres ni por búsqueda de texto»*. Buscar `api.anthropic.com` en
+el árbol se engaña partiendo la cadena en dos; **lo único que no se puede disimular es el intento de
+salir**. Así que hay un centinela (`scripts/lib/centinela-red.cjs`) que envuelve las **cinco puertas
+de red de Node** —`fetch`, `https.request`, `http.request`, `net/tls.connect` y `dns.lookup`—, apunta
+cualquier intento hacia el proveedor y **lo corta**. Se carga con `--require`, y **`NODE_OPTIONS` lo
+heredan los procesos hijos**: por eso se puede medir un barrido de 230 comprobaciones sin tocar ni una.
+
+**Y no se fía de su propio instrumento:** el paso [3] **quita el corte** en una copia de `core/llm.js`
+y exige que el centinela SÍ lo cace. Si eso no se pusiera rojo, el cero no valdría nada.
+
+**⚠️ ME EQUIVOQUÉ AL INVENTARIAR LOS GATES, Y SOBRE ESO SE DECIDIÓ.** Dije que **cinco** gates del
+barrido llamaban al proveedor. Salió de un `grep` heurístico y **lo di como medido**. Al medirlo de
+verdad contra el único camino vivo (`POST /api/disa/message`): **eran DOS** — `gate-disa-csrf` y
+`gate-disa-dictar-compra`. `gate-disa-borrado-conversaciones` siembra por SQL;
+`gate-avisos-badge` y `gate-disa-adjuntar` **lo dicen en su propia cabecera** («determinista, sin
+modelo» / «la parte que NO necesita al modelo»); `gate-csp-estricta` ya lo interceptaba y
+`gate-inicio-cuadro-mando` solo comprueba que no esté. **Ibrahin había decidido interceptar dos que
+nunca llamaron.** Se le dijo, y su respuesta corrigió el diseño: *«quita esa exigencia. El candado
+bueno está en callClaude() y protege por sí solo, sin depender de qué gate exista. Un guardián que
+exige algo sin contenido confunde a quien lo lea después.»*
+
+**Los tres gates de DISA quedan RETIRADOS del barrido** con su motivo escrito en `gates-mapa.mjs`, y
+**se borrarán junto con el código de DISA** en el encargo del borrado.
+
+**LOS NEGOCIOS DE GATES, APARTADOS.** Los tres (`gate-csrf-disa-bede37`, `gate-borrado-a-38ddfe`,
+`gate-borrado-b-38ddfe`) estaban registrados en `control.db` como negocios de verdad desde el 3 sep.
+`scripts/apartar-negocios-de-gates.mjs`: copia previa de `control.db` verificada → **cerrojo que se
+para si alguno tiene datos dentro** (un negocio con clientes no es residuo por mucho que se llame
+`gate-…`) → soltar las filas dependientes ANTES de la suya (la clave ajena de `tenant_suscripciones`
+ya tumbó 18 gates el 3 sep) → y apartar la base con su huella. **No se han borrado**: están en
+`~/bases-retiradas/2026-09-06-negocios-de-gates/` con LEEME. Quedan **8 negocios**.
+
+**LO QUE NO SE HA TOCADO, a propósito:** ni una línea de DISA borrada · el cifrado · la última ficha
+del Bloque 2 · Stripe · Verifactu · las copias de Drive.
+
+---
+
+### ✅ EL CIERRE, CON SUS SALVEDADES ESCRITAS (7 sep 2026, madrugada)
+
+**EL CRITERIO SE CUMPLE, Y ESTÁ MEDIDO: cero llamadas salientes al proveedor de IA.** Medido sobre
+los **228 gates** de un barrido completo, con un centinela metido en los cinco caminos de red de Node
+(`fetch`, `https.request`, `http.request`, `net/tls.connect` y `dns.lookup`) que se hereda a todos
+los procesos hijos. El parte quedó **vacío**.
+
+**Y el cero significa algo porque el guardián se probó EN ROJO:** se le quitó el corte a `callClaude`
+sobre una copia y el centinela **cazó la llamada, dijo a dónde iba y por qué puerta**. Un instrumento
+que no ve nada y uno roto dan la misma respuesta —cero—, así que esa prueba es la que da valor a la
+otra. `censo-ia-apagada` corrió dentro del barrido: `[193/228] ✅ RESULTADO: 13 ✓`.
+
+> ### ⚠️ SALVEDAD, Y NO ES MENOR: EL VEREDICTO DEL BARRIDO NO ES INTERPRETABLE
+>
+> **Mientras exista el fallo de conexiones fantasma, ninguna pasada completa da un número fiable.**
+> En **una sola pasada** el proceso pasó de **28 a 132 descriptores abiertos**, de los cuales **92 son
+> conexiones a ficheros de base YA BORRADOS**. Empezó limpio (0 fantasmas) y terminó con 92.
+>
+> **El servidor se deteriora durante la propia medición.** Los últimos gates de la pasada miden un
+> servidor que ya no está sano, así que su rojo no dice nada del producto. Detalle y arreglo en la
+> ficha `conexiones-que-no-se-cierran`, aquí abajo.
+
+**LOS ROJOS, REPARTIDOS COMO SE PUEDE Y NO MÁS:** el barrido dio **141/228 · 945 s**.
+
+- **45 ya venían rojos de antes** (40 catalogados el 1 sep en `docs/barridos/2026-09-01-los-113-rojos.md`).
+  **No son de esta tarea y no se han tocado.**
+- **6 se arreglaron:** `gate-cifrado-en-reposo`, `gate-copias-cifradas` y `verify-wal-acotado` (los
+  tres del cifrado), más `gate-disa-csrf`, `gate-disa-borrado-conversaciones` y
+  `gate-disa-dictar-compra` (los tres retirados del barrido por decisión de Ibrahin).
+- **3 caen POR DISEÑO**, porque prueban lo que se acaba de apagar. **Van al encargo de retirada ya
+  previsto, y se dejan por nombre para que no se pierdan:**
+  **`gate-nav-inicio-disa`** (el riel de DISA en el Inicio) · **`gate-registro-alta`** (el alta por
+  chat, ahora retirada) · **`test-llm-texto-respuesta`** (prueba el transporte del modelo).
+- **39 quedan SIN ATRIBUIR.** Ocho fallan diciendo `/admin/login`, 401 o 403; el resto son menús que
+  no aparecen, selectores que no llegan y listas que no cargan — el mismo patrón. **No se reparten a
+  ojo entre «producto» y «fantasma»**: se reclasifican cuando se pueda medir sobre un servidor que no
+  se estropee mientras se le mide. Es criterio de aceptación de `conexiones-que-no-se-cierran`.
+
+**Lo que NO se marca en verde:** el barrido. Se marca en verde el criterio que sí se midió —las
+llamadas salientes—, y se deja escrito, con número, por qué el otro no se puede afirmar.
+
+---
+
+## TAREA — Bamburu abre bases y no las cierra nunca (y lo mismo con Chromium)
+
+- **id:** conexiones-que-no-se-cierran
+- **estado:** pendiente
+- **prioridad:** 🔺 **LA SIGUIENTE DEL BLOQUE 2.** Subida por Ibrahin el 7 sep 2026, y el motivo está
+  escrito: **bloquea la verificación de cualquier tarea posterior.** Mientras esto siga, un barrido
+  completo no da un número fiable —el servidor se deteriora durante la propia medición— así que
+  ninguna tarea que venga detrás se va a poder dar por comprobada. Va delante de
+  `retencion-backup-fallo-parcial`, que era la que quedaba del bloque.
+- **origen:** diagnóstico del fallo de sesión del 6 sep 2026
+
+### Criterios de HECHO
+
+1. **El servidor deja de acumular fantasmas.** Un barrido completo tiene que terminar con **cero**
+   conexiones a ficheros de base borrados. Hoy termina con **92**, empezando en 0.
+2. **Y con él, los Chromium**: `bamburu.service` no puede terminar el día con procesos de navegador
+   colgando. Hoy son **13, y 1.020 MB**.
+3. **⚠️ RECLASIFICAR LOS 39 ROJOS SIN ATRIBUIR, Y DEJAR LA LISTA ESCRITA.** Tras el arreglo se
+   ejecuta el barrido completo y se separan uno a uno: cuáles eran del fantasma y cuáles son defectos
+   de producto de verdad. **La ficha NO se cierra sin esa lista escrita** — son los 39 que quedaron
+   colgando al cerrar `apagar-disa-paso-1`, y si no se reclasifican se convierten en deuda que nadie
+   vuelve a mirar. La lista de partida está en la entrada de cierre de esa ficha, aquí arriba.
+
+**QUÉ PASA.** `core/tenant-middleware.js` → `getTenantDb()` guarda cada conexión en un `Map`
+(`tenantConnections`) **y no la suelta jamás**. Ni cuando el negocio se borra, ni cuando alguien
+elimina sus ficheros, ni nunca. No hay `close()` en todo el camino.
+
+**LO QUE COSTÓ EL 6 DE SEPTIEMBRE, medido.** Un barrido completo dejó al servicio con **102
+descriptores de ficheros de base BORRADOS** todavía abiertos. Entre ellos, el `-wal` y el `-shm` del
+negocio de desarrollo:
+
+```
+26 -> /home/ubuntu/bamburu/data/tenants/desarrollo-bamburu.db-shm (deleted)
+54 -> /home/ubuntu/bamburu/data/tenants/desarrollo-bamburu.db-wal (deleted)
+```
+
+**Y eso TUMBÓ EL ACCESO AL PANEL ENTERO.** En modo WAL, una conexión que sujeta un `-wal` y un `-shm`
+borrados queda hablando con un diario fantasma: **deja de ver lo que escriben los demás procesos**.
+Las sesiones que creaban los gates se guardaban en la base, el servidor no las encontraba, y **todas
+las pantallas autenticadas redirigían a `/admin/login`**. Reproducido fuera de todo gate, con `curl`
+y una sesión a mano. Se arregló reiniciando; el servicio pasó de 102 a 0.
+
+**POR QUÉ NO SE VIO ANTES, y por qué es peor de lo que parece:** no se nota. `getAdminSession()`
+funciona, la consulta devuelve la fila, `integrity_check` da `ok` y las bases están sanas. **Lo único
+que falla es que el proceso mira otro sitio.** Costó un diagnóstico entero y tres hipótesis
+descartadas (el cifrado, el centinela de red y `gate-registro-alta`) llegar al descriptor.
+
+**CON CLIENTES REALES ESTO SE AGOTA Y SE CAE.** Hoy el límite del servicio es holgado
+(`LimitNOFILE` 524.288) y se llegó a 138 descriptores, así que no fue agotamiento — **fue el fantasma,
+no el número**. Pero las dos cosas crecen con cada negocio que se da de alta y de baja, y ninguna se
+suelta sola.
+
+**ES EL MISMO PATRÓN QUE LOS 13 CHROMIUM, y por eso van juntas.** `bamburu.service` tiene **13
+procesos de Chromium colgando, 1.020 MB**, hijos del propio servicio — el motor de PDF que se abre y
+no se cierra. Medido el 6 sep 2026. **Se abre y no se cierra**: una base, un navegador, da igual. La
+tarea es la misma.
+
+**LO QUE HAY QUE DECIDIR AL CONSTRUIRLA** (por eso está apuntada y no empezada):
+- **Cuándo se suelta una conexión.** ¿Por tiempo sin usarse? ¿Por tope de conexiones abiertas? ¿Al
+  detectar que el fichero de debajo ya no es el mismo? Las tres son distintas y solo una es correcta.
+- **Cómo se detecta el fantasma.** Comparar el inodo abierto con el del disco es barato y directo;
+  reabrir a ciegas cada X, no.
+- **Y que el remedio no sea peor:** cerrar una conexión en uso rompe una petición en curso. Esto toca
+  el camino por el que pasa **todo** el producto.
+
+**LO QUE NO ES:** no es el cifrado (comprobado el mismo día: 16 de 16 cifradas, `integrity_check` ok)
+ni el apagado de la IA (no toca ficheros de base). Es de antes que las dos cosas.
+
+---
+
+## TAREA — Volver a leer facturas de proveedor, sin modelo de lenguaje
+
+- **id:** captura-facturas-sin-ia
+- **estado:** pendiente
+- **firma:** Ibrahin
+  > **Encargada por Ibrahin el 6 sep 2026, al apagar la IA, y APUNTADA SIN CONSTRUIR.**
+  > Decide qué se le promete al cliente (que pueda fotografiar una factura y no teclearla) y con qué
+  > proveedor de fuera se hace, así que la firma es suya.
+- **origen:** encargo «Apagar DISA (paso 1 de 2)», 6 sep 2026
+
+**QUÉ SE PERDIÓ, Y ES LO ÚNICO.** Al apagar la IA, la única función del producto que se queda **sin
+sustituto directo** es leer una factura de proveedor desde una foto o un PDF
+(`modules/erp/routes/purchases-capture.js`). Todo lo demás tenía camino visual: el asistente tiene
+sus pantallas y el alta tiene su formulario. Ésta no: o se teclea la factura, o no hay.
+**Lo ya capturado no se perdió** — vive en `supplier_invoices` y nunca dependió del modelo.
+
+**LO QUE PIDE IBRAHIN:** rehacerla con un **servicio específico de extracción de documentos**, no con
+un modelo de lenguaje. Los dos que nombró: **Amazon Textract** y **Parseur**. Y una condición que no
+es un detalle: **alojado en la UE**, porque *«además ayuda con el RGPD»* — una factura de proveedor
+lleva NIF, dirección y datos de un tercero, y hoy salían del país en cada captura.
+
+**POR QUÉ NO ES LO MISMO QUE LO QUE HABÍA.** Un extractor de documentos hace una cosa y la hace
+acotada: devuelve campos y tablas de un papel. No conversa, no improvisa, no ejecuta acciones, y su
+salida es comprobable campo a campo. La pieza que había usaba un modelo de propósito general para
+esto, que es de donde salían el coste variable y el que no se pudiera afirmar nada sobre su respuesta.
+
+**LO QUE HAY QUE DECIDIR ANTES DE CONSTRUIR** (y por eso está apuntada, no empezada):
+- **Cuál de los dos**, con su precio por documento y su región. Textract es de AWS (Frankfurt o
+  Irlanda); Parseur es un servicio de plantillas. No son la misma pieza ni el mismo trabajo.
+- **Qué pasa si el servicio no responde.** Hoy la pantalla ya sabe decir que la función no está; lo
+  que no puede es quedarse a medias con una factura subida y sin extraer.
+- **Dónde vive su llave.** El patrón ya está resuelto dos veces (la de las copias y la de las bases):
+  fichero propio, 0600, fuera de `/etc/bamburu.env`, custodiada fuera del servidor.
+- **Y el punto de entrada NO se reabre:** `core/llm.js` se queda apagado. Esto es una pieza nueva,
+  no un permiso para volver a llamar al proveedor de IA.
+
+**LO QUE NO HAY QUE VOLVER A HACER:** el guardián `censo-ia-apagada` mide que nadie salga hacia el
+proveedor de IA. Un extractor de documentos es otro proveedor y otra puerta — **cuando se construya,
+el guardián tiene que aprender a distinguirlos**, no ampliarse para dejar pasar cualquier salida.
+
+---
 
 ## TAREA — Permisos · Paso 1 — dejar escrito qué permiso exige cada ruta
 

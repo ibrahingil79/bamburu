@@ -34,7 +34,7 @@ export function getDisaWidget(nonce = '') {
   <div id="disaBox">
     <div class="dp-head" id="disaDragHandle">
       <div class="dp-avatar">D</div>
-      <div><div class="dp-name">DISA</div><div class="dp-status"><span class="dp-dot"></span>Asistente IA</div></div>
+      <div><div class="dp-name">DISA</div><div class="dp-status" id="dpEstado"><span class="dp-dot"></span>Asistente IA</div></div>
       <button class="dp-close" id="dpNewBtn" title="Nueva conversación" style="margin-left:auto">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
       </button>
@@ -86,6 +86,30 @@ export function getDisaWidget(nonce = '') {
     // no a la ventanita flotante (que es la experiencia de escritorio) ni al dashboard de Inicio.
     if (window.matchMedia && window.matchMedia('(max-width:768px)').matches) { window.location.href = '/admin/disa'; return; }
     document.getElementById('disaModal').classList.add('open');
+    // ⛔ IA APAGADA (Ibrahin, 6 sep 2026). Se dice AL ABRIR, no después de escribir. El servidor ya
+    // contesta que está apagada, pero enterarse solo tras teclear una pregunta no es «la pantalla lo
+    // dice con claridad»: es dejar que alguien lo intente para descubrirlo. Aquí no se borra nada
+    // —el botón y la ventana siguen, y su retirada va en el encargo del borrado—, pero al abrirla se
+    // lee lo que pasa y adónde ir.
+    if (window.BAMBURU_IA_APAGADA) {
+      // El rótulo de la cabecera también, o la ventana se contradice a sí misma: un punto verde y
+      // «Asistente IA» encima de «está apagada» es exactamente el tipo de contradicción que este
+      // repositorio no deja pasar en un documento, y en pantalla se lee peor.
+      var est = document.getElementById('dpEstado');
+      if (est) { est.textContent = 'Apagada'; est.style.opacity = '.6'; }
+      document.getElementById('dpMsgs').innerHTML =
+        '<div style="padding:28px 20px;text-align:center;color:var(--text2);line-height:1.6">'
+        + '<div style="font-size:28px;margin-bottom:10px">⛔</div>'
+        + '<strong style="display:block;color:var(--text);margin-bottom:8px">DISA está apagada</strong>'
+        + 'Bamburu ya no usa inteligencia artificial. Es una decisión del 6 de septiembre de 2026.'
+        + '<div style="margin-top:12px">Todo lo que le pedías se hace desde las pantallas: clientes, '
+        + 'productos, facturas, stock y proveedores tienen cada uno su sitio en el menú.</div>'
+        + '<div style="margin-top:12px;font-size:12px;color:var(--text3)">Tus conversaciones anteriores no se han borrado.</div>'
+        + '</div>';
+      var inp = document.getElementById('dpInput');
+      if (inp) { inp.disabled = true; inp.placeholder = 'DISA está apagada'; }
+      return;
+    }
     document.getElementById('dpInput').focus();
     if (!widgetLoaded) { widgetLoaded = true; loadActiveThread(); }
   };

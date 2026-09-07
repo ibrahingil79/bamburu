@@ -35,7 +35,7 @@ import { runCapture, captureFromExtraction } from '../erp/routes/purchases-captu
 import { createProductSvc } from '../erp/routes/products.js';   // alta validada (banda de IVA obligatoria, sin defecto silencioso)
 import { getVatBands } from '../../core/vat-bands.js';   // [D5] lista cerrada de bandas legales (misma fuente que el formulario/API)
 import { ALLOWED_MIME, MAX_UPLOAD_BYTES } from '../erp/attachments.js';
-import { callClaude, hasAnthropicKey, textFromResponse, toolUseBlocks } from '../../core/llm.js';   // helper único de IA: clave + transporte centralizados
+import { callClaude, hasAnthropicKey, textFromResponse, toolUseBlocks, iaApagada } from '../../core/llm.js';   // helper único de IA: clave + transporte centralizados
 import { rateLimit } from '../../core/rate-limit.js';   // freno por IP del endpoint caro de DISA
 import { ENTITY } from '../../core/activity-entities.js';
 import { escHtml } from '../../core/escape.js';
@@ -2408,6 +2408,22 @@ export function register(app, db) {
   router.post('/message',
     rateLimit({ windowMs: 60000, max: 15, keyPrefix: 'disa-message', message: 'Vas demasiado rápido con DISA. Espera un momento.' }),
     async c => {
+    // ⛔ IA APAGADA (Ibrahin, 6 sep 2026). Se contesta ANTES de tocar nada: ni se cuenta uso, ni se
+    // crea hilo, ni se guarda mensaje. Y se contesta con **200 y un texto**, no con un error: quien
+    // escribe en la burbuja tiene que LEER qué ha pasado, no ver una pantalla rota. El aviso se
+    // manda por el mismo campo `reply` que usaba la respuesta del modelo, así que el widget lo
+    // pinta igual que siempre sin cambiar nada de su lógica.
+    if (iaApagada()) {
+      return c.json({
+        reply: 'DISA está apagada. Bamburu ya no usa inteligencia artificial — lo decidió Ibrahin el '
+             + '6 de septiembre de 2026.\n\nTodo lo que le pedías a DISA se puede hacer desde las '
+             + 'pantallas: clientes, productos, facturas, stock y proveedores tienen cada uno su '
+             + 'sitio en el menú. Tus datos y tus conversaciones anteriores no se han borrado.',
+        ia_apagada: true,
+        thread_id: null,
+      });
+    }
+
     const usage = getUsage(db);
     const limit = 50;
     const tenantSlug = c.get('tenant')?.slug;

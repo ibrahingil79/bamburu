@@ -23,6 +23,37 @@ import { readFileSync } from 'fs';
 import { getGlobalLlmSpend, addGlobalLlmSpend, markGlobalLlmAlerted } from './control-db.js';
 import { sendEmail } from './mailer.js';
 
+// ═════════════════════════════════════════════════════════════════════════════════════════════════
+// ⛔ LA IA ESTÁ APAGADA. DECISIÓN DE IBRAHIN, 6 DE SEPTIEMBRE DE 2026.
+//
+// **Bamburu deja de usar IA. DISA sale del producto.** Esto es el apagado; el borrado del código va
+// en un encargo aparte, así que todo lo de abajo sigue escrito y sin tocar — **apagar no es borrar**.
+//
+// EL INTERRUPTOR VIVE AQUÍ Y EN NINGÚN OTRO SITIO, y es una CONSTANTE, no una variable de entorno.
+// Eso es deliberado: una variable de entorno es una puerta, y basta con que alguien la ponga en un
+// `.env` para que el producto vuelva a llamar al proveedor sin que nadie lo decida. Para volver a
+// encenderla hay que editar este fichero, que es exactamente el gesto que debe costar.
+//
+// **CÓMO SE APAGA, y por qué así.** `callClaude()` corta en su PRIMERA línea, antes de leer la clave,
+// antes del freno de gasto y antes de construir la petición. Lo que hay debajo —la URL, las
+// cabeceras, el `fetch`— queda inalcanzable. No se ha borrado nada: se ha quedado sin camino.
+//
+// **QUIÉN AVISA AL USUARIO NO ES ESTO.** Este corte es la red de seguridad, no la cara: las tres
+// piezas que usaban el modelo preguntan ANTES con `iaApagada()` y enseñan un mensaje claro en su
+// pantalla. Si alguna se dejara sin preguntar, aquí no se rompe nada en silencio: sale un error con
+// `code: 'ia_apagada'`, que se distingue de un fallo del proveedor y se puede buscar.
+//
+// **Lo vigila `scripts/censo-ia-apagada.mjs`**, que se pone rojo si el interruptor se toca, si
+// alguien mete un `fetch` al proveedor por otro lado, o si una pieza vuelve a llamar sin preguntar.
+//
+// El inventario de qué usaba la IA, qué pantallas la enseñaban y qué era cálculo y qué lenguaje
+// está en `docs/disa/inventario-uso-de-ia.md`.
+// ═════════════════════════════════════════════════════════════════════════════════════════════════
+export const IA_APAGADA = true;
+
+/** ¿Está la IA apagada? Lo preguntan las pantallas ANTES de llamar, para poder explicarlo. */
+export function iaApagada() { return IA_APAGADA; }
+
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 const ANTHROPIC_VERSION = '2023-06-01';
 
@@ -110,6 +141,17 @@ export function documentBlock(base64, mediaType = 'application/pdf') {
 // - Lanza Error con .status si no hay key (500) o si la API responde error (502).
 // - fetchImpl: inyectable para tests (por defecto, fetch global).
 export async function callClaude(opts = {}) {
+  // ⛔ EL CORTE. Va aquí, en la primera línea y SIN excepciones — ni siquiera para un `fetchImpl`
+  // inyectado. Decisión de Ibrahin, 6 sep 2026: «sin excepciones, el guardián queda sin puertas
+  // abiertas». Todo lo que hay debajo —la clave, el freno de gasto, la URL, el fetch— queda
+  // inalcanzable mientras esto esté puesto.
+  if (IA_APAGADA) {
+    const e = new Error('La IA está apagada en Bamburu. Esta función ya no usa inteligencia artificial.');
+    e.status = 503;
+    e.code = 'ia_apagada';
+    throw e;
+  }
+
   const { model, system, messages, max_tokens = 1500, tools, timeoutMs = 30000 } = opts;
   if (!model) { const e = new Error('Falta el modelo'); e.status = 500; throw e; }
   if (!Array.isArray(messages) || !messages.length) { const e = new Error('Faltan mensajes'); e.status = 500; throw e; }

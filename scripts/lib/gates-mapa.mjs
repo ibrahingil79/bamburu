@@ -124,6 +124,10 @@ export const RAPIDO = new Map([
   // claro NO se nota usando el producto: funciona igual de bien. Solo lo ve quien mire el fichero.
   // Mira los 12 ficheros de verdad y se pone rojo a sí mismo tres veces. ~4 s medidos.
   ['gate-cifrado-en-reposo', 'las bases: ¿siguen cifradas en el disco, y sin llave no se abren? (cifrado-en-reposo-bases)'],
+  // Y que Bamburu NO vuelva a llamar al proveedor de IA. Estático + ejecutado, <1 s. Va en el
+  // rápido porque volver a encenderla es una línea, y porque el daño de que se cuele no se nota
+  // usando el producto: se nota en la factura del proveedor a fin de mes.
+  ['censo-ia-apagada', '¿sigue Bamburu sin llamar al proveedor de IA? (decisión de Ibrahin, 6 sep 2026)'],
 ]);
 
 // La velocidad de UNA comprobación. No hay tercer estado: o está declarada arriba o es del completo.
@@ -232,9 +236,13 @@ export const GRUPOS = {
     'censo-disa-csrf',
     'censo-disa-confirmacion',
     'censo-texto-ajeno',
-    'gate-disa-borrado-conversaciones',
+    // ⛔ 6 SEP 2026 — RETIRADOS DEL BARRIDO AL APAGAR LA IA (decisión de Ibrahin). Los tres
+    // conducían a DISA por HTTP, o sea que **cada barrido completo pagaba una tanda de llamadas al
+    // proveedor**. Con la IA apagada medirían un simulacro de algo que se va a retirar, así que
+    // salen ahora y **se borrarán junto con el código de DISA**, en el encargo del borrado:
+    //   'gate-disa-borrado-conversaciones' · 'gate-disa-csrf' · 'gate-disa-dictar-compra'
+    // No se borran hoy porque apagar no es borrar, y el código que prueban sigue montado.
     'gate-disa-confirmacion',
-    'gate-disa-csrf',
     'gate-disa-stock-libro',
     'gate-disa-sql-limites',
     'gate-disa-inyeccion',
@@ -252,7 +260,7 @@ export const GRUPOS = {
     'verify-propuestas-fiscales',
     'verify-propuestas-reposicion', 'gate-propuestas-reposicion',
     'verify-disa-query-permisos', 'verify-disa-sin-pedidos', 'verify-actividad-etiquetas',
-    'gate-nav-inicio-disa', 'gate-disa-dictar-compra', 'gate-disa-adjuntar',
+    'gate-nav-inicio-disa', 'gate-disa-adjuntar',   // ⛔ 'gate-disa-dictar-compra' retirado el 6 sep 2026 (ver arriba)
   ],
   inventario: [
     // ↓ de las 99 invisibles (24 ago 2026), medidas y en verde:
@@ -355,7 +363,7 @@ export const GRUPOS = {
   // 25 ago 2026 · Las dos del correo. `verify-correo-freno` prueba que el freno para de verdad al
   // llegar al tope; `verify-comprobaciones-sin-correo-real` vigila la norma del dueño: ninguna
   // comprobación vuelve a escribir a una bandeja real. Ver docs/censo-correos.md.
-  infra: ['gate-arranque-modulos', 'gate-cifrado-en-reposo', 'gate-copias-cifradas', 'gate-restauracion-completa', 'gate-portal-sin-llave-en-url', 'gate-adjuntos-por-contenido', 'gate-aviso-copias', 'gate-csp-superficies-limpias', 'censo-bot-de-bamburu', 'censo-avisos-sin-fabrica', 'verify-correo-freno', 'verify-comprobaciones-sin-correo-real', 'verify-disco-perfiles', 'test-c6-secretos', 'gate-conciliacion-deshacer', 'verify-superadmin-escrituras', 'verify-tenant-lookup-readonly', 'verify-wal-acotado', 'verify-safe-error',
+  infra: ['gate-arranque-modulos', 'gate-cifrado-en-reposo', 'censo-ia-apagada', 'gate-copias-cifradas', 'gate-restauracion-completa', 'gate-portal-sin-llave-en-url', 'gate-adjuntos-por-contenido', 'gate-aviso-copias', 'gate-csp-superficies-limpias', 'censo-bot-de-bamburu', 'censo-avisos-sin-fabrica', 'verify-correo-freno', 'verify-comprobaciones-sin-correo-real', 'verify-disco-perfiles', 'test-c6-secretos', 'gate-conciliacion-deshacer', 'verify-superadmin-escrituras', 'verify-tenant-lookup-readonly', 'verify-wal-acotado', 'verify-safe-error',
           'verify-xss-escape', 'gate-xss-escape', 'gate-csp-estricta',
           // PUNTO 2 (24 ago 2026) — dar de baja a alguien del equipo: borrar si no dejó rastro,
           // archivar si lo dejó, y decirlo ANTES de pulsar. Antes daba un 500 seco.

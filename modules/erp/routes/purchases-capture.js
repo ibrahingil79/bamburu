@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { adminLayout, can } from '../layout.js';
 import { requirePerm, logActivity } from '../../../core/auth.js';
 import { validate, price } from '../../../core/validate.js';
-import { callClaude, imageBlock, documentBlock, textFromResponse } from '../../../core/llm.js';
+import { callClaude, imageBlock, documentBlock, textFromResponse, iaApagada } from '../../../core/llm.js';
 import { getVatBands } from '../../../core/vat-bands.js';
 import { searchProducts, createProductSvc } from './products.js';
 import { searchSuppliers, createSupplierSvc, supplierFiscalIdConflict } from './suppliers.js';
@@ -398,6 +398,19 @@ export function createPurchaseCaptureRoutes(db) {
   api.post('/', requirePerm('purchases.create'),
     bodyLimit({ maxSize: MAX_UPLOAD_BYTES, onError: c => c.json({ error: 'El archivo supera el máximo de 12 MB. Sube una foto o PDF más ligero.' }, 413) }),
     async c => {
+      // ⛔ IA APAGADA (Ibrahin, 6 sep 2026), y ésta es la ÚNICA función del producto que pierde algo
+      // sin sustituto directo: leer un papel de formato libre. Se contesta ANTES de aceptar el
+      // fichero — no se sube, no se guarda y no se deja un adjunto huérfano en `data/uploads`.
+      // Lo ya capturado NO se toca: vive en `supplier_invoices` y no dependía del modelo.
+      if (iaApagada()) {
+        return c.json({
+          error: 'La captura automática de facturas está retirada: Bamburu ya no usa inteligencia '
+               + 'artificial. Puedes registrar la factura a mano en Compras → Nueva factura de '
+               + 'proveedor. Las facturas que ya capturaste siguen donde estaban.',
+          ia_apagada: true,
+        }, 503);
+      }
+
       try {
         const body = await c.req.parseBody();
         const file = body.file;
@@ -474,6 +487,34 @@ function capturePage({ sym, bands, today, preload = null, nonce = '' }) {
   // Precarga (chat de DISA): se inyecta el blob ya extraído; escapamos `<` para no
   // romper el <script nonce="${nonce}"> con el contenido del documento.
   const preloadJson = preload ? JSON.stringify(preload).replace(/</g, '\\u003c') : 'null';
+  // ⛔ IA APAGADA (Ibrahin, 6 sep 2026). La pantalla lo dice ARRIBA DEL TODO y ANTES del recuadro de
+  // subida, para que nadie haga la foto, la suba y se lleve el chasco al final. El resto de la
+  // pantalla se deja como está —apagar no es borrar— pero el paso 1 queda inerte y explicado.
+  if (iaApagada()) {
+    return `
+  <div class="ph">
+    <h2>Capturar factura de proveedor</h2>
+    <a href="/admin/purchases" class="btn btn-secondary">Volver</a>
+  </div>
+
+  <div class="card" style="max-width:640px;margin:0 auto">
+    <div class="card-body" style="text-align:center;padding:2rem">
+      <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="var(--text2)" stroke-width="1.5" style="margin-bottom:1rem"><circle cx="12" cy="12" r="10"/><line x1="4.9" y1="4.9" x2="19.1" y2="19.1"/></svg>
+      <h3 style="margin:0 0 .75rem">Esta función está retirada</h3>
+      <p style="color:var(--text2);margin:0 0 1rem;line-height:1.6">
+        Leer la factura desde una foto o un PDF necesitaba inteligencia artificial, y
+        <strong>Bamburu ya no la usa</strong>. Es una decisión del 6 de septiembre de 2026.
+      </p>
+      <p style="color:var(--text2);margin:0 0 1.5rem;line-height:1.6">
+        Puedes registrar la factura <strong>a mano</strong>, que sigue funcionando igual que siempre.
+        Y <strong>las facturas que ya capturaste no se han tocado</strong>: están donde estaban.
+      </p>
+      <a href="/admin/supplier-invoices/new" class="btn btn-primary">Registrar factura a mano</a>
+      <a href="/admin/purchases" class="btn btn-secondary" style="margin-left:.5rem">Ver compras</a>
+    </div>
+  </div>`;
+  }
+
   return `
   <div class="ph">
     <h2>Capturar factura de proveedor</h2>

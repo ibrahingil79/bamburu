@@ -1,4 +1,5 @@
 import { getDisaWidget } from '../disa/widget.js';
+import { iaApagada } from '../../core/llm.js';   // ⛔ apagado de la IA (6 sep 2026): lo lee la burbuja
 import { escHtml, jsonForScript } from '../../core/escape.js';
 import { estadoAvisos, hoyLocal, fuentesDe } from './avisos.js';
 import { contarPropuestasPendientes, tiposVisiblesPara } from './propuestas.js';   // D5 — badge de Propuestas de DISA
@@ -440,6 +441,11 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
   <link rel="stylesheet" href="/public/vendor/tabler/tabler-icons.min.css">
   <script nonce="${c?.get?.('cspNonce') || ''}">
     window.CSRF_TOKEN="${csrfToken}";
+    // ⛔ IA APAGADA (Ibrahin, 6 sep 2026). Se declara en el armazón porque la burbuja de DISA se
+    // monta en TODAS las pantallas del panel: así lo sabe al abrirse y lo dice, en vez de dejar
+    // que alguien escriba una pregunta para enterarse. El valor sale de core/llm.js, no de una
+    // copia: si un día se vuelve a encender, esto se entera solo.
+    window.BAMBURU_IA_APAGADA=${iaApagada() ? "true" : "false"};
     window.USER_PERMS=${JSON.stringify(perms)};
     window.USER_IS_OWNER=${isOwner};
     window.USER_IS_ADMIN=${isAdmin};
