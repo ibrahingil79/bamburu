@@ -2229,6 +2229,57 @@ de exportación reales** para construir y probar contra algo cierto.
 
 ---
 
+#### N. VOLVER A LEER FACTURAS DE PROVEEDOR, SIN MODELO DE LENGUAJE · **BLOQUEADO** (no es PENDIENTE: no depende de nosotros)
+
+> **⤴️ Movida aquí desde el BLOQUE 2 el 7 sep 2026, por decisión de Ibrahin, y con su motivo:**
+> *«reponer una función no es seguridad, y esa ficha depende de un trámite externo de Ibrahin
+> (elegir proveedor y firmar contrato), así que dejarla dentro mantiene el bloque abierto
+> indefinidamente»*. Entró en el Bloque 2 el 6 de septiembre, al apagar la IA, porque nació de aquel
+> encargo; pero **no cierra ningún agujero de seguridad: repone una función de producto**. Y su
+> siguiente paso no es de código —es elegir proveedor (Textract o Parseur), mirar precio y región, y
+> firmar—, así que **no la desbloquea trabajar, la desbloquea Ibrahin.** Se mueve íntegra, sin tocar
+> una coma. **Con ella fuera, el Bloque 2 quedó cerrado entero.**
+
+- **id:** captura-facturas-sin-ia
+- **estado:** pendiente
+- **firma:** Ibrahin
+  > **Encargada por Ibrahin el 6 sep 2026, al apagar la IA, y APUNTADA SIN CONSTRUIR.**
+  > Decide qué se le promete al cliente (que pueda fotografiar una factura y no teclearla) y con qué
+  > proveedor de fuera se hace, así que la firma es suya.
+- **origen:** encargo «Apagar DISA (paso 1 de 2)», 6 sep 2026
+
+**QUÉ SE PERDIÓ, Y ES LO ÚNICO.** Al apagar la IA, la única función del producto que se queda **sin
+sustituto directo** es leer una factura de proveedor desde una foto o un PDF
+(`modules/erp/routes/purchases-capture.js`). Todo lo demás tenía camino visual: el asistente tiene
+sus pantallas y el alta tiene su formulario. Ésta no: o se teclea la factura, o no hay.
+**Lo ya capturado no se perdió** — vive en `supplier_invoices` y nunca dependió del modelo.
+
+**LO QUE PIDE IBRAHIN:** rehacerla con un **servicio específico de extracción de documentos**, no con
+un modelo de lenguaje. Los dos que nombró: **Amazon Textract** y **Parseur**. Y una condición que no
+es un detalle: **alojado en la UE**, porque *«además ayuda con el RGPD»* — una factura de proveedor
+lleva NIF, dirección y datos de un tercero, y hoy salían del país en cada captura.
+
+**POR QUÉ NO ES LO MISMO QUE LO QUE HABÍA.** Un extractor de documentos hace una cosa y la hace
+acotada: devuelve campos y tablas de un papel. No conversa, no improvisa, no ejecuta acciones, y su
+salida es comprobable campo a campo. La pieza que había usaba un modelo de propósito general para
+esto, que es de donde salían el coste variable y el que no se pudiera afirmar nada sobre su respuesta.
+
+**LO QUE HAY QUE DECIDIR ANTES DE CONSTRUIR** (y por eso está apuntada, no empezada):
+- **Cuál de los dos**, con su precio por documento y su región. Textract es de AWS (Frankfurt o
+  Irlanda); Parseur es un servicio de plantillas. No son la misma pieza ni el mismo trabajo.
+- **Qué pasa si el servicio no responde.** Hoy la pantalla ya sabe decir que la función no está; lo
+  que no puede es quedarse a medias con una factura subida y sin extraer.
+- **Dónde vive su llave.** El patrón ya está resuelto dos veces (la de las copias y la de las bases):
+  fichero propio, 0600, fuera de `/etc/bamburu.env`, custodiada fuera del servidor.
+- **Y el punto de entrada NO se reabre:** `core/llm.js` se queda apagado. Esto es una pieza nueva,
+  no un permiso para volver a llamar al proveedor de IA.
+
+**LO QUE NO HAY QUE VOLVER A HACER:** el guardián `censo-ia-apagada` mide que nadie salga hacia el
+proveedor de IA. Un extractor de documentos es otro proveedor y otra puerta — **cuando se construya,
+el guardián tiene que aprender a distinguirlos**, no ampliarse para dejar pasar cualquier salida.
+
+---
+
 #### L. LA COLA DE ENVÍOS: DEVOLVERLA AL PANEL Y VESTIRLA · ✅ **HECHO (21 ago 2026)** · commit `3296c1f`
 
 > **L. LA COLA DE ENVÍOS: DEVOLVERLA AL PANEL Y VESTIRLA.**
@@ -9726,11 +9777,16 @@ escenarios y los dos casos incómodos, con relojes de prueba de Stripe) ·
 >
 > ~~🔺 **⚙️ ACTUALIZADO ESE MISMO DÍA (7 sep 2026, tarde): 22 fichas, 20 HECHAS, 2 PENDIENTES.**~~
 >
-> 🎯 **⚙️ Y OTRA VEZ ESA MISMA TARDE, al cerrar `retencion-backup-fallo-parcial`: 22 fichas,
-> 21 HECHAS, 1 PENDIENTE.** La única que queda es **`captura-facturas-sin-ia`**, y **lleva la firma
-> de Ibrahin**: decide él qué se le promete al cliente (poder fotografiar una factura y no teclearla)
-> y con qué proveedor de fuera se hace. **Con esa, el BLOQUE 2 se cierra entero.** Contado sobre el
-> documento, entre `## BLOQUE 2` y `## BLOQUE 3`, no de memoria.
+> ~~🎯 **⚙️ Y OTRA VEZ ESA MISMA TARDE: 22 fichas, 21 HECHAS, 1 PENDIENTE** —
+> `captura-facturas-sin-ia`, con la firma de Ibrahin.~~
+>
+> 🎉 **⚙️ Y AL FINAL DE ESA TARDE, EL BLOQUE 2 QUEDÓ CERRADO ENTERO: 21 fichas, 21 HECHAS,
+> 0 PENDIENTES.** No porque se construyera la que faltaba, sino porque **Ibrahin la sacó del bloque**:
+> `captura-facturas-sin-ia` se movió a **§GRUPO 4 — DEPENDE DE ALGO EXTERNO A IBRAHIN** (entrada N),
+> con su motivo escrito — *«reponer una función no es seguridad, y esa ficha depende de un trámite
+> externo de Ibrahin (elegir proveedor y firmar contrato), así que dejarla dentro mantiene el bloque
+> abierto indefinidamente»*. **Se dice aquí para que nadie lea el 21/21 como si se hubiera
+> construido.** Contado sobre el documento, entre `## BLOQUE 2` y `## BLOQUE 3`, no de memoria.
 >
 > ⚙️ **Y se corrige de paso el recuento que este mismo puntero traía desde el 7 sep: decía «20 fichas,
 > 18 hechas», y ni el total ni el reparto cuadraban.** Faltaba `captura-facturas-sin-ia` —la ficha del
@@ -9774,7 +9830,7 @@ escenarios y los dos casos incómodos, con relojes de prueba de Stripe) ·
 > lo que depende de que alguien se acuerde un día se olvida. Lo vigila `censo-bot-de-bamburu`
 > (`lint` + `infra` + RAPIDO), con autoprueba.
 
-## BLOQUE 2 — QUE SEA SEGURO DE VERDAD
+## BLOQUE 2 — QUE SEA SEGURO DE VERDAD · ✅ **CERRADO ENTERO (7 sep 2026)** — 21 de 21
 
 > Los cuatro de DISA, las copias con la configuración y los certificados dentro y cifradas, los
 > archivos que sube la gente, el enlace del portal, y que Bamburu no arranque si le falta una parte.
@@ -11283,45 +11339,24 @@ ni el apagado de la IA (no toca ficheros de base). Es de antes que las dos cosas
 
 ---
 
-## TAREA — Volver a leer facturas de proveedor, sin modelo de lenguaje
+## ⤴️ MOVIDA FUERA DEL BLOQUE 2 — `captura-facturas-sin-ia` (7 sep 2026)
 
-- **id:** captura-facturas-sin-ia
-- **estado:** pendiente
-- **firma:** Ibrahin
-  > **Encargada por Ibrahin el 6 sep 2026, al apagar la IA, y APUNTADA SIN CONSTRUIR.**
-  > Decide qué se le promete al cliente (que pueda fotografiar una factura y no teclearla) y con qué
-  > proveedor de fuera se hace, así que la firma es suya.
-- **origen:** encargo «Apagar DISA (paso 1 de 2)», 6 sep 2026
-
-**QUÉ SE PERDIÓ, Y ES LO ÚNICO.** Al apagar la IA, la única función del producto que se queda **sin
-sustituto directo** es leer una factura de proveedor desde una foto o un PDF
-(`modules/erp/routes/purchases-capture.js`). Todo lo demás tenía camino visual: el asistente tiene
-sus pantallas y el alta tiene su formulario. Ésta no: o se teclea la factura, o no hay.
-**Lo ya capturado no se perdió** — vive en `supplier_invoices` y nunca dependió del modelo.
-
-**LO QUE PIDE IBRAHIN:** rehacerla con un **servicio específico de extracción de documentos**, no con
-un modelo de lenguaje. Los dos que nombró: **Amazon Textract** y **Parseur**. Y una condición que no
-es un detalle: **alojado en la UE**, porque *«además ayuda con el RGPD»* — una factura de proveedor
-lleva NIF, dirección y datos de un tercero, y hoy salían del país en cada captura.
-
-**POR QUÉ NO ES LO MISMO QUE LO QUE HABÍA.** Un extractor de documentos hace una cosa y la hace
-acotada: devuelve campos y tablas de un papel. No conversa, no improvisa, no ejecuta acciones, y su
-salida es comprobable campo a campo. La pieza que había usaba un modelo de propósito general para
-esto, que es de donde salían el coste variable y el que no se pudiera afirmar nada sobre su respuesta.
-
-**LO QUE HAY QUE DECIDIR ANTES DE CONSTRUIR** (y por eso está apuntada, no empezada):
-- **Cuál de los dos**, con su precio por documento y su región. Textract es de AWS (Frankfurt o
-  Irlanda); Parseur es un servicio de plantillas. No son la misma pieza ni el mismo trabajo.
-- **Qué pasa si el servicio no responde.** Hoy la pantalla ya sabe decir que la función no está; lo
-  que no puede es quedarse a medias con una factura subida y sin extraer.
-- **Dónde vive su llave.** El patrón ya está resuelto dos veces (la de las copias y la de las bases):
-  fichero propio, 0600, fuera de `/etc/bamburu.env`, custodiada fuera del servidor.
-- **Y el punto de entrada NO se reabre:** `core/llm.js` se queda apagado. Esto es una pieza nueva,
-  no un permiso para volver a llamar al proveedor de IA.
-
-**LO QUE NO HAY QUE VOLVER A HACER:** el guardián `censo-ia-apagada` mide que nadie salga hacia el
-proveedor de IA. Un extractor de documentos es otro proveedor y otra puerta — **cuando se construya,
-el guardián tiene que aprender a distinguirlos**, no ampliarse para dejar pasar cualquier salida.
+> **Decisión de Ibrahin.** La ficha «Volver a leer facturas de proveedor, sin modelo de lenguaje»
+> **ya no vive aquí**: está en **§GRUPO 4 — DEPENDE DE ALGO EXTERNO A IBRAHIN**, como entrada **N**,
+> íntegra y sin tocar una coma.
+>
+> **El motivo, en sus palabras:** *«reponer una función no es seguridad, y esa ficha depende de un
+> trámite externo de Ibrahin (elegir proveedor y firmar contrato), así que dejarla dentro mantiene el
+> bloque abierto indefinidamente»*.
+>
+> Las dos mitades importan. **No es de este bloque por naturaleza:** el Bloque 2 es «que sea seguro
+> de verdad», y esto es **reponer una función de producto** que se perdió al apagar la IA — no cierra
+> ningún agujero. **Y no puede avanzar desde aquí:** hace falta elegir entre Textract y Parseur, mirar
+> precio y región, y firmar con un proveedor de fuera. Nada de eso lo mueve una sesión de trabajo, así
+> que mientras estuviera dentro **el bloque no se cerraría nunca**, aunque el trabajo de seguridad
+> estuviera terminado — que es justo lo que pasaba hoy.
+>
+> **Con ella fuera, el BLOQUE 2 queda CERRADO ENTERO: 21 fichas, 21 hechas.**
 
 ---
 
@@ -11607,8 +11642,31 @@ Esta tarea **no es migrar a la nube**: es dejar escrito y probado qué hace falt
 ## TAREA — Las conexiones a las bases de los negocios no se cierran nunca
 
 - **id:** conexiones-sqlite-con-expulsion
-- **estado:** pendiente
+- **estado:** 🔶 **CASI HECHA sin querer — leer esto ANTES de empezar (7 sep 2026)**
 - **origen:** Auditoría de Codex, 25 ago 2026 · AUD-018 — comprobado vivo el 2 sep
+
+> ⚠️ **ESTA FICHA Y `conexiones-que-no-se-cierran` (Bloque 2, hecha el 7 sep, commit `d03f7e6`) SON
+> LA MISMA AVERÍA**, apuntada dos veces por dos vías distintas: aquélla salió del fallo de sesión del
+> 6 sep, ésta de la auditoría del 25 ago. **No se ha marcado hecha porque no lo está del todo**, pero
+> **quien la coja NO debe construirla de cero.** Contrastados sus cuatro criterios contra lo que ya
+> hay en `core/tenant-middleware.js`:
+>
+> - ✅ **Tope + expulsión de las menos usadas:** hecho (`TOPE_ABIERTAS = 200`, y `repasarConexiones()`
+>   cierra por antigüedad de uso al pasarlo).
+> - 🔶 **«El tope vive en la configuración, no repartido por el código»:** está en **un solo sitio**,
+>   con su derivación escrita al lado — pero es una constante del módulo, **no un ajuste del
+>   servidor**. Si el criterio pedía una variable de entorno, eso es lo que falta.
+> - ❌ **La prueba que abre MÁS negocios que el tope** y enseña que el número no crece sin fin:
+>   **no existe.** `gate-conexiones-que-se-cierran` prueba el cierre al desaparecer la base, la
+>   conexión rancia, la caducidad y el cierre ordenado, **pero no el tope bajo carga.** Es el hueco
+>   real de esta ficha.
+> - ✅ **Cerrar no corrompe una escritura en curso:** hecho, con los 5 s de gracia (y la excepción
+>   medida: una conexión rancia se cierra en el acto, porque mantenerla viva pierde escrituras de
+>   otros procesos).
+>
+> **Así que lo que queda de verdad son dos cosas pequeñas, no una tarea entera.** Se deja escrito
+> aquí para que nadie rehaga lo que ya está: un puntero que dice «pendiente» sobre trabajo hecho
+> cuesta una sesión entera.
 
 Cada negocio que entra abre su conexión SQLite y **esa conexión se queda abierta para siempre**: no hay expulsión, ni tope, ni cierre. Con ocho negocios no se nota; con cientos, el servidor se queda sin descriptores de fichero y sin memoria. Comprobado el 2 sep en `core/tenant-middleware.js`.
 
