@@ -1232,7 +1232,7 @@ export function createInvoiceRoutes(db) {
         <input class="form-control" type="date" id="lstHasta" style="width:auto" data-iv="verbos">
         <span id="lstVerbos"></span>
       </div>
-      <div id="disaBand"></div>
+      <div id="bandaAviso"></div>
       <div class="card">
         <div class="card-head"><h3>Todas las facturas</h3><input class="search" id="searchBox" placeholder="Buscar..."></div>
         <div class="table-wrap"><table>
@@ -1274,17 +1274,17 @@ export function createInvoiceRoutes(db) {
       let rows=[];
       async function loadInvoices(){
         rows=await api('GET','/api/erp/invoices').catch(()=>[]);
-        updateDisaBand();
+        actualizaBandaAviso();
         filterTable();
       }
-      // Banda de DISA (§6): aviso calmado de vencidas con UN enlace ("Revisar →" a Cobros).
-      function updateDisaBand(){
-        const el=document.getElementById('disaBand'); if(!el) return;
+      // Banda de aviso (§6): calmada, de vencidas con UN enlace ("Revisar →" a Cobros).
+      function actualizaBandaAviso(){
+        const el=document.getElementById('bandaAviso'); if(!el) return;
         const v=rows.filter(r=>r.cobro_estado==='vencida');
         if(!v.length){ el.innerHTML=''; return; }
         const eur=v.reduce((a,r)=>a+Number(r.pendiente||0),0);
-        const txt='Tienes <strong>'+v.length+'</strong> factura'+(v.length===1?'':'s')+' vencida'+(v.length===1?'':'s')+' ('+'${sym}'+eur.toFixed(2)+' pendiente). DISA puede ayudarte a reclamar el cobro.';
-        el.innerHTML=window.disaBand(txt,'/admin/cobros','Revisar');
+        const txt='Tienes <strong>'+v.length+'</strong> factura'+(v.length===1?'':'s')+' vencida'+(v.length===1?'':'s')+' ('+'${sym}'+eur.toFixed(2)+' pendiente). Puedes reclamarlas desde Cobros el cobro.';
+        el.innerHTML=window.bandaAviso(txt,'/admin/cobros','Revisar');
       }
       function filterTable(){
         const q=document.getElementById('searchBox').value.toLowerCase();

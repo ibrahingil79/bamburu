@@ -83,11 +83,11 @@ export function createVigiaRoutes(db) {
   views.get('/', requirePerm('analytics.read'), c => {
     const sym = db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get()?.currency_symbol || '€';
     const content = `
-      <div class="ph"><h2>Vigía · DISA predictiva</h2></div>
+      <div class="ph"><h2>Vigía</h2></div>
       <div class="card" style="margin-bottom:1rem">
         <div class="card-body">
           <p style="margin:0;color:var(--text2);font-size:.85rem">
-            El vigía recorre tus motores de área y marca lo que conviene mirar. DISA te lo cuenta en
+            El vigía recorre tus motores de área y marca lo que conviene mirar. Te lo cuenta en
             llano y te <strong>propone una decisión</strong>. <strong>No hace sus propias cuentas</strong>:
             cada cifra sale del mismo motor que pinta la pantalla de esa área (Cobros, Pagos, Ventas,
             Plan) — no puede contradecirla, y cada aviso trae un <strong>gráfico de apoyo</strong>
@@ -167,7 +167,7 @@ export function createVigiaRoutes(db) {
         const avisos = data.avisos||[];
         if(!avisos.length){
           body.innerHTML = '<div class="card"><div class="card-body" style="color:var(--muted)">'
-            + 'Nada que te avise ahora mismo en las áreas que puedes ver. DISA no inventa: si no hay problema, no dice nada.</div></div>';
+            + 'Nada que te avise ahora mismo en las áreas que puedes ver. El vigía no inventa: si no hay problema, no dice nada.</div></div>';
           return;
         }
         window.__avisos = avisos;
@@ -278,7 +278,7 @@ export function createVigiaRoutes(db) {
         pintarVigia(data);
       })();
       </script>`;
-    return c.html(adminLayout('Vigía · DISA predictiva', content, 'vigia', c.get('session')?.csrfToken || '', c));
+    return c.html(adminLayout('Vigía', content, 'vigia', c.get('session')?.csrfToken || '', c));
   });
 
   return { api, views };

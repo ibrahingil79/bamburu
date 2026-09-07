@@ -241,11 +241,11 @@ export function createPropuestasRoutes(db) {
       const subject = String(body.subject != null ? body.subject : p.subject).trim();
       const text = String(body.body != null ? body.body : p.body);
       if (!subject || !text.trim()) {
-        return c.json({ error: 'El asunto y el mensaje no pueden estar vacíos. Aprueba la propuesta para que DISA redacte el borrador.' }, 400);
+        return c.json({ error: 'El asunto y el mensaje no pueden estar vacíos. Aprueba la propuesta para que se redacte el borrador.' }, 400);
       }
 
       const r = await registerClientActivitySvc(db, p.client_id,
-        { type: 'email', email_subject: subject, email_text: text, note: 'Reenganche propuesto por DISA' },
+        { type: 'email', email_subject: subject, email_text: text, note: 'Reenganche propuesto por Bamburu' },
         { sendEmail, userName: c.get('session')?.userName || '' });
 
       const quien = c.get('session')?.userName || c.get('session')?.userId || '';
@@ -342,8 +342,8 @@ export function createPropuestasRoutes(db) {
 
   // GET /admin/propuestas — la pantalla. Gate de VER; las acciones revalidan su permiso en la API.
   views.get('/', c => {
-    if (!puedeVer(c)) return c.html(adminLayout('Propuestas de DISA',
-      '<div class="card"><div class="card-body">No tienes permiso para ver las propuestas de DISA.</div></div>',
+    if (!puedeVer(c)) return c.html(adminLayout('Propuestas',
+      '<div class="card"><div class="card-body">No tienes permiso para ver las propuestas.</div></div>',
       'propuestas', c.get('session')?.csrfToken || '', c));
     const csrf = c.get('session')?.csrfToken || '';
     const puedeAprobar = can(c, 'cobros.manage');
@@ -351,11 +351,11 @@ export function createPropuestasRoutes(db) {
     const puedeEmitir = can(c, 'invoices.create');   // el mismo que exige emitir en /admin/recurrentes
     const sym = db.prepare('SELECT currency_symbol FROM company_config WHERE id=1').get()?.currency_symbol || '€';
     const content = `
-      <div class="ph"><h2>Propuestas de DISA</h2>
+      <div class="ph"><h2>Propuestas</h2>
         <button class="btn btn-secondary" id="btnRecargar"><i class="ti ti-refresh"></i> Actualizar</button>
       </div>
       <div class="card" style="margin-bottom:1rem"><div class="card-body" style="color:var(--muted)">
-        DISA prepara el trabajo y te lo deja listo: recordatorios de cobro para tus facturas vencidas,
+        Bamburu prepara el trabajo y te lo deja listo: recordatorios de cobro para tus facturas vencidas,
         los pagos a proveedor que están a punto de vencer, las facturas recurrentes (igualas y cuotas)
         que tocan y aún no has emitido, los clientes que te compraban y han dejado de hacerlo, los
         <strong>vencimientos fiscales</strong> de los modelos que presentas (IVA, IRPF…), y la
@@ -462,7 +462,7 @@ export function createPropuestasRoutes(db) {
       }
 
       // ── Tarjeta de CLIENTE DORMIDO: el que te compraba y dejó de hacerlo.
-      //    DOS PASOS a propósito: primero DISA REDACTA (aprobar), y solo después TÚ envías. Mientras
+      //    DOS PASOS a propósito: primero SE REDACTA (aprobar), y solo después TÚ envías. Mientras
       //    no esté redactada, no hay texto que enseñar — y no se manda nada sin que lo leas. ──
       function dormidoHtml(p){
         const dias = p.dias_sin_comprar != null ? p.dias_sin_comprar + ' días sin comprar' : 'sin datos de compra';
@@ -472,7 +472,7 @@ export function createPropuestasRoutes(db) {
           : '<p class="prop-warn">⚠ Este cliente YA NO está dormido: te ha comprado desde que se propuso. Descártala — no le escribas que le echas de menos.</p>';
         if (!p.redactada) {
           const acc = (PUEDE_ESCRIBIR && p.viva)
-            ? '<button class="btn btn-primary btn-sm" data-pr="redactar" data-id="'+p.id+'">Aprobar — DISA redacta el email</button>'
+            ? '<button class="btn btn-primary btn-sm" data-pr="redactar" data-id="'+p.id+'">Aprobar — se redacta el email</button>'
             : (!PUEDE_ESCRIBIR ? '<span class="prop-meta">Necesitas permiso de CRM para escribir a clientes.</span>' : '');
           return '<div class="prop-card" id="prop'+p.id+'">'
             +'<div class="prop-head"><div><span class="prop-tag t-dormido">Dormido</span> <strong>'+escHtml(p.client_name||'Cliente')+'</strong></div>'
@@ -480,7 +480,7 @@ export function createPropuestasRoutes(db) {
             + razon
             +'<div class="prop-meta">Para: '+escHtml(p.client_email||'(sin email)')+'</div>'
             + noViva
-            +'<div class="prop-meta" style="margin-top:.4rem;font-style:italic">Aprobar NO envía nada: DISA te redacta el borrador y lo lees antes.</div>'
+            +'<div class="prop-meta" style="margin-top:.4rem;font-style:italic">Aprobar NO envía nada: se te redacta el borrador y lo lees antes.</div>'
             +'<div class="prop-actions">'+acc
             +' <button class="btn btn-secondary btn-sm" data-pr="descartar" data-id="'+p.id+'">Descartar</button></div>'
             +'</div>';
@@ -588,7 +588,7 @@ export function createPropuestasRoutes(db) {
         PROP_POR_FACTURA = {};
         props.forEach(function(p){ if(p.type==='pago_por_vencer') PROP_POR_FACTURA[p.supplier_invoice_id]=p.id; });
         box.innerHTML = props.length ? props.map(propHtml).join('')
-          : (window.emptyRow ? '' : '') + '<div class="card"><div class="card-body" style="color:var(--muted)">No hay propuestas pendientes. Cuando una factura de venta lleve vencida más días que el umbral, un pago a proveedor esté a punto de vencer, o toque emitir una factura recurrente, DISA lo preparará aquí.</div></div>';
+          : (window.emptyRow ? '' : '') + '<div class="card"><div class="card-body" style="color:var(--muted)">No hay propuestas pendientes. Cuando una factura de venta lleve vencida más días que el umbral, un pago a proveedor esté a punto de vencer, o toque emitir una factura recurrente, Bamburu lo preparará aquí.</div></div>';
         if (typeof window.propBadgeSync==='function') window.propBadgeSync(props.length);
       }
 
@@ -620,7 +620,7 @@ export function createPropuestasRoutes(db) {
               toast(r.message||'Factura emitida'); loadProps(); }
         catch(e){ toast(e.message||'Error','err'); }
       };
-      // Aprobar un dormido = que DISA REDACTE. No manda nada; recarga la tarjeta con el borrador dentro.
+      // Aprobar un dormido = que SE REDACTE el borrador. No manda nada; recarga la tarjeta con el borrador dentro.
       window.redactar = async function(id){
         try { const r=await api('POST','/api/erp/propuestas/'+id+'/redactar',{});
               toast(r.message||'Borrador preparado'); loadProps(); }
@@ -679,7 +679,7 @@ export function createPropuestasRoutes(db) {
         else if (a === 'pagar') openPagos(id);
       });
 </script>`;
-    return c.html(adminLayout('Propuestas de DISA', content, 'propuestas', csrf, c));
+    return c.html(adminLayout('Propuestas', content, 'propuestas', csrf, c));
   });
 
   return { api, views };

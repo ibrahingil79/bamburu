@@ -1667,8 +1667,8 @@ export function createAnalyticsRoutes(db, cfg = {}) {
         await abrirDesdeLaUrl();
       }
 
-      // ── PUNTO 10 · LA PUERTA POR LA QUE ENTRA DISA ────────────────────────────────────────────
-      // DISA compone un informe en el chat y le da al dueño un enlace para verlo aquí, en la
+      // ── PUNTO 10 · LA PUERTA DEL INFORME ────────────────────────────────────────────
+      // Se componia un informe en el chat y se le daba al dueno un enlace para verlo aquí, en la
       // pantalla, con su gráfico y su botón de guardar. Dos formas:
       //   ?panel=<id>                → abre un informe GUARDADO
       //   ?area=..&dim=..&med=..     → deja la frase puesta con esa receta y la dibuja

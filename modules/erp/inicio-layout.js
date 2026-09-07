@@ -42,7 +42,7 @@ export const NATIVOS = {
   // motor da por abierto de 8 a 21 todos los días, así que «te quedan 13 h libres» sería un número
   // inventado con pinta de dato. Antes que enseñar eso, no se enseña nada.
   hoy:    { etiqueta: 'Hoy en la agenda',   desc: 'Las citas de hoy y las horas que te quedan libres.', perm: 'citas.read', icon: 'ti-calendar-event', w: 2, h: 2, soloAgenda: true },
-  vigia:  { etiqueta: 'Vigía de DISA',      desc: 'Lo que más conviene mirar, ordenado por prioridad.', perm: 'analytics.read', icon: 'ti-radar',           w: 2, h: 2 },
+  vigia:  { etiqueta: 'Vigía',                 desc: 'Lo que más conviene mirar, ordenado por prioridad.', perm: 'analytics.read', icon: 'ti-radar',           w: 2, h: 2 },
   avisos: { etiqueta: 'Avisos pendientes',  desc: 'Cobros, pagos, stock y recurrentes por resolver.', perm: null,             icon: 'ti-bell',            w: 2, h: 2 },
 };
 
@@ -125,7 +125,7 @@ export const TARJETAS_CUADRO = [
   { id: 'grafico',  etiqueta: 'El gráfico del mes',     desc: 'Ventas por día, con el mes anterior detrás.' },
   { id: 'cifras',   etiqueta: 'Tu negocio en cifras',   desc: 'Lo que más vendes, lo que más te deja y tus mejores clientes.' },
   { id: 'oport',    etiqueta: 'Oportunidades abiertas', desc: 'Cuántas hay y por cuánto.' },
-  { id: 'decide',   etiqueta: 'DISA decide',            desc: 'Lo que conviene mirar hoy, con su botón.' },
+  { id: 'decide',   etiqueta: 'Qué mirar hoy',            desc: 'Lo que conviene mirar hoy, con su botón.' },
   { id: 'arranque', etiqueta: 'Pon en marcha tu negocio', desc: 'Los pasos que te faltan por montar.' },
 ];
 const IDS_CUADRO = TARJETAS_CUADRO.map(t => t.id);

@@ -474,7 +474,7 @@ export function createCrmRoutes(db) {
       document.getElementById('actTitle').textContent='Seguimiento — '+o.title;
       // La oportunidad LLEGA CON EL TRABAJO HECHO (CANON §2.3): la propuesta ya está calculada.
       document.getElementById('actProx').innerHTML = p
-        ? '<div class="disa-band"><span class="db-ic"><i class="ti ti-sparkles"></i></span><span class="db-tx"><strong>Próxima acción:</strong> '
+        ? '<div class="banda-aviso"><span class="db-ic"><i class="ti ti-bell"></i></span><span class="db-tx"><strong>Próxima acción:</strong> '
           +proxBadge(p)+' '+escHtml(proxTexto(p))+(p.fechaObjetivo?' <span style="color:var(--muted)">· '+escHtml(p.fechaObjetivo)+'</span>':'')
           +'<div style="color:var(--muted);font-size:.8rem;margin-top:.2rem">'+escHtml(p.motivo||'')+'</div></span></div>'
         : '';

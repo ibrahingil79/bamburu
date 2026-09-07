@@ -102,7 +102,7 @@ export function fichaClienteCSS() {
       font-family:inherit;font-size:.8rem;padding:.35rem .7rem;border-radius:999px;cursor:pointer}
     .bf-mas:hover{border-color:var(--accent);color:var(--accent)}
 
-    /* DISA recomienda: UNA caja por familia, con la decisión y sus botones. */
+    /* Recomendaciones: UNA caja por familia, con la decisión y sus botones. */
     .bf-rec{border-left:3px solid var(--accent);background:var(--accent-soft);border-radius:0 10px 10px 0;
       padding:.7rem .9rem;margin-bottom:.6rem;min-width:0}
     .bf-rec .q{font-size:.87rem;color:var(--text);line-height:1.45}
@@ -296,14 +296,16 @@ export function fichaClienteJS({ sym = '€' } = {}) {
       }).join('')+'</div>';
     }
 
-    // ── DISA RECOMIENDA (bloque C) ────────────────────────────────────────────────────────────────
+    // ── RECOMENDACIONES (bloque C) ────────────────────────────────────────────────────────────────
     // Sin nada que recomendar no se pinta NADA. Ni un "todo en orden": el silencio ya lo dice.
     function recomiendaHTML(recs){
       if (!recs || !recs.length) return '';
       return recs.map(function(r){
         var acts = '';
         if (r.accion) acts += '<button type="button" class="btn btn-primary btn-sm" data-rec="'+esc(r.accion.tipo)+'">'+esc(r.accion.texto)+'</button>';
-        acts += '<button type="button" class="btn btn-secondary btn-sm" data-rec="disa" data-fam="'+esc(r.key)+'">Preguntar a DISA cómo</button>';
+        // 7 SEP 2026 (paso 1) — aqui habia un boton que abria el chat del asistente.
+        // Se retira: la recomendacion la calcula el motor de siempre y su boton de accion (arriba)
+        // es el que hace algo. Ese chat ya no existe.
         var detras = (r.detras && r.detras.length>1)
           ? '<details class="porque"><summary>Ver los '+r.detras.length+' documentos</summary><ul>'
             + r.detras.map(function(d){ return '<li>'+esc(d.titulo)+(d.cifra!=null?' · '+eur(d.cifra):'')+'</li>'; }).join('')
@@ -614,7 +616,7 @@ export function fichaVentanaJS({ montaje = 'ventana' } = {}) {
         + '</div>'
         + '<div class="bf-win-body" id="bfBody"></div>'
         // B1.5 — el pie. Va abajo del todo porque es lo ultimo del orden que manda la ventana:
-        // cabecera, DISA, tarjetas, que te compra, y la salida hacia el detalle largo.
+        // cabecera, recomendaciones, tarjetas, que te compra, y la salida hacia el detalle largo.
         // A3 — «Ver ficha completa» ABRE UNA CAPA, no una página. Navegando por la app nunca se sale
         // de la ventana; la página entera existe solo para cuando alguien recarga la dirección.
         // Sigue siendo un <a> con href de verdad para que se pueda abrir en pestaña nueva con el
@@ -690,7 +692,7 @@ export function fichaVentanaJS({ montaje = 'ventana' } = {}) {
     }
 
     // ── B1: LA VENTANA ES EL RESUMEN, EN ESTE ORDEN Y NADA MÁS ────────────────────────────────────
-    //   1 cabecera compacta · 2 lo que recomienda DISA · 3 las tarjetas · 4 qué te compra
+    //   1 cabecera compacta · 2 lo que se recomienda · 3 las tarjetas · 4 qué te compra
     //   5 pie "Ver ficha completa →"
     // Lo que ya NO está aquí (la tabla larga de facturas, la historia, las notas) NO se ha borrado:
     // vive en la ficha completa, a un clic. Nada desaparece del producto (B2).
@@ -714,7 +716,7 @@ export function fichaVentanaJS({ montaje = 'ventana' } = {}) {
       html += BF.chipsHTML(D.contadores, D.chips_extra);
       // F (23 ago 2026) — EL MAPA EN EL RESUMEN, por encargo de Ibrahin. Reabre a propósito el
       // "y nada más" de B1: la primera pantalla del cliente es esta, y ahí es donde hay que ver
-      // dónde está. Va DESPUÉS de lo que exige una decisión (la recomendación de DISA y las cifras)
+      // dónde está. Va DESPUÉS de lo que exige una decisión (la recomendación y las cifras)
       // y ANTES de lo comercial, porque es identidad — como el NIF o el teléfono. En cuadro CHICO:
       // el resumen sigue siendo un resumen. Nace oculto; si no hay punto, se queda vacío y a cero.
       html += '<div id="bfWinMapa" style="display:none"></div>';
@@ -895,22 +897,9 @@ export function fichaVentanaJS({ montaje = 'ventana' } = {}) {
       }).catch(function(e){ caja.innerHTML = '<div class="bf-vacio">'+BF.esc(e.message)+'</div>'; });
     }
 
-    // ── C3 · PREGUNTAR A DISA CÓMO ────────────────────────────────────────────────────────────────
-    // Abre DISA con este cliente en contexto. DISA NO escribe ni envía nada: prepara y el humano
-    // valida (CANON). Aquí solo se le entrega la pregunta ya escrita.
-    var PREGUNTA = {
-      deuda: 'Tengo una cuenta vencida con este cliente. ¿Cómo se la reclamo sin perderlo?',
-      pago_pronto: '¿Cómo le recuerdo a este cliente un pago que está a punto de vencer?',
-      dormido: 'Este cliente lleva tiempo sin venir. ¿Qué le escribo para recuperarlo?',
-      plantones: 'Este cliente ha faltado a varias citas. ¿Cómo se lo planteo?',
-      sin_cita: 'Este cliente no tiene próxima cita. ¿Cómo se la propongo?',
-    };
-    function preguntarDisa(fam){
-      var nombre = (D && D.cliente && D.cliente.name) || window.BF_CLIENTE_NOMBRE || '';
-      var q = (PREGUNTA[fam] || '¿Qué hago con este cliente?') + ' Cliente: ' + nombre + '.';
-      if (typeof window.disaAbrirCon === 'function') { window.disaAbrirCon(q); return; }
-      location.href = '/admin/disa?q=' + encodeURIComponent(q);
-    }
+    // 7 SEP 2026 (paso 1) — aqui vivia el bloque de "preguntar como": un catalogo de preguntas ya
+    // escritas y la funcion que abria el chat con el cliente en contexto. Retirado con su boton.
+    // Las recomendaciones que se pintan arriba las calcula el motor de siempre y no han cambiado.
 
     // Catálogo de tipos de la última capa de registro pintada (lo trae el servidor: la pantalla no
     // tiene la lista escrita a mano, ni la coletilla de WhatsApp).
@@ -1031,7 +1020,6 @@ export function fichaVentanaJS({ montaje = 'ventana' } = {}) {
       if (t.hasAttribute('data-rec')) {
         e.preventDefault();
         var tipo = t.getAttribute('data-rec');
-        if (tipo === 'disa')     { preguntarDisa(t.getAttribute('data-fam')); return; }
         if (tipo === 'cuenta')   { abrirTarjeta('deuda'); return; }
         if (tipo === 'historia') { location.href = '/admin/clients/' + id + '#historia'; return; }
         if (tipo === 'citas')    { location.href = '/admin/citas?cliente=' + ID; return; }

@@ -1,8 +1,7 @@
-import { getDisaWidget } from '../disa/widget.js';
 import { iaApagada } from '../../core/llm.js';   // ⛔ apagado de la IA (6 sep 2026): lo lee la burbuja
 import { escHtml, jsonForScript } from '../../core/escape.js';
 import { estadoAvisos, hoyLocal, fuentesDe } from './avisos.js';
-import { contarPropuestasPendientes, tiposVisiblesPara } from './propuestas.js';   // D5 — badge de Propuestas de DISA
+import { contarPropuestasPendientes, tiposVisiblesPara } from './propuestas.js';   // D5 — badge de Propuestas
 // NAVEGACIÓN — la definición del menú vive en `menu.js`, en un solo sitio, y la comparten el rail, el
 // buscador del topbar y las anclas del usuario. Aquí solo se pinta. `vocabulario()` (las palabras del
 // oficio) y `contarAvisosPendientes()` (el contador de la Cola) se consultan allí, no aquí: eran las
@@ -27,10 +26,13 @@ export function csrfField(token) {
   return `<input type="hidden" name="_csrf" value="${token}">`;
 }
 
-// Banda de DISA (DISEÑO §6) para vistas SERVER-rendered: aviso calmado con tinte azul y UN solo
-// enlace de acción. `text` debe venir ya escapado por quien llama. Espejo de window.disaBand.
-export function disaBand(text, href = '', cta = 'Revisar') {
-  return `<div class="disa-band"><span class="db-ic"><i class="ti ti-sparkles"></i></span>`
+// Banda de aviso (DISEÑO §6) para vistas SERVER-rendered: calmada, con tinte azul y UN solo
+// enlace de acción. `text` debe venir ya escapado por quien llama. Espejo de window.bandaAviso.
+// ⚙️ 7 SEP 2026 — se llamaba `disaBand`. **No es de IA y nunca lo fue**: es una banda de aviso con
+// un enlace, pintada con datos del cálculo de siempre (facturas vencidas, pagos a proveedor). Solo
+// cambia el nombre.
+export function bandaAviso(text, href = '', cta = 'Revisar') {
+  return `<div class="banda-aviso"><span class="db-ic"><i class="ti ti-bell"></i></span>`
     + `<span class="db-tx">${text}</span>`
     + (href ? `<a class="db-cta" href="${href}">${cta} →</a>` : '')
     + `</div>`;
@@ -77,7 +79,7 @@ export function estadoTabs(active = '', entries = [], q = '') {
 }
 
 // ── Estado VACÍO compartido (U2) ─────────────────────────────────────────────────
-// Bloque centrado con voz de DISA: icono sutil (marca) + UNA frase + acción opcional.
+// Bloque centrado: icono sutil (marca) + UNA frase + acción opcional.
 // `text` ya viene escapado por quien llama (es voz de producto, texto fijo). Reutiliza
 // los tokens (--accent-soft/--accent) y el botón .btn-primary; espejo de window.emptyState.
 // opts: { cta, href } acción principal (botón azul) · soft:true → enlace suave (vacío
@@ -135,7 +137,7 @@ export function fuentesPermitidas(c) {
 // tras anclar o reordenar). Si el HTML del rail se escribiera además en el JavaScript del navegador
 // serían DOS renderizadores, y el día que uno cambie el otro se queda viejo en silencio.
 //
-// `ctx` = { active, anclado:Set, disaBadge }.
+// `ctx` = { active, anclado:Set, badgePropuestas }.
 
 // La chincheta. Misma pieza para las entradas del desplegable y para las ÁREAS; lo único que cambia es
 // dónde se coloca (`extra`), porque el área tiene chevron a la derecha y la entrada no.
@@ -183,14 +185,14 @@ function flyBloquesHTML(a, ctx) {
 
 // Un ÁREA del rail: su icono, su nombre y su desplegable. Con `ancla:true` es la COPIA que vive en el
 // bloque de anclados: se comporta igual (abre el mismo desplegable) pero se puede arrastrar, y **no
-// lleva el id ni el badge de DISA** — dos elementos con el mismo id serían HTML inválido y el contador
+// lleva el id ni el badge de Propuestas** — dos elementos con el mismo id serían HTML inválido y el contador
 // solo se actualizaría en uno. El área de siempre no se mueve de su sitio: arriba hay un atajo, no un
 // traslado.
 function areaNavgHTML(a, ctx, { ancla = false } = {}) {
-  const esDisa = a.id === 'disa';
-  const groupActive = a.todos.some(i => i.key === ctx.active) || (esDisa && (ctx.active === 'propuestas' || ctx.active === 'disa'));
-  const ic = (esDisa && !ancla)
-    ? `<span class="rail-ic"><i class="ti ${a.icon}"></i>${ctx.disaBadge || ''}</span>`
+  const esPropuestas = a.id === 'propuestas';
+  const groupActive = a.todos.some(i => i.key === ctx.active) || (esPropuestas && ctx.active === 'propuestas');
+  const ic = (esPropuestas && !ancla)
+    ? `<span class="rail-ic"><i class="ti ${a.icon}"></i>${ctx.badgePropuestas || ''}</span>`
     : `<i class="ti ${a.icon}"></i>`;
   const clave = 'area:' + a.id;
   // (D) El ÁREA se mueve de sitio en el rail: `data-ord` la identifica como pieza reordenable. La
@@ -199,7 +201,7 @@ function areaNavgHTML(a, ctx, { ancla = false } = {}) {
     ? ` data-anc="${escHtml(clave)}" draggable="true"`
     : ` data-ord="area:${escHtml(a.id)}" data-area="__rail__" draggable="true"`;
   return `<div class="navg${ancla ? ' anc' : ''}"${arr} data-navg="1">`
-    + `<button type="button"${esDisa && !ancla ? ' id="disaRailBtn"' : ''} class="nav-item${groupActive ? ' active' : ''}" title="${escHtml(a.label)}" aria-label="${escHtml(a.label)}" data-act="navfly">${ic}<span class="nav-label">${escHtml(a.label)}</span><i class="ti ti-chevron-right nav-chev"></i></button>`
+    + `<button type="button"${esPropuestas && !ancla ? ' id="railPropuestasBtn"' : ''} class="nav-item${groupActive ? ' active' : ''}" title="${escHtml(a.label)}" aria-label="${escHtml(a.label)}" data-act="navfly">${ic}<span class="nav-label">${escHtml(a.label)}</span><i class="ti ti-chevron-right nav-chev"></i></button>`
     + pinBtn(clave, ctx.anclado.has(clave), 'nav-pin')
     + `<div class="flyout"><div class="flyout-h">${escHtml(a.label)}</div>${flyBloquesHTML(a, ctx)}</div>`
     + `</div>`;
@@ -310,7 +312,7 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
       avisos = { count: est.count || 0, sinVer: (est.nuevos || []).length, estado: est.estado };
     }
   } catch { avisos = { count: 0, sinVer: 0, estado: 'apagado' }; }
-  // D5 — Propuestas de DISA pendientes, para el badge del topbar. Cada TIPO se cuenta solo si el
+  // D5 — Propuestas pendientes, para el badge del topbar. Cada TIPO se cuenta solo si el
   // usuario puede ver ESE tipo (mismo permiso que su pantalla de origen; owner/admin bypass):
   // Qué tipos cuenta el badge lo decide `tiposVisiblesPara` (propuestas.js), la ÚNICA fuente de esa
   // regla — la misma que usan las rutas del panel. Antes esta lista estaba COPIADA aquí, y al añadir
@@ -336,7 +338,7 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
         : `${avisos.count} aviso${avisos.count === 1 ? '' : 's'} pendientes (ya vistos)`);
 
   // Foto de perfil del usuario (admin_users.foto_url, la elige en /admin/perfil). Mismo patrón
-  // que disaCount: si falla, cae a la inicial — nunca rompe el render.
+  // que el contador: si falla, cae a la inicial — nunca rompe el render.
   let fotoUrl = '';
   try {
     const _db = c?.get?.('db');
@@ -383,16 +385,16 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
   catch { anclas = []; }
   const anclado = new Set(anclas.map(a => a.key));
 
-  // ── DISA en el riel (2º icono, debajo de Inicio) ─────────────────────────────
+  // ── PROPUESTAS en el riel (2º icono, debajo de Inicio) ─────────────────────────────
   // Ve el panel de Propuestas quien pueda ver AL MENOS UN tipo: cobros (invoices.read/cobros.read) o
   // pagos a proveedor (purchases.read). Esa regla vive ahora en `menu.js` (`permAlguno`), así que el
   // badge se limita a preguntar si la entrada sobrevivió al filtro: una sola fuente para las dos cosas.
   // Antes eran dos expresiones distintas de la misma regla, aquí mismo, y podían separarse.
-  const verPropuestas = menu.areas.some(a => a.id === 'disa' && a.todos.some(i => i.key === 'propuestas'));
-  const disaBadge = verPropuestas
+  const verPropuestas = menu.areas.some(a => a.id === 'propuestas' && a.todos.some(i => i.key === 'propuestas'));
+  const badgePropuestas = verPropuestas
     ? `<span class="rail-count" id="propCount"${propuestasPend ? '' : ' style="display:none"'}>${propuestasPend || ''}</span>`
     : '';
-  const ctxRail = { active, anclado, disaBadge };
+  const ctxRail = { active, anclado, badgePropuestas };
   // ¿Ha tocado algo este usuario? Decide si el rail enseña «Restablecer mi menú».
   let hayPref = false;
   try { if (_dbNav && session.userId) hayPref = tienePref(_dbNav, session.userId); } catch { hayPref = false; }
@@ -441,7 +443,7 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
   <link rel="stylesheet" href="/public/vendor/tabler/tabler-icons.min.css">
   <script nonce="${c?.get?.('cspNonce') || ''}">
     window.CSRF_TOKEN="${csrfToken}";
-    // ⛔ IA APAGADA (Ibrahin, 6 sep 2026). Se declara en el armazón porque la burbuja de DISA se
+    // ⛔ IA APAGADA (Ibrahin, 6 sep 2026). Se declara en el armazón porque el asistente se
     // monta en TODAS las pantallas del panel: así lo sabe al abrirse y lo dice, en vez de dejar
     // que alguien escriba una pregunta para enterarse. El valor sale de core/llm.js, no de una
     // copia: si un día se vuelve a encender, esto se entera solo.
@@ -631,8 +633,8 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
     function toast(msg,type='ok'){
       const t=document.createElement('div');
       const styles={ok:'background:#E4F6EA;border:1px solid #CDE8D8;color:#157F3B',err:'background:#FBE3E3;border:1px solid #F0CFCC;color:#C0392B',warn:'background:#FBEED0;border:1px solid #EBDDB7;color:#8A5B00'};
-      // FICHA D-bis — EL AVISO SALIA DEBAJO DEL BOTON FLOTANTE DE DISA y se leia a medias. Medido:
-      // el aviso estaba en bottom/right 24px con z-index 9999, y #disaFab en bottom/right 24px con
+      // FICHA D-bis — EL AVISO SALIA DEBAJO DEL BOTON FLOTANTE y se leia a medias. Medido:
+      // el aviso estaba en bottom/right 24px con z-index 9999, y el boton en bottom/right 24px con
       // z-index 99999 — el MISMO rincon y el aviso por debajo. En la captura se leia «Informe guar».
       // Se arregla por los dos lados: se sube por encima de la burbuja (88px, que es su alto mas su
       // margen) Y se le da mas z-index, porque la burbuja se puede ARRASTRAR y el hueco no basta.
@@ -703,9 +705,9 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
       if(m)m.style.display='flex';
     };
     // ── Patrón por pantalla (DISEÑO §6) — helpers compartidos ──
-    // Banda de DISA: aviso calmado con UN enlace de acción ("Revisar →"). text ya viene escapado.
-    window.disaBand=function(text,href,cta){
-      return '<div class="disa-band"><span class="db-ic"><i class="ti ti-sparkles"></i></span>'
+    // Banda de aviso: calmada, con UN enlace de acción ("Revisar →"). text ya viene escapado.
+    window.bandaAviso=function(text,href,cta){
+      return '<div class="banda-aviso"><span class="db-ic"><i class="ti ti-bell"></i></span>'
         +'<span class="db-tx">'+text+'</span>'
         +(href?'<a class="db-cta" href="'+href+'">'+(cta||'Revisar')+' →</a>':'')+'</div>';
     };
@@ -857,9 +859,9 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
         if(!d) return;
         cerrar();
         if(d.href){ location.href=d.href; return; }
-        // «Hablar con DISA» no es una pantalla: es el chat flotante de siempre. Se abre igual que desde
+        // 7 SEP 2026 (paso 1) — aqui se abria el chat flotante. Esa entrada ya no existe en el menu.
         // el menú —sin hilo nuevo y sin duplicar el widget—, no se navega a ningún sitio.
-        if(window.disaOpen){ window.disaOpen(); } else { location.href='/admin/disa'; }
+
       }
       inp.addEventListener('input',function(){
         wrap.classList.toggle('busca',!!inp.value);
@@ -1091,14 +1093,14 @@ ${ROOT_TOKENS}
     .sidebar:hover,.sidebar.flyopen{width:240px;box-shadow:6px 0 24px rgba(16,24,40,.10)}
     .sidebar::-webkit-scrollbar{width:6px}
     .sidebar::-webkit-scrollbar-thumb{background:rgba(0,0,0,.12);border-radius:6px}
-    /* DISA fija arriba — la marca y el Inicio. YA NO lleva contador de avisos: la única señal
+    /* Marca fija arriba — el Inicio. YA NO lleva contador de avisos: la única señal
        de avisos de todo el chrome es la campana del topbar (una sola cosa que mirar). */
-    .disa-pin{position:relative;display:flex;align-items:center;justify-content:center;gap:0;height:50px;flex-shrink:0;color:var(--brand);text-decoration:none;overflow:hidden}
-    .sidebar:hover .disa-pin,.sidebar.flyopen .disa-pin{justify-content:flex-start;gap:12px;padding-left:1.05rem}
-    .disa-pin i.ti{font-size:22px;line-height:1;flex-shrink:0}
-    .disa-pin:hover{color:var(--accent-d)}
-    .disa-pin.active i.ti{color:var(--accent)}
-    .disa-pin .nav-label{font-weight:600;color:var(--text)}
+    .pin-inicio{position:relative;display:flex;align-items:center;justify-content:center;gap:0;height:50px;flex-shrink:0;color:var(--brand);text-decoration:none;overflow:hidden}
+    .sidebar:hover .pin-inicio,.sidebar.flyopen .pin-inicio{justify-content:flex-start;gap:12px;padding-left:1.05rem}
+    .pin-inicio i.ti{font-size:22px;line-height:1;flex-shrink:0}
+    .pin-inicio:hover{color:var(--accent-d)}
+    .pin-inicio.active i.ti{color:var(--accent)}
+    .pin-inicio .nav-label{font-weight:600;color:var(--text)}
     .sb-nav{flex:1;padding:.4rem .5rem .6rem;display:flex;flex-direction:column;gap:3px;overflow-x:hidden}
     .rail-spacer{flex:1;min-height:8px}
     .navg{position:relative}
@@ -1113,7 +1115,7 @@ ${ROOT_TOKENS}
     .nav-item.active .nav-label{font-weight:600}
     .nav-chev{margin-left:auto;font-size:14px!important;opacity:0;transition:opacity .12s}
     .sidebar:hover .nav-chev,.sidebar.flyopen .nav-chev{opacity:.45}
-    /* Badge de Propuestas pendientes, pegado al icono de DISA (mismo patrón que el contador
+    /* Badge de Propuestas pendientes, pegado a su icono (mismo patrón que el contador
        del topbar que sustituye: círculo rojo pequeño sobre la esquina del icono). */
     .rail-ic{position:relative;display:inline-flex;flex-shrink:0}
     .rail-count{position:absolute;top:-7px;right:-9px;min-width:15px;height:15px;padding:0 3px;border-radius:8px;background:#DC2626;color:#fff;font-size:9px;font-weight:700;line-height:15px;text-align:center;pointer-events:none}
@@ -1284,7 +1286,7 @@ ${ROOT_TOKENS}
     .docpanel .dp-actions .btn{justify-content:center;width:100%}
     @media(max-width:980px){.docwrap{flex-direction:column}.docpanel{width:100%;position:static}}
     @media print{
-      .sidebar,.topbar,.docpanel,#disaFab,#disaPanel,.disa-fab{display:none!important}
+      .sidebar,.topbar,.docpanel{display:none!important}
       .wrap{margin-left:0!important}.content{padding:0!important}
       .docwrap{display:block}
       .docpaper{border:none;box-shadow:none;border-radius:0;padding:0;max-width:820px;margin:auto}
@@ -1414,13 +1416,13 @@ ${ROOT_TOKENS}
     .alert-info{background:var(--info-s);color:var(--info);border:1px solid #BAE6FD}
 
     /* ── Patrón por pantalla (DISEÑO §6) ─────────────────────────────────────────────
-       Banda de DISA: aviso CALMADO con tinte azul claro y UN solo enlace de acción
+       Banda de aviso: CALMADA con tinte azul claro y UN solo enlace de acción
        (nunca un grupo de botones). Menú "···": recoge las acciones secundarias de fila. */
-    .disa-band{display:flex;align-items:center;gap:12px;background:var(--accent-soft);border:1px solid #CFE0FF;border-radius:var(--radius-lg);padding:11px 15px;margin-bottom:1.25rem;font-size:.86rem;color:var(--text)}
-    .disa-band .db-ic{color:var(--accent);font-size:18px;flex-shrink:0;display:flex;line-height:1}
-    .disa-band .db-tx{flex:1;min-width:0}
-    .disa-band .db-cta{color:var(--accent);font-weight:600;text-decoration:none;white-space:nowrap;font-size:.85rem;flex-shrink:0}
-    .disa-band .db-cta:hover{text-decoration:underline}
+    .banda-aviso{display:flex;align-items:center;gap:12px;background:var(--accent-soft);border:1px solid #CFE0FF;border-radius:var(--radius-lg);padding:11px 15px;margin-bottom:1.25rem;font-size:.86rem;color:var(--text)}
+    .banda-aviso .db-ic{color:var(--accent);font-size:18px;flex-shrink:0;display:flex;line-height:1}
+    .banda-aviso .db-tx{flex:1;min-width:0}
+    .banda-aviso .db-cta{color:var(--accent);font-weight:600;text-decoration:none;white-space:nowrap;font-size:.85rem;flex-shrink:0}
+    .banda-aviso .db-cta:hover{text-decoration:underline}
     .rmenu{position:relative;display:inline-block}
     .rmenu-btn{background:none;border:1px solid var(--border2);border-radius:8px;cursor:pointer;color:var(--text2);font-size:1rem;line-height:1;padding:.2rem .5rem;font-family:inherit;transition:background .12s,border-color .12s}
     .rmenu-btn:hover{background:var(--bg3);border-color:var(--text3);color:var(--text)}
@@ -1432,7 +1434,7 @@ ${ROOT_TOKENS}
     .rmenu-item.danger{color:var(--danger)}
     .rmenu-item.danger:hover{background:var(--danger-s)}
 
-    /* ── Estado VACÍO (U2) — voz de DISA: icono sutil + frase + acción opcional.
+    /* ── Estado VACÍO (U2): icono sutil + frase + acción opcional.
        Reutiliza tokens (--accent-soft/--accent, --ok-s/--ok) y el botón .btn-primary. ── */
     .empty{display:flex;flex-direction:column;align-items:center;text-align:center;gap:.55rem;padding:2.75rem 1.5rem;color:var(--text2)}
     .empty-ic{width:42px;height:42px;border-radius:12px;background:var(--accent-soft);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:21px;line-height:1;flex-shrink:0}
@@ -1480,7 +1482,7 @@ ${ROOT_TOKENS}
          entradas. Aquí se ata a la fila del área. (En escritorio no pasa: el flyout es fixed y
          no cuenta para el alto del .navg.) */
       .sidebar.open .nav-pin{top:10px;transform:none}
-      /* Pantallas a pantalla completa (el chat de DISA): el contenido RELLENA el hueco bajo el
+      /* Pantallas a pantalla completa: el contenido RELLENA el hueco bajo el
          topbar con flexbox, sin restar una altura fija de topbar → el compositor queda siempre a la
          vista, sin scroll, sea cual sea el alto real del topbar o del navegador móvil. */
       .content-flush{padding:0;display:flex;flex-direction:column;overflow:hidden;min-height:0}
@@ -1495,9 +1497,9 @@ ${ROOT_TOKENS}
       .sidebar.open,.sidebar.open.flyopen{transform:translateX(0);width:280px;box-shadow:8px 0 30px rgba(16,24,40,.22)}
       /* Con el drawer abierto se muestran los nombres (en táctil no hay hover que los despliegue) */
       .sidebar.open .nav-label{opacity:1;max-width:200px}
-      .sidebar.open .nav-item,.sidebar.open .disa-pin{justify-content:flex-start;gap:12px}
+      .sidebar.open .nav-item,.sidebar.open .pin-inicio{justify-content:flex-start;gap:12px}
       .sidebar.open .nav-item{padding-left:.7rem}
-      .sidebar.open .disa-pin{padding-left:1.05rem}
+      .sidebar.open .pin-inicio{padding-left:1.05rem}
       .sidebar.open .nav-chev{opacity:.45}
       /* Submenús: en acordeón INLINE dentro del drawer (no popovers flotantes que se saldrían) */
       .sidebar.open .flyout{position:static;min-width:0;width:auto;box-shadow:none;border:none;background:transparent;padding:2px 0 6px 24px;z-index:auto;top:auto!important;left:auto!important}
@@ -1506,8 +1508,6 @@ ${ROOT_TOKENS}
       .wrap{margin-left:0;min-width:0}
       .content{min-width:0}
       .acct-meta{display:none}
-      #disaFab{bottom:16px;right:16px}
-      #disaPanel{width:calc(100vw - 24px);right:12px;bottom:80px}
       .g4{grid-template-columns:repeat(2,1fr)}
       .g3{grid-template-columns:repeat(2,1fr)}
       .g2{grid-template-columns:1fr}
@@ -1523,7 +1523,7 @@ ${ROOT_TOKENS}
 </head>
 <body>
   <aside class="sidebar">
-    <a href="${fijaPin.href}" class="disa-pin${active === fijaPin.key ? ' active' : ''}" title="${escHtml(fijaPin.label)}">
+    <a href="${fijaPin.href}" class="pin-inicio${active === fijaPin.key ? ' active' : ''}" title="${escHtml(fijaPin.label)}">
       <i class="ti ${fijaPin.icon}"></i>
       <span class="nav-label">${escHtml(fijaPin.label)}</span>
     </a>
@@ -1567,7 +1567,7 @@ ${ROOT_TOKENS}
         <div class="acct-menu" id="acctMenu">${acctMenuHTML}</div>
       </div>
     </div>
-    <main class="content${active === 'disa' ? ' content-flush' : ''}">${roBanner}${content}</main>
+    <main class="content">${roBanner}${content}</main>
   </div>
   <script nonce="${c?.get?.('cspNonce') || ''}">
     // ── 4 SEP 2026 (csp-erp-migrar-handlers) — UN SOLO OYENTE PARA TODO EL ARMAZON ────────────────
@@ -1600,8 +1600,7 @@ ${ROOT_TOKENS}
         case 'bell':           window.toggleBell&&window.toggleBell(e); break;
         case 'bell-all':       window.bellMarcarTodos&&window.bellMarcarTodos(e); break;
         case 'acct':           window.toggleAcct&&window.toggleAcct(e); break;
-        case 'disa-abrir':     { if(window.closeFly)window.closeFly();
-                                 if(window.disaOpen){window.disaOpen();} else {location.href='/admin/disa';} break; }
+        /* 7 SEP 2026 (paso 1) — retirada la accion que abria el chat flotante. */
         case 'navfly':         { var g=el.closest('[data-navg]'); if(g&&window.toggleFly)window.toggleFly(g); break; }
         case 'rowmenu':        window.toggleRowMenu&&window.toggleRowMenu(el); break;
         case 'menu-reset':     window.menuRestablecer&&window.menuRestablecer(); break;
@@ -1674,13 +1673,13 @@ ${ROOT_TOKENS}
     };
     var _bellCargado=false;
     // D5 — el panel de Propuestas llama a esto tras cada acción para que el badge (ahora sobre el
-    // icono de DISA del riel) cuadre sin recargar. Solo actualiza el número visible; no reescanea cobros.
+    // icono de Propuestas del riel) cuadre sin recargar. Solo actualiza el número visible; no reescanea cobros.
     window.propBadgeSync=function(n){
       var el=document.getElementById('propCount'); if(!el) return;
       if(n>0){ el.textContent=String(n); el.style.display=''; }
       else { el.textContent=''; el.style.display='none'; }
-      var b=document.getElementById('disaRailBtn');
-      if(b) b.title='DISA'+(n>0?(' — '+n+' propuesta'+(n===1?'':'s')+' pendiente'+(n===1?'':'s')):'');
+      var b=document.getElementById('railPropuestasBtn');
+      if(b) b.title='Propuestas'+(n>0?(' — '+n+' pendiente'+(n===1?'':'s')):'');
     };
     function bellPinta(d){
       var list=document.getElementById('bellList');
@@ -1799,7 +1798,7 @@ ${ROOT_TOKENS}
   </script>
   
 
-${hideDisaSidebar ? '' : getDisaWidget(c?.get?.('cspNonce') || '')}
+<!-- 7 SEP 2026 — aqui iba el boton flotante del asistente. No se oculta: no se pinta. -->
   <div id="accessDeniedModal" style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.6);z-index:99999;align-items:center;justify-content:center">
     <div style="background:#FFFFFF;border:1px solid #EDEFF2;border-radius:13px;padding:32px;text-align:center;max-width:380px;box-shadow:0 30px 80px rgba(16,24,40,.18)">
       <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#A6453F" stroke-width="2" style="margin-bottom:16px"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>

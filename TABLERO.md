@@ -9195,6 +9195,118 @@ ejecutar el guion al final, cuando le venga bien, y guardar la llave que le ense
 
 ---
 
+## FUERA DE LOS BLOQUES — SACAR DISA DEL PRODUCTO
+
+> Va aquí, y no dentro de un bloque, a propósito: **no es seguridad ni infraestructura**, es quitar
+> una función del producto. Nace de la decisión de Ibrahin del 6 sep 2026 —*«Bamburu deja de usar IA.
+> DISA sale del producto»*— y es la continuación de `apagar-disa-paso-1`, que apagó las llamadas y
+> dejó dicho que **borrar no es apagar** y que el borrado iría con su propio encargo.
+
+## TAREA — Sacar DISA del producto · PASO 1: que no se vea
+
+- **id:** sacar-disa-paso-1-invisible
+- **estado:** ✅ HECHA — 7 sep 2026 (tarde)
+- **origen:** encargo de Ibrahin, 7 sep 2026 · decisión del 6 sep 2026
+
+> ⏱️ **ESTA FICHA ESTUVO SIN ENCARGAR DESPUÉS DE TOMARSE LA DECISIÓN, y queda escrito por orden de
+> Ibrahin.**
+>
+> **Lo que dice el registro, medido:** la decisión está fechada el **6 sep 2026** (`TABLERO.md`, ficha
+> `apagar-disa-paso-1`: *«DECISIÓN DE IBRAHIN, 6 SEP 2026: Bamburu deja de usar IA. DISA sale del
+> producto»*), y el encargo de sacarla de la vista llegó el **7 sep 2026**. Contra el registro, eso
+> es **un día**.
+>
+> ⚠️ **Ibrahin lo cifró en TRES días, y no se cambia su palabra por la mía.** Puede que su cuenta
+> arranque de una decisión anterior a la que se anotó el 6, y esa conversación no está en el
+> repositorio. **Se deja escrito lo que dice el registro Y lo que dice él, sin elegir el que
+> conviene** — que es lo que manda este documento cuando dos cifras no cuadran. Si su cuenta es la
+> buena, lo que falla es el registro: la decisión se anotó tarde.
+>
+> **Y lo que importa de esto no es el número, sino el hueco:** entre apagar la IA y quitarla de la
+> vista, el panel siguió enseñando la burbuja, el chat y la palabra DISA en **76 de 79 pantallas**,
+> con la IA ya apagada. Quien entrara veía un asistente que no podía contestar.
+
+### Lo que se ha hecho, medido antes y después
+
+Recorriendo el panel **pantalla por pantalla, con sesión**, sobre el HTML que sale del servidor
+(`scripts/gate-disa-fuera-de-la-vista.mjs` lo repite entero):
+
+| | Antes | Después |
+|---|---|---|
+| Pantallas con rastro visible de DISA | **76 de 79** | **0 de 74** |
+| Rastros en total | **4.688** | **0** |
+| Pantallas limpias | 3 | **74** |
+
+**Qué se ha quitado, no ocultado:**
+
+- **La burbuja y su panel.** `modules/erp/layout.js` ya no importa ni llama a `getDisaWidget`: el
+  botón flotante, su panel y su JavaScript **no llegan al navegador**. No hay `display:none`.
+- **La entrada del menú.** El grupo del riel se llamaba «DISA» y tenía dos entradas: «Propuestas» y
+  «Hablar con DISA». **El chat se fue; el grupo se llama ahora «Propuestas»**, que es lo que de
+  verdad contiene. Y «Vigía (DISA)» pasa a «Vigía».
+- **La pantalla del chat.** `/admin/disa` y **todo lo que colgaba de él** (`/agents`, `/threads`,
+  `/chips`, `/summary`…) mandan al panel. Se hace registrando la redirección ANTES del montaje
+  —en Hono manda el orden— **sin borrar una línea**, porque borrar es el paso 2.
+- **Los textos.** «Asistente IA», «DISA prepara…», «DISA te recordará…», «Propuestas de DISA»,
+  «Pregunta a DISA», «DISA decide», «DISA no inventa»… todos reescritos sin la palabra.
+- **Dos botones que abrían el chat:** «Preguntar a DISA cómo» de la ficha de cliente (con su bloque
+  de preguntas preparadas) y la acción `disa-abrir` del despachador del armazón.
+- **Los nombres internos que se veían en el código servido:** `disaBand` → `bandaAviso`,
+  `.disa-band` → `.banda-aviso`, `.disa-pin` → `.pin-inicio` (¡que era el pin de **Inicio**!),
+  `--border-disa` → `--border-suave`, `disaRailBtn` → `railPropuestasBtn`, `.onb-disa` → `.onb-paso`.
+
+### ⛔ LO QUE NO SE HA TOCADO, Y SIGUE FUNCIONANDO — comprobado
+
+**Avisos, propuestas, recordatorios de impago, reposición de stock y facturas recurrentes.** Se
+llamaban «Propuestas de DISA» y **nunca fueron IA**: los hace el cálculo de siempre. **No se ha
+cambiado ni una línea de lógica** — el diff de `propuestas.js` son 12 líneas y las 12 son texto.
+Comprobado respondiendo: Propuestas, Avisos, Recurrentes, el Vigía y el contador del badge.
+
+### 🚨 LA TRAMPA DEL PASO 2, Y ES SERIA
+
+**La tabla de las propuestas se llama `disa_proposals`.** Tiene **86 filas repartidas por los
+negocios** y la leen `reposicion.js`, `propuestas.js` y `calendario-fiscal.js` — o sea, **justo las
+funciones que Ibrahin dijo que no se tocan**.
+
+**Un borrado de «las tablas de DISA» por el prefijo se llevaría por delante los recordatorios de
+impago, la reposición de stock y los avisos fiscales de todos los negocios.** Quien haga el paso 2
+tiene que separar a mano: `disa_conversations`, `disa_conversation_threads`, `disa_agents`,
+`disa_agent_instructions`, `disa_quick_chips`, `disa_usage`, `disa_spend` y `disa_profile` son del
+chat; **`disa_proposals` NO**. Y la regla de esta casa manda archivar, no destruir.
+
+### El gate
+
+**`gate-disa-fuera-de-la-vista`** (RAPIDO + infra, **20 ✓ · 0 ✗**), en tres partes:
+recorre el panel entero sobre el HTML servido · **PULSA en un navegador de verdad** (no hay botón
+flotante en el DOM, el riel no nombra a DISA, se pulsa el grupo Propuestas y el clic lleva a su
+pantalla, cero errores de navegador) · y comprueba que lo intocable sigue en pie, incluida la tabla
+`disa_proposals`. **Rojo provocado:** al detector se le da una página *como era antes* y tiene que
+cazar las cinco familias de rastro; si alguien afloja los patrones, cae.
+
+### Lo que queda para el PASO 2 (borrar el código)
+
+- `modules/disa/` entero (índice, widget, worker de consultas…) y `core/llm.js`.
+- Las rutas `/api/disa/*` y el montaje de `/admin/disa`.
+- Las tablas del chat (la lista de arriba), **archivando, no destruyendo**, y **sin tocar
+  `disa_proposals`**.
+- **El constructor de tienda** (`modules/erp/routes/settings.js`, ~líneas 1372-1799): tiene dentro
+  una pestaña «✦ DISA construye» con su chat. **Hoy no se sirve** —su montaje está comentado en
+  `modules/erp/routes/index.js:164`— así que no es un rastro visible, pero si alguien descomenta esa
+  línea, DISA reaparece. Va con el paso 2.
+- Los nombres de agente sembrados en `modules/erp/models.js` (`DISA Administración`, `DISA Ventas`,
+  `DISA Web`, `DISA Finanzas`).
+
+## TAREA — Sacar DISA del producto · PASO 2: borrar el código
+
+- **id:** sacar-disa-paso-2-borrado
+- **estado:** pendiente
+- **origen:** encargo de Ibrahin, 7 sep 2026
+
+Rutas, servicios, ficheros y tablas de DISA. **Leer antes la trampa de `disa_proposals` de la ficha
+de arriba**, y la lista de lo que queda. Archivar, no destruir.
+
+---
+
 ## BLOQUE 1 — QUE BAMBURU PUEDA COBRAR
 
 > **Sin esto es una demostración, no un producto.** Hoy no existe ninguna forma de cobrarle a un

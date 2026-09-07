@@ -167,7 +167,7 @@ export function aprobarReposicionSvc(db, proposalId, quien, opts = {}) {
   const today = opts.today || new Date().toISOString().slice(0, 10);
   const poId = Number(createPurchaseOrderSvc(db, {
     supplier_id: p.supplier_id, date: today,
-    notes: 'Borrador preparado por DISA (reposición de stock bajo mínimo). Revísalo y envíalo tú.',
+    notes: 'Borrador preparado por Bamburu (reposición de stock bajo mínimo). Revísalo y envíalo tú.',
     items: lineas.map(l => ({ product_id: l.product_id, quantity: l.quantity, unit_cost: l.unit_cost })),
   }));
   db.prepare("UPDATE disa_proposals SET status='aprobada', resolved_at=?, resolved_by=?, repo_po_id=? WHERE id=?")

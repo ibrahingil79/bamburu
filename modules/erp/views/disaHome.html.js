@@ -11,7 +11,7 @@
 //   3. GRÁFICO PRINCIPAL .... ventas por día del mes, con el mes anterior detrás en gris.
 //   4. TU NEGOCIO EN CIFRAS . lo que más vendes · lo que más te deja · tus mejores clientes.
 //   5. OPORTUNIDADES ........ cuántas y por cuánto, con su enlace.
-//   6. DISA DECIDE .......... tres líneas como mucho, con la cifra delante y su botón.
+//   6. QUÉ MIRAR HOY ....... tres líneas como mucho, con la cifra delante y su botón.
 //   7. PON EN MARCHA ........ el panel de arranque, plegado en una línea (se recuerda por usuario).
 //   8. TUS PANELES .......... la rejilla componible del paso 6, que sigue viva con su paleta.
 //
@@ -121,7 +121,7 @@ export function disaHomeHtml({ userName, simbolo = '€', nonce = '' }) {
       .cm-oport .big { font-size: 16px; font-weight: 700; color: var(--text); }
       .cm-oport .cta { margin-left: auto; font-size: 12.5px; color: var(--accent); font-weight: 600; white-space: nowrap; }
 
-      /* ── DISA DECIDE: máximo tres líneas, cifra delante y botón ─────────────────────────────── */
+      /* ── QUÉ MIRAR HOY: máximo tres líneas, cifra delante y botón ─────────────────────────────── */
       .cm-dec { display: flex; align-items: center; gap: 10px; padding: 10px 0;
         border-top: 1px solid var(--border); min-width: 0; flex-wrap: wrap; }
       .cm-dec.primera { border-top: none; }
@@ -240,7 +240,7 @@ export function disaHomeHtml({ userName, simbolo = '€', nonce = '' }) {
       .ig-chip i { font-size: 13px; color: var(--accent); }
       @media (max-width: 900px) { .ig-grid { grid-template-columns: repeat(2, 1fr); } .ig-block.w3, .ig-block.w4 { grid-column: span 2; } }
       /* ── U6 · Onboarding — "Configura tu negocio" (nivel Stripe/Shopify): anillo de progreso +
-         timeline de pasos con iconos; el paso ACTUAL desplegado con la guía de DISA + su acción;
+         timeline de pasos con iconos; el paso ACTUAL desplegado con su guía + su acción;
          los hechos y los futuros plegados. Reutiliza los tokens de la app. ── */
       .onb-card { background: var(--bg2); border: 1px solid var(--border2); border-radius: 16px; padding: 20px 20px 8px; margin-bottom: 18px; box-shadow: 0 1px 3px rgba(16,24,40,.05); animation: onb-in .5s cubic-bezier(.2,.7,.3,1) both; }
       @keyframes onb-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
@@ -253,8 +253,8 @@ export function disaHomeHtml({ userName, simbolo = '€', nonce = '' }) {
       .onb-ring-n i { font-style: normal; font-size: 10px; font-weight: 600; color: var(--text3); margin-left: 1px; }
       .onb-title { font-size: 16px; font-weight: 700; margin: 0; letter-spacing: -.2px; color: var(--text); }
       .onb-sub { font-size: 13px; color: var(--text2); margin: 3px 0 0; }
-      .onb-disa { display: flex; gap: 10px; align-items: flex-start; margin: 15px 0 8px; padding: 11px 13px; background: var(--accent-soft); border: 1px solid #cfe0ff; border-radius: 11px; font-size: 12.75px; line-height: 1.5; color: var(--text); }
-      .onb-disa-ic { color: var(--accent); font-size: 16px; flex-shrink: 0; display: flex; margin-top: 1px; }
+      .onb-paso { display: flex; gap: 10px; align-items: flex-start; margin: 15px 0 8px; padding: 11px 13px; background: var(--accent-soft); border: 1px solid #cfe0ff; border-radius: 11px; font-size: 12.75px; line-height: 1.5; color: var(--text); }
+      .onb-paso-ic { color: var(--accent); font-size: 16px; flex-shrink: 0; display: flex; margin-top: 1px; }
       /* Timeline */
       .onb-steps { position: relative; padding: 4px 0; }
       .onb-step { position: relative; display: flex; gap: 14px; padding: 8px 0; text-decoration: none; }
@@ -655,7 +655,7 @@ export function disaHomeHtml({ userName, simbolo = '€', nonce = '' }) {
             + '<span class="cta">Ver el embudo →</span></a>';
         }
 
-        // ── DISA DECIDE ─────────────────────────────────────────────────────────────────────────
+        // ── QUÉ MIRAR HOY ─────────────────────────────────────────────────────────────────────────
         // Tres líneas como mucho, con la cifra YA CALCULADA delante (la del vigía, sin recalcular) y
         // el botón que lleva a donde se resuelve. Sin nada que recomendar, el bloque NO APARECE.
         //
@@ -666,7 +666,7 @@ export function disaHomeHtml({ userName, simbolo = '€', nonce = '' }) {
           if (!d || !d.lineas || !d.lineas.length) { box.innerHTML = ''; return; }
           var col = { alta: ['var(--danger-s)', 'var(--danger)'], media: ['var(--warn-s)', 'var(--warn)'], baja: ['var(--bg3)', 'var(--text3)'] };
           box.innerHTML = '<div class="cm-card">'
-            + '<p class="cm-h"><i class="ti ti-sparkles"></i>DISA decide</p>'
+            + '<p class="cm-h"><i class="ti ti-bulb"></i>Qué mirar hoy</p>'
             + d.lineas.map(function(l, i){
                 var c = col[l.prioridad] || col.media;
                 var partes = [];
@@ -814,7 +814,7 @@ export function disaHomeHtml({ userName, simbolo = '€', nonce = '' }) {
           .catch(function(){});
       })();
 
-      // ── PASO 6 · INICIO PERSONALIZABLE — la rejilla componible. El vigía de DISA (pieza 5), las cifras
+      // ── PASO 6 · INICIO PERSONALIZABLE — la rejilla componible. El vigía (pieza 5), las cifras
       // y los avisos son ahora BLOQUES colocables; se suman los paneles guardados del constructor. La
       // cascada (usuario > empresa > fábrica) y los permisos los resuelve el servidor; el gráfico de un
       // panel se pinta reutilizando el MOTOR del constructor (/constructor/cruzar + Chart.js). Solo se
@@ -887,7 +887,7 @@ export function disaHomeHtml({ userName, simbolo = '€', nonce = '' }) {
           else if (b.tipo === 'kpis'){ titulo = 'Cifras del negocio'; icon = 'ti-layout-dashboard'; }
           else if (b.tipo === 'hoy'){ titulo = 'Hoy en la agenda'; icon = 'ti-calendar-event'; }
           else if (b.tipo === 'avisos'){ titulo = 'Avisos pendientes'; icon = 'ti-bell'; }
-          else if (b.tipo === 'vigia'){ titulo = 'Vigía de DISA'; icon = 'ti-radar'; }
+          else if (b.tipo === 'vigia'){ titulo = 'Vigía';           icon = 'ti-radar'; }
           else { titulo = b.tipo; icon = 'ti-square'; }
           var tools = '<span class="ig-block-tools">'
             + tool(b._uid, 'w', -1, '‹') + tool(b._uid, 'w', 1, '›') + tool(b._uid, 'h', -1, '–') + tool(b._uid, 'h', 1, '+')

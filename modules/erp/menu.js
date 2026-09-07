@@ -83,7 +83,7 @@ export const NAV_PERMS = {
   'citas-publica':  'citas.edit',   // peldaño 7 · PIEZA 6 · mandos de la puerta pública de reserva
   analytics:        'analytics.read',
   vigia:            'analytics.read',   // DISA predictiva · el vigía (dentro filtra por detector)
-  disa:             null,
+  propuestas:       null,
   perfil:           null,   // todo usuario gestiona su propio perfil
   users:            'admin.manage_users',
   settings:         'admin.settings',
@@ -158,18 +158,18 @@ export const ROLE_FILTERS = {
 // pinta como UNA lista, sin rótulo: dos carteles para separar tres cosas de una es más cartel que menú.
 // La marca se conserva igual, para que el día que esa área tenga tres ajustes el bloque aparezca solo.
 export const MENU = [
-  // DISA — 1er grupo del rail. Estaba escrito a mano en layout.js, fuera de esta lista: por eso sus
-  // dos entradas no existían para nadie más. Ahora vive aquí y el buscador y las anclas las ven.
+  // PROPUESTAS — 1er grupo del rail.
+  //
+  // ⚙️ 7 SEP 2026 (`sacar-disa-del-producto`, paso 1) — **ESTE GRUPO SE LLAMABA «DISA»** y tenía dos
+  // entradas: «Propuestas» y «Hablar con DISA», que abría el chat flotante. **El chat se ha ido** y
+  // el grupo se llama por lo que de verdad contiene. **Lo que hay dentro NO es inteligencia
+  // artificial y nunca lo fue**: los recordatorios de impago, la reposición de stock, las facturas
+  // recurrentes, los avisos fiscales y los clientes dormidos los calcula el motor de siempre. Por
+  // eso la lógica no se toca ni una línea — solo el nombre, que confundía.
   // OJO: su candado NO es `NAV_PERMS`; es un O de tres permisos con semántica `can()`. Ver `permAlguno`.
-  { id: 'disa', label: 'DISA', icon: 'ti-sparkles', items: [
+  { id: 'propuestas', label: 'Propuestas', icon: 'ti-checklist', items: [
     { href: '/admin/propuestas', label: 'Propuestas', key: 'propuestas', icon: 'ti-checklist',
       permAlguno: ['invoices.read', 'cobros.read', 'purchases.read'] },
-    // Sin ruta: abre el MISMO chat flotante de siempre. Se puede BUSCAR (Enter lo abre), no se puede
-    // anclar —el rail ancla destinos, y esto no es un destino.
-    { label: 'Hablar con DISA', key: 'disa-chat', icon: 'ti-message-2',
-      // 4 SEP 2026 (csp-erp-migrar-handlers) — ya no viaja codigo, viaja un NOMBRE. Lo despacha el
-      // oyente unico del armazon (layout.js). Un nonce no cubre el codigo escrito en un atributo.
-      accion: 'disa-abrir' },
   ]},
   { id: 'ventas', label: 'Ventas', icon: 'ti-shopping-cart', items: [
     { href: '/admin/invoices', label: 'Facturas', key: 'invoices', icon: 'ti-file-invoice' },
@@ -299,7 +299,7 @@ export const MENU = [
     { href: '/admin/analytics', label: 'Informes', key: 'analytics', icon: 'ti-report-analytics' },
     // Escalera · paso 5 — DISA predictiva. El vigía analiza sobre los motores del constructor; por
     // eso vive aquí, junto a Informes, y no en el rail de chat de DISA.
-    { href: '/admin/vigia', label: 'Vigía (DISA)', key: 'vigia', icon: 'ti-radar' },
+    { href: '/admin/vigia', label: 'Vigía', key: 'vigia', icon: 'ti-radar' },
   ]},
 ];
 
@@ -392,7 +392,7 @@ export const CONFIG_NEGOCIO = [
         desc: 'Qué te avisa Bamburu, cuándo, y a qué dirección llega el resumen del día.' },
       { href: '/admin/settings/situacion-fiscal', label: 'Mi situación fiscal', key: 'settings-fiscal', icon: 'ti-file-certificate',
         alias: ['Modelos', 'Hacienda', 'IVA', 'IRPF', '303', '130'],
-        desc: 'Qué declaras. De aquí salen los modelos que DISA te recuerda, y sus fechas.' },
+        desc: 'Qué declaras. De aquí salen los modelos que Bamburu te recuerda, y sus fechas.' },
     ],
   },
 ];
@@ -483,7 +483,7 @@ export const CUENTA = [
 //     entero. NO se arregla aquí — es otra tarea, y el encargo pide expresamente que el buscador
 //     herede el comportamiento del menú "ni mejor ni peor" para que ambos se arreglen a la vez.
 //
-// (2) `permAlguno`, la regla de DISA: un O de varios permisos con semántica `can()` —owner/admin pasan
+// (2) `permAlguno`, la regla de Propuestas: un O de varios permisos con semántica `can()` —owner/admin pasan
 //     siempre; el resto necesita AL MENOS UNO, tenga o no permisos propios. NO se puede meter en (1):
 //     con la regla (1), un empleado sin permisos vería «Propuestas», y hoy NO la ve. Son dos reglas
 //     distintas porque hoy ya lo son; unificarlas sería cambiar el comportamiento de tapadillo.
@@ -668,7 +668,8 @@ export function destinosBuscador(menu) {
 
 // Lo ANCLABLE de este usuario, indexado por clave. «Cualquier entrada del menú» es literal: entran
 // **las áreas del rail** (clave `area:<id>`) **y** las entradas de sus desplegables, más las fijas y
-// las de cuenta. Lo único que no entra es «Hablar con DISA»: no tiene ruta, y el bloque de anclados
+// las de cuenta. (Hasta el 7 sep 2026 quedaba fuera «Hablar con DISA», que no tenía ruta; esa
+// entrada ya no existe.) El bloque de anclados
 // ancla sitios a los que ir — se busca, no se ancla.
 //
 // Anclar un área NO la mueve, ni la renombra, ni la saca del rail: sigue en su sitio y en su orden.

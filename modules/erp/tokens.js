@@ -18,14 +18,14 @@ export const ROOT_TOKENS = `
                                  caían en el fallback oscuro #1e1e1e → nombre ilegible. */
       --border:    #EEEFF2;   /* separadores (DISEÑO §2.4) */
       --border2:   #E4E6EA;   /* bordes (DISEÑO §2.4) */
-      --border-disa: #D6DCE4; /* borde de la tarjeta de DISA (DISEÑO §2.2) */
+      --border-suave: #D6DCE4; /* borde de la tarjeta de aviso (DISEÑO §2.2) */
       --text:      #14161B;   /* texto principal (DISEÑO §2.3) */
       --text2:     #5C616B;   /* texto secundario (DISEÑO §2.3) */
       --text3:     #8A8F99;   /* texto tenue (DISEÑO §2.3) */
       --body-tx:   #3A3F48;   /* texto cuerpo (entre principal y secundario) */
       --accent:    #2F6BFF;   /* AZUL — acción principal y enlaces (DISEÑO §2.2, SUSTITUCIÓN 2) */
       --accent-d:  #2456D6;   /* azul fuerte / hover / activo */
-      --accent-soft:#E4EDFF;  /* fondo azul claro: item activo / avisos de DISA / chips */
+      --accent-soft:#E4EDFF;  /* fondo azul claro: item activo / avisos / chips */
       /* Acento morado SEMÁNTICO (IRPF/retención + stock reservado). No es acento de marca: es el
          tercer acento de dato que ya usaban documentos e inventario (U1, 2026-07-05). */
       --accent-purple: #9333EA;  --accent-purple-s: #F0EBFB;

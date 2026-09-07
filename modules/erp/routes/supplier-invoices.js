@@ -504,7 +504,7 @@ export function createSupplierInvoiceRoutes(db) {
       </div>
       <!-- C8 · los tres verbos. El listado imprime lo que la pantalla enseña, filtro incluido. -->
       <div style="margin:-.5rem 0 1rem">${botonesListado('gastos', supplierId ? 'proveedor_id=' + supplierId : '')}</div>
-      <div id="disaBand"></div>
+      <div id="bandaAviso"></div>
       ${supplierId ? `<div class="card" id="debtCard" style="margin-bottom:1rem;display:none"><div class="card-body" id="debtBox"></div></div>` : ''}
       <div class="card">
         <div class="card-head" style="gap:.5rem;flex-wrap:wrap"><h3>Documentos de deuda con proveedores</h3>
@@ -533,18 +533,18 @@ export function createSupplierInvoiceRoutes(db) {
       const ESTADO_LABEL = ${JSON.stringify(ESTADO_LABEL)};
       const ESTADO_BADGE = ${JSON.stringify(ESTADO_BADGE)};
       let rows = [];
-      // Banda de DISA (§6): aviso calmado de facturas de proveedor vencidas con UN enlace a Pagos.
-      function updateDisaBand(){
-        const el=document.getElementById('disaBand'); if(!el) return;
+      // Banda de aviso (§6): calmada, de facturas de proveedor vencidas con UN enlace a Pagos.
+      function actualizaBandaAviso(){
+        const el=document.getElementById('bandaAviso'); if(!el) return;
         const v=rows.filter(function(r){return r.status!=='anulada' && Number(r.pendiente||0)>0.0049 && Number(r.dias_vencida||0)>0;});
         if(!v.length){ el.innerHTML=''; return; }
         const eur=v.reduce(function(a,r){return a+Number(r.pendiente||0);},0);
         const txt='Tienes <strong>'+v.length+'</strong> factura'+(v.length===1?'':'s')+' de proveedor vencida'+(v.length===1?'':'s')+' ('+dineroEs(eur, SYM)+' pendiente de pago).';
-        el.innerHTML=window.disaBand(txt,'/admin/pagos','Revisar');
+        el.innerHTML=window.bandaAviso(txt,'/admin/pagos','Revisar');
       }
       async function loadList(){
         try { rows = await api('GET','/api/erp/supplier-invoices'+(SUPPLIER_ID?('?supplier='+SUPPLIER_ID):'')); } catch(e){ toast(e.message||'Error','err'); return; }
-        updateDisaBand();
+        actualizaBandaAviso();
         document.getElementById('siBody').innerHTML = rows.length ? rows.map(function(r){
           const badge = r.status==='anulada' ? '<span class="badge b-gray">Anulada</span>' : '<span class="badge '+(ESTADO_BADGE[r.estado]||'')+'">'+(ESTADO_LABEL[r.estado]||r.estado)+(r.dias_vencida>0?' · '+r.dias_vencida+'d':'')+'</span>';
           const pend = r.status==='anulada' ? '—' : dineroEs(r.pendiente||0, SYM);

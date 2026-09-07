@@ -536,8 +536,8 @@ export function createSettingsRoutes(db, cfg = {}) {
           </div>
           <div class="form-row">
             <div class="form-group"><label class="form-label">Retención de IRPF por defecto (%)</label><input class="form-control" type="number" id="cIrpfDefault" min="0" max="100" step="0.1"><small style="color:var(--text2);font-size:12px;margin-top:4px;display:block">Es tu retención como autónomo. Precarga la factura: clientes empresa/profesional la aplican; particulares, no. Puedes cambiarla en cada factura.</small></div>
-            <div class="form-group"><label class="form-label">Recordatorio de impago (días tras el vencimiento)</label><input class="form-control" type="number" id="cDiasImpago" min="0" max="365" step="1"><small style="color:var(--text2);font-size:12px;margin-top:4px;display:block">DISA prepara un borrador de recordatorio de pago cuando una factura de venta lleva vencida más días que este umbral. Por defecto 7. Los borradores aparecen en «Propuestas de DISA» para que los apruebes; nunca se envían solos.</small></div>
-            <div class="form-group"><label class="form-label">Aviso de pago a proveedor (días antes del vencimiento)</label><input class="form-control" type="number" id="cDiasPago" min="0" max="365" step="1"><small style="color:var(--text2);font-size:12px;margin-top:4px;display:block">DISA te propone registrar el pago de una factura de compra cuando le quedan menos días que este umbral para vencer. Por defecto 7. Las propuestas aparecen en «Propuestas de DISA»; nada se paga solo: tú apruebas.</small></div>
+            <div class="form-group"><label class="form-label">Recordatorio de impago (días tras el vencimiento)</label><input class="form-control" type="number" id="cDiasImpago" min="0" max="365" step="1"><small style="color:var(--text2);font-size:12px;margin-top:4px;display:block">Bamburu prepara un borrador de recordatorio de pago cuando una factura de venta lleva vencida más días que este umbral. Por defecto 7. Los borradores aparecen en «Propuestas» para que los apruebes; nunca se envían solos.</small></div>
+            <div class="form-group"><label class="form-label">Aviso de pago a proveedor (días antes del vencimiento)</label><input class="form-control" type="number" id="cDiasPago" min="0" max="365" step="1"><small style="color:var(--text2);font-size:12px;margin-top:4px;display:block">Bamburu te propone registrar el pago de una factura de compra cuando le quedan menos días que este umbral para vencer. Por defecto 7. Las propuestas aparecen en «Propuestas»; nada se paga solo: tú apruebas.</small></div>
           </div>
           <div class="form-row">
             <div class="form-group"><label class="form-label">Email</label><input class="form-control" type="email" id="cEmail"></div>
@@ -603,7 +603,7 @@ export function createSettingsRoutes(db, cfg = {}) {
       <div class="card" style="max-width:700px;margin-top:1rem">
         <div class="card-body">
           <h3 style="margin:0 0 .3rem;font-size:1rem">Situación fiscal</h3>
-          <p style="color:var(--text2);font-size:13px;margin:0 0 .8rem">Dinos qué presentas a Hacienda (IVA, IRPF, retenciones…) y DISA te recordará cada modelo antes de que venza. Nunca presenta nada por ti: te lo deja preparado para que lo revises.</p>
+          <p style="color:var(--text2);font-size:13px;margin:0 0 .8rem">Dinos qué presentas a Hacienda (IVA, IRPF, retenciones…) y Bamburu te recordará cada modelo antes de que venza. Nunca presenta nada por ti: te lo deja preparado para que lo revises.</p>
           <a class="btn btn-secondary" href="/admin/settings/situacion-fiscal"><i class="ti ti-calendar"></i> Declarar mi situación fiscal</a>
         </div>
       </div>
@@ -1256,8 +1256,8 @@ export function createSettingsRoutes(db, cfg = {}) {
       <div class="card" style="max-width:720px">
         <div class="card-body">
           <p style="color:var(--text2);font-size:13px;margin:0 0 1rem">
-            Dime qué presentas a Hacienda y DISA te recordará cada modelo <strong>antes</strong> de que
-            venza —en «Propuestas de DISA»—, con la fecha aproximada del plazo. <strong>Bamburu nunca
+            Dime qué presentas a Hacienda y Bamburu te recordará cada modelo <strong>antes</strong> de que
+            venza —en «Propuestas»—, con la fecha aproximada del plazo. <strong>Bamburu nunca
             presenta nada a la AEAT:</strong> te lo deja preparado para que lo revises y lo presentes tú.
           </p>
           <div id="fpWarn"></div>
@@ -1305,7 +1305,7 @@ export function createSettingsRoutes(db, cfg = {}) {
         if ($fp('fRetTrab').checked) m.push('retenciones de trabajo (111) y su resumen anual (190)');
         if ($fp('fRetAlq').checked) m.push('retenciones de alquiler (115) y su resumen anual (180)');
         $fp('fEspBox').style.display = $fp('fEsp').checked ? '' : 'none';
-        // Solo ILUSTRATIVO: lo que DISA propone de verdad lo decide el servidor (calendario-fiscal.js).
+        // Solo ILUSTRATIVO: lo que se propone de verdad lo decide el servidor (calendario-fiscal.js).
         $fp('fpResumen').innerHTML = m.length
           ? '<strong>Con esto, te recordaré:</strong> ' + m.join(' · ') + '.'
           : 'Ahora mismo no me has dicho que presentes nada, así que <strong>no te recordaré ningún modelo</strong>. Marca lo que te toque.';
@@ -1318,7 +1318,7 @@ export function createSettingsRoutes(db, cfg = {}) {
         $fp('fRetAlq').checked = !!d.tiene_retenciones_alquiler;
         $fp('fEsp').checked = !!d.situacion_especial;
         $fp('fNota').value = d.no_cubierto || '';
-        if (!d.configured_at) $fp('fpWarn').innerHTML = '<div class="card" style="border-color:#f59e0b;margin-bottom:1rem"><div class="card-body" style="color:#b45309;font-size:13px">Aún no has declarado tu situación fiscal, así que <strong>DISA no te está recordando ningún vencimiento</strong>. Marca lo que presentas y guarda.</div></div>';
+        if (!d.configured_at) $fp('fpWarn').innerHTML = '<div class="card" style="border-color:#f59e0b;margin-bottom:1rem"><div class="card-body" style="color:#b45309;font-size:13px">Aún no has declarado tu situación fiscal, así que <strong>no se te está recordando ningún vencimiento</strong>. Marca lo que presentas y guarda.</div></div>';
         pintarResumen();
       });
       async function guardar(){

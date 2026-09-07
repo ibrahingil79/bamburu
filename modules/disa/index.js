@@ -1714,6 +1714,18 @@ export function register(app, db) {
 
   // ── Vista ─────────────────────────────────────────────────
 
+  // ⚙️ 7 SEP 2026 (`sacar-disa-del-producto`, PASO 1) — LA PANTALLA DEL CHAT YA NO SE PINTA.
+  //
+  // Debajo sigue entera la función que la construía: **no se borra aquí, se borra en el PASO 2**,
+  // que es el encargo de quitar el código. Lo que hace este corte es que **no quede rastro visible**:
+  // quien escriba `/admin/disa` en la barra —o llegue por un enlace viejo, o por un marcador— acaba
+  // en el panel, no en un chat. La entrada del menú ya no existe, así que esta puerta era el último
+  // sitio por el que se podía llegar.
+  //
+  // Va ANTES que el manejador de siempre a propósito: en Hono manda el orden de registro, así que
+  // este `get('/')` gana y el de abajo queda inalcanzable sin tocarlo ni una línea.
+  router.get('/', c => c.redirect('/admin'));
+
   router.get('/', c => {
     const session = c.get('session');
     const prefill = c.req.query('q') || '';
@@ -3184,6 +3196,14 @@ export function register(app, db) {
   puerta.use('*', csrfProtect());
   puerta.route('/', router);
 
+  // ⚙️ 7 SEP 2026 (paso 1) — TODO EL SUBÁRBOL `/admin/disa` DEJA DE SERVIRSE.
+  //
+  // No basta con cortar la raíz: colgaban de aquí las llamadas del chat (`/agents`, `/threads`,
+  // `/chips`, `/summary`…), y una de ellas devolvía los nombres de los agentes en un JSON que
+  // cualquiera podía pedir desde la barra del navegador. Se registra ANTES del montaje porque en
+  // Hono manda el orden: este `all` gana y lo de debajo queda inalcanzable **sin borrar una línea**,
+  // que es lo que toca en el paso 1. El borrado del código es el paso 2.
+  app.all('/admin/disa/*', c => c.redirect('/admin'));
   app.route('/admin/disa', puerta);
   app.route('/api/disa', puerta);
 

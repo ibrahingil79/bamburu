@@ -465,7 +465,7 @@ export function createProductRoutes(db, cfg = {}) {
                 <div class="form-group" id="pStockManage" style="display:none"><label class="form-label">Stock</label><div><button type="button" class="btn btn-secondary btn-sm" data-pd="kardex">Gestionar stock (kardex · ajustar)</button></div></div>
                 <div class="form-group" id="pNivelesWrap" style="display:none">
                   <label class="form-label">Niveles de reposición por almacén</label>
-                  <p style="font-size:.75rem;color:var(--muted);margin:-.2rem 0 .5rem">Cuando el <strong>disponible</strong> de un almacén baja de su <strong>mínimo</strong>, DISA te avisa y —si el producto tiene proveedor habitual— te prepara un borrador de compra hasta el <strong>objetivo</strong>. Mínimo en 0 = no se vigila ese almacén.</p>
+                  <p style="font-size:.75rem;color:var(--muted);margin:-.2rem 0 .5rem">Cuando el <strong>disponible</strong> de un almacén baja de su <strong>mínimo</strong>, Bamburu te avisa y —si el producto tiene proveedor habitual— te prepara un borrador de compra hasta el <strong>objetivo</strong>. Mínimo en 0 = no se vigila ese almacén.</p>
                   <div id="pNivelesBody" style="font-size:.85rem"></div>
                   <button type="button" class="btn btn-secondary btn-sm" style="margin-top:.5rem" data-pd="niveles">Guardar niveles</button>
                 </div>
@@ -477,7 +477,7 @@ export function createProductRoutes(db, cfg = {}) {
               </div>
               <div style="font-size:.72rem;color:var(--muted);margin:-.5rem 0 .25rem">
                 <a href="https://sede.agenciatributaria.gob.es/Sede/iva.html" target="_blank" rel="noopener" style="color:var(--teal)">Tipos de IVA oficiales (AEAT) ↗</a>
-                &nbsp;·&nbsp; ¿Dudas sobre qué IVA aplicar? Pregunta a DISA.
+                
               </div>
               <div class="form-row">
                 <div class="form-group"><label class="form-label">Categoría</label><select class="form-control" id="pCategory"><option value="">Sin categoría</option></select></div>
