@@ -309,6 +309,20 @@ como `NOTION_TOKEN`).
 - Mensaje claro: qué se cerró, qué commits incluye.
 - `git push origin master`.
 
+**REGLA DE CIERRE, YA MECÁNICA (9 sep 2026).** «Commit + push antes de marcar hecho» era, hasta
+esta fecha, una frase que dependía de que la sesión se acordara — y una vez no se acordó: la ficha
+`barrera-permisos-contamina-el-barrido` se escribió, se probó y se documentó como `✅ HECHA` en una
+sesión que la dejó viva SOLO en el árbol de trabajo, invisible para `git log`, para `origin` y para
+la sesión siguiente. Ya no depende de la memoria: `scripts/verificar-cierre-limpio.mjs` comprueba
+que el árbol está limpio (`git status --porcelain` vacío) y que `HEAD` no va por delante de
+`origin/<rama>` — y un hook `Stop` de Claude Code (`.claude/settings.json`) lo corre en modo
+`--si-toca-tablero` **cada vez que la sesión intenta parar**. Ese modo solo bloquea cuando
+`TABLERO.md` tiene una línea `✅ … HECHA` que `origin` todavía no conoce — el resto de las paradas
+(trabajo a medias, una pregunta, un corte para pensar) no se tocan. Si bloquea, nombra exactamente
+qué queda sin commitear o sin pushear; no hay forma de leer "hecha" y que sea mentira sin que algo
+lo grite. El modo incondicional (sin flag) es el que se propone a mano al cerrar una sesión, o el
+que correría dentro de un barrido si se pidiera.
+
 ---
 
 ### Reglas que protegen el panel

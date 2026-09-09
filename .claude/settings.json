@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd /home/ubuntu/bamburu && out=$(node scripts/verificar-cierre-limpio.mjs --si-toca-tablero 2>&1); code=$?; if [ \"$code\" -ne 0 ]; then jq -n --arg out \"$out\" \"{decision:\\\"block\\\", reason: (\\\"REGLA DE CIERRE — el árbol de trabajo NO está limpio/pusheado a origin. No se puede dar una ficha por hecha así:\\n\\n\\\" + \\$out)}\"; fi",
+            "timeout": 30,
+            "statusMessage": "Comprobando REGLA DE CIERRE (árbol limpio + pusheado)…"
+          }
+        ]
+      }
+    ]
+  }
+}

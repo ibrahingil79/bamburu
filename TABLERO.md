@@ -15200,6 +15200,91 @@ que nadie borre ni reinicie ese directorio.
       (0 restos antes y después, con las dos excepciones declaradas) y con el `--sembrar-rojo` propio.
 
 
+## ✅ TAREA — La REGLA DE CIERRE, hecha comprobación mecánica
+
+- **id:** regla-de-cierre-mecanica
+- **estado:** ✅ **HECHA — 9 sep 2026.**
+- **origen:** encargo directo de Ibrahin, 9 sep 2026, a raíz de la propia ficha
+  `barrera-permisos-contamina-el-barrido` (justo arriba): el arreglo se escribió, se probó verde y se
+  documentó como `✅ HECHA` en una sesión — y se quedó vivo SOLO en el árbol de trabajo, invisible
+  para `git log`, para `origin` y para la sesión siguiente, que leyó "hecha" sobre un código que no
+  existía en ningún sitio más que ese directorio.
+
+**El encargo, en sus palabras:** *"La REGLA DE CIERRE (una tarea no se marca hecha hasta estar
+commiteada y pusheada) EXISTE pero no se respeta porque nada la obliga. Conviértela en una
+comprobación automática que IMPIDA cerrar (...) Que no dependa de que la sesión se acuerde. Decide
+tú el enganche técnico correcto."*
+
+**El enganche técnico decidido:** un hook `Stop` de Claude Code (`.claude/settings.json`, se lee al
+arrancar la sesión, no depende de que nadie lo recuerde), que corre en **cada intento de la sesión de
+parar** — al terminar de responder, al hacer `/clear`, al retomar o al compactar. NO se metió en el
+barrido (`node scripts/run-gates.mjs --all`): un barrido se lanza a demanda de Ibrahin (RITUAL.md), y
+el commit no depende de correrlo — meterlo ahí habría atado dos cosas que RITUAL.md ya mantiene
+separadas a propósito.
+
+**Qué se construyó:**
+
+1. **`scripts/verificar-cierre-limpio.mjs`** — comprueba dos cosas y nada más: (a) el árbol de
+   trabajo está limpio (`git status --porcelain` vacío) y (b) `HEAD` no va por delante de
+   `origin/<rama>` (`git log origin/<rama>..HEAD`, tras un `git fetch` real — no se fía de lo que la
+   máquina recordara de la última vez). No juzga si el trabajo está bien hecho, ni corre gates: eso ya
+   lo hacen `run-gates.mjs` y `verify-residuo-de-pruebas.mjs`.
+   - **Modo incondicional** (sin flag): falla si hay algo sucio o sin pushear, sin mirar de qué se
+     trata. Para proponer a mano al cerrar una sesión.
+   - **Modo `--si-toca-tablero`**: solo falla si `TABLERO.md` tiene una línea `✅ … HECHA` que
+     `origin/<rama>` todavía no tiene — es decir, solo si de verdad hay una ficha marcada como hecha
+     que el remoto no conoce. Si no la hay, sale 0 aunque el árbol esté sucio (puede ser trabajo a
+     medias, legítimo). **Es el modo que usa el hook**, para no interrumpir cada parada del asistente,
+     solo la que de verdad pretende cerrar algo.
+2. **Hook `Stop`** en `.claude/settings.json` (nuevo, no existía): corre
+   `node scripts/verificar-cierre-limpio.mjs --si-toca-tablero`, y si sale con error, devuelve
+   `{"decision":"block","reason": "<lo que el script escribió por stderr>"}` — la sesión no puede
+   parar sin ver, palabra por palabra, qué queda sin commitear o sin pushear.
+3. **RITUAL.md**, sección "Al TERMINAR — rutina de cierre", paso d): documentado el enganche y por
+   qué existe.
+
+**Dos averías reales, encontradas probándolo en rojo a propósito (no en la primera versión que
+"parecía funcionar"):**
+- La comparación de "¿hay una marca nueva en `TABLERO.md`?" leía el fichero del ÍNDICE de git
+  (`git show :TABLERO.md`), no el fichero EN DISCO — se habría comido cualquier edición todavía sin
+  `git add`. Corregido: lee con `readFileSync` el fichero real.
+- `execSync` tiene un `maxBuffer` por defecto de 1 MB, y `TABLERO.md` ya pesa 1,18 MB: el
+  `git show origin/<rama>:TABLERO.md` se cortaba con `ENOBUFS`, y el `catch` original lo trataba como
+  "nada que comparar" — un **falso verde** que se habría comido justo la ficha que la comprobación
+  existe para cazar. Corregido con dos cambios: `maxBuffer` a 64 MB, y la filosofía del `catch` pasada
+  de "si falla, no hay nada que comparar" a "si falla AQUÍ (con `origin` ya confirmado que existe por
+  el `fetch` previo), es un fallo de la herramienta, no un permiso" — sale con código 2 y lo dice, no
+  se traga el error en silencio.
+
+**Comprobado, no supuesto (probado tres veces, con la marca real del hook ya instalado en
+`.claude/settings.json`, no solo el script suelto):**
+- Estado limpio real → el comando exacto guardado en `settings.json` no produce salida y sale 0 (la
+  sesión para sin más).
+- **Prueba en rojo:** se añadió a mano una línea `- **estado:** ✅ HECHA — prueba en rojo…` a
+  `TABLERO.md` (sin commitear) y se corrió el comando exacto extraído de `settings.json` con
+  `jq -r '.hooks.Stop[0].hooks[0].command'` — devolvió `{"decision":"block", "reason": "..."}`
+  nombrando la línea falsa exacta y los ficheros sin commitear (`TABLERO.md`, y los nuevos ficheros
+  del propio hook). Revertido después: la línea de prueba nunca llegó a `TABLERO.md` de verdad.
+- `jq -e` sobre `.claude/settings.json` valida sintaxis y esquema del hook sin error.
+
+**Lo que NO hace esta comprobación, dicho sin adornar el cierre:** no puede probarse disparando de
+verdad el evento `Stop` DENTRO de este mismo turno (el evento ocurre al terminar el turno, no antes) —
+se verificó extrayendo el comando EXACTO del fichero de configuración y ejecutándolo con el mismo
+payload (`echo '{}' | …`) que recibiría el hook real, que es la comprobación que el propio manual de
+enganche de hooks pide para este caso.
+
+**Criterios de aceptación**
+
+- [x] Existe una comprobación mecánica (no un texto en un documento) que verifica árbol limpio +
+      todo pusheado a `origin` antes de poder dar una ficha por cerrada.
+- [x] No depende de que la sesión se acuerde: vive en un hook `Stop` de Claude Code, que se dispara
+      solo, en cada intento de parar.
+- [x] Si hay algo suelto, falla y nombra exactamente qué queda sin commitear o sin pushear —
+      comprobado con la prueba en rojo de arriba.
+- [x] No interfiere con paradas normales de trabajo a medias: el modo del hook solo bloquea cuando
+      `TABLERO.md` ganó una marca `✅ … HECHA` que `origin` no tiene todavía.
+
+
 ## ✅ TAREA — Migrar el ERP para quitarle el `unsafe-inline`
 
 - **id:** csp-erp-migrar-handlers
