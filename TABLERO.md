@@ -9851,7 +9851,7 @@ dejan de decir algo útil. Apuntada para que no se quede como ruido permanente s
 ## TAREA — Enviar factura, albarán y pedido por correo (como ya se hace con el presupuesto)
 
 - **id:** enviar-documentos-por-correo
-- **estado:** ✅ HECHA — 9 sep 2026
+- **estado:** ✅ HECHA — 9 sep 2026 · commit `1b56f6c`
 - **origen:** encargo de Ibrahin, 9 sep 2026 · Pilar 4 (Ventas)
 - **fusiona y sustituye** a la ficha `pdf-por-correo-de-cualquier-documento` (Inventario 24 ago 2026
   A17, más abajo en §LA COLA): mismo hueco, misma solución. Esa ficha queda tachada en su sitio con
