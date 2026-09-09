@@ -372,6 +372,11 @@ export const GRUPOS = {
   // cinco veces (puerto propio, Telegram apagado): ~15-20 s medidos, no un gate «rápido». Va aquí,
   // con el resto de infra, no en RAPIDO.
   infra: ['gate-arranque-modulos', 'gate-cifrado-en-reposo', 'verify-sin-proveedor-ia', 'gate-conexiones-que-se-cierran', 'gate-permisos-por-ruta', 'gate-barrera-permisos', 'gate-copia-completa', 'gate-disa-fuera-de-la-vista', 'gate-copias-cifradas', 'gate-restauracion-completa', 'gate-portal-sin-llave-en-url', 'gate-adjuntos-por-contenido', 'gate-aviso-copias', 'gate-csp-superficies-limpias', 'censo-bot-de-bamburu', 'censo-avisos-sin-fabrica', 'verify-correo-freno', 'verify-comprobaciones-sin-correo-real', 'verify-disco-perfiles', 'test-c6-secretos', 'gate-conciliacion-deshacer', 'verify-superadmin-escrituras', 'verify-tenant-lookup-readonly', 'verify-wal-acotado', 'verify-safe-error',
+          // 9 sep 2026 (`barrera-permisos-contamina-el-barrido`) — el censo que vigila que el
+          // propio barrido no ensucie: ¿queda algún negocio/cliente/producto/factura de gate
+          // vivo en el entorno, ahora mismo? Va en `infra` junto al resto de la familia de
+          // higiene del barrido (conexiones, cifrado, la propia barrera de permisos).
+          'verify-residuo-de-pruebas',
           'verify-xss-escape', 'gate-xss-escape', 'gate-csp-estricta',
           // PUNTO 2 (24 ago 2026) — dar de baja a alguien del equipo: borrar si no dejó rastro,
           // archivar si lo dejó, y decirlo ANTES de pulsar. Antes daba un 500 seco.
@@ -510,6 +515,16 @@ export const TENANT_EXTRA = new Map([
 // Los que necesitan el negocio de desarrollo en silencio. Cada uno con su MOTIVO: un gate marcado
 // «solo» sin explicar por qué es una excusa para tapar una carrera de verdad.
 export const SOLOS = new Map([
+  // ── 9 SEP 2026 (`barrera-permisos-contamina-el-barrido`) ─────────────────────────────────────
+  ['gate-barrera-permisos',
+   'PARCHEA FICHEROS REALES en disco (users.js, settings.js, index.js) para probar la barrera de '
+   + 'arranque, y los devuelve tal cual — texto Y fecha (utimesSync) — en cuanto cada escenario '
+   + 'termina. Pero MIENTRAS un escenario está en marcha (unos segundos), el fichero SÍ está tocado '
+   + 'de verdad, y cualquier gate de navegador que en ESE instante llame a exigeCodigoServido() '
+   + '(vía launchOpts()) lo ve "más nuevo que el arranque" y aborta — no es una fecha que se quede '
+   + 'mal para siempre (eso ya se corrigió), es una ventana real de segundos que solo se cierra no '
+   + 'compartiéndola con nadie. Medido el 9 sep 2026: en paralelo, cuatro gates abortaron en cascada '
+   + 'justo en la ventana de un escenario; solo, 10 ✓ · 0 ✗ y nadie más lo ve tocado.'],
   ['gate-avisos-badge',
    'cuenta TODOS los avisos del negocio y afirma «sube a N+1»; además marca «visto» para todos. '
    + 'Cualquier otro gate que cree una factura de proveedor vencida a la vez le mueve el número.'],

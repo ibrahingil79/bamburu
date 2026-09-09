@@ -42,6 +42,9 @@ await autoAceptarPaneles(page);
 const HJ = { 'Cookie': 'asess=' + token, 'Content-Type': 'application/json', 'x-csrf-token': csrf };
 const post = async (u, body) => { const r = await fetch(BASE + u, { method: 'POST', headers: HJ, body: JSON.stringify(body || {}) }); return { status: r.status, body: await r.json() }; };
 
+// Declaradas ANTES del `try` para que el `finally` pueda limpiarlas aunque algo falle a mitad.
+let a, b;
+
 try {
   // ════ A) SOBRE-RECEPCIÓN ════
   // LOS PROVEEDORES SE ELIGEN ACTIVOS, NO POR SU ID. Estaban clavados al 1 y al 2, y el reseed del
@@ -52,7 +55,7 @@ try {
   ok(PROVS.length >= 1, 'hay proveedores activos con los que pedir', PROVS.join(', ') || 'ninguno');
   const PROV_A = PROVS[0], PROV_B = PROVS[1] || PROVS[0];
 
-  const a = (await post('/api/erp/purchase-orders', { supplier_id: PROV_A, date: '2026-06-10', items: [{ product_id: PRODUCT_ID, quantity: 10, unit_cost: 1.5 }] })).body;
+  a = (await post('/api/erp/purchase-orders', { supplier_id: PROV_A, date: '2026-06-10', items: [{ product_id: PRODUCT_ID, quantity: 10, unit_cost: 1.5 }] })).body;
   const aSent = (await post('/api/erp/purchase-orders/' + a.id + '/enviar')).body;
   ok(/^OC-/.test(aSent.order_number || ''), 'orden A ' + aSent.order_number + ' enviada');
 
@@ -94,7 +97,7 @@ try {
   await page.screenshot({ path: '/tmp/c1c-2-exceso-ficha.png' });
 
   // ════ B) CIERRE MANUAL ════
-  const b = (await post('/api/erp/purchase-orders', { supplier_id: PROV_B, date: '2026-06-10', items: [{ product_id: PRODUCT_ID, quantity: 8, unit_cost: 1.2 }] })).body;
+  b = (await post('/api/erp/purchase-orders', { supplier_id: PROV_B, date: '2026-06-10', items: [{ product_id: PRODUCT_ID, quantity: 8, unit_cost: 1.2 }] })).body;
   const bSent = (await post('/api/erp/purchase-orders/' + b.id + '/enviar')).body;
   const bItems = await fetch(BASE + '/api/erp/purchase-orders/' + b.id + '/receipts', { headers: { 'Cookie': 'asess=' + token } }).then(r => r.json());
   // ESTE PASO NO SE COMPROBABA, y por eso un fallo suyo solo se notaba 30 líneas más abajo, en el
@@ -134,6 +137,26 @@ try {
   const libro = db2.prepare('SELECT COALESCE(SUM(quantity),0) s FROM stock_movements WHERE product_id=?').get(PRODUCT_ID).s;
   ok(after === libro, `caché products.stock (${after}) == suma del libro (${libro})`);
   ok(after === stockBefore + 15, `delta de stock = +15 (12 con exceso + 3 parciales; antes ${stockBefore} → ${after})`);
+
+  // ⚙️ 9 SEP 2026 (`barrera-permisos-contamina-el-barrido`) — LO QUE ESTE GATE CREA, LO BORRA. Las
+  // dos órdenes (A recibida con exceso, B parcial y cerrada) se quedaban VIVAS para siempre: no
+  // están en la cadena de VERI*FACTU (eso es solo facturas), así que no hay motivo para dejarlas.
+  // `anularPurchaseOrderSvc` las rechaza por tener recepciones confirmadas — sería deshacer la
+  // propia recepción que el gate acaba de comprobar arriba — así que se borran POR ID, hijos antes
+  // que padres, igual que hace `purgarArtefactos()` con el resto de gates de compras. El stock que
+  // movieron se revierte con ellas: por eso el delta de arriba se mide ANTES de este bloque.
+  const ids = (a?.id != null && b?.id != null) ? [a.id, b.id] : (a?.id != null ? [a.id] : (b?.id != null ? [b.id] : []));
+  if (ids.length) {
+    const en = '(' + ids.join(',') + ')';
+    const recepciones = db2.prepare(`SELECT id FROM purchase_order_receipts WHERE order_id IN ${en}`).all().map(r => r.id);
+    const enRec = '(' + (recepciones.length ? recepciones.join(',') : '-1') + ')';
+    db2.prepare(`DELETE FROM stock_movements WHERE origin_type='po_receipt' AND origin_id IN ${enRec}`).run();
+    db2.prepare(`DELETE FROM purchase_order_receipt_items WHERE receipt_id IN ${enRec}`).run();
+    db2.prepare(`DELETE FROM purchase_order_receipts WHERE id IN ${enRec}`).run();
+    db2.prepare(`DELETE FROM purchase_order_items WHERE order_id IN ${en}`).run();
+    const borradas = db2.prepare(`DELETE FROM purchase_orders WHERE id IN ${en}`).run().changes;
+    ok(borradas === ids.length, `limpieza: las ${ids.length} orden(es) de prueba ya no están (borradas ${borradas})`);
+  }
   db2.prepare('DELETE FROM admin_sessions WHERE token=?').run(token);
   db2.close();
 }

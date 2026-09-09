@@ -192,6 +192,12 @@ try {
   console.error('ERROR', e.stack || e.message); fail++;
   try { await browser.close(); } catch {}
 } finally {
+  // ⚙️ 9 SEP 2026 (`barrera-permisos-contamina-el-barrido`) — RED DE SEGURIDAD: el anular de arriba
+  // (líneas [3] NETO-CERO) es un PASO DEL TEST, no limpieza — si algo de las secciones [0]/[1]/[2]
+  // falla antes de llegar ahí, la factura y el gasto se quedaban vivos para siempre. Aquí se
+  // reintenta sin condiciones, y se calla si ya estaban anulados (el camino feliz ya lo hizo).
+  try { if (fPG && db.prepare('SELECT status FROM invoices WHERE id=?').get(fPG)?.status !== 'anulada') anularInvoice(db, fPG, 'Gate rentabilidad — limpieza (red de seguridad)'); } catch {}
+  try { if (gPP && db.prepare('SELECT status FROM supplier_invoices WHERE id=?').get(gPP)?.status !== 'anulada') anularSupplierInvoiceSvc(db, gPP, 'Gate rentabilidad — limpieza (red de seguridad)'); } catch {}
   for (const t of tokens) { try { db.prepare('DELETE FROM admin_sessions WHERE token=?').run(t); } catch {} }
   for (const id of emps) { try { db.prepare('DELETE FROM user_permissions WHERE admin_user_id=?').run(id); } catch {} try { db.prepare('DELETE FROM admin_users WHERE id=?').run(id); } catch {} }
   // Los proyectos de prueba se borran; las facturas anuladas (venta + gasto) y el cliente/proveedor

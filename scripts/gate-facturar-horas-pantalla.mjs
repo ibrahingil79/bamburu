@@ -174,6 +174,11 @@ try {
   console.error('ERROR', e.stack || e.message); fail++;
   try { await browser.close(); } catch {}
 } finally {
+  // ⚙️ 9 SEP 2026 (`barrera-permisos-contamina-el-barrido`) — RED DE SEGURIDAD: el anular de arriba
+  // ([3] RESIDUO NETO-CERO) es un PASO DEL TEST, no limpieza — si algo falla antes de llegar ahí
+  // (y esta pantalla lleva bastantes pasos), la factura se quedaba EMITIDA para siempre. Se
+  // reintenta aquí sin condiciones; se calla si el camino feliz ya la anuló.
+  try { if (invoiceId && db.prepare('SELECT status FROM invoices WHERE id=?').get(invoiceId)?.status !== 'anulada') anularInvoice(db, invoiceId, 'Gate FH — limpieza (red de seguridad)'); } catch {}
   for (const t of tokens) { try { db.prepare('DELETE FROM admin_sessions WHERE token=?').run(t); } catch {} }
   // Las entradas de tiempo se borran (dato de prueba). La factura anulada + su anulación PERMANECEN a
   // propósito (cadena Verifactu inmutable, neto-cero en Ventas); el cliente de prueba queda referenciado

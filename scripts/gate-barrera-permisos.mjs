@@ -9,9 +9,21 @@
 // PARCHEA un fichero real durante segundos y lo devuelve en el `finally`, aunque el hijo reviente:
 // dejar el árbol tocado sería peor que el propio rojo que esto busca cazar.
 //
+// ⚙️ 9 SEP 2026 (`barrera-permisos-contamina-el-barrido`) — DEVOLVER EL CONTENIDO NO BASTA: el
+// TEXTO volvía, pero `writeFileSync` adelanta la FECHA de modificación aunque el contenido acabe
+// siendo idéntico. Y `scripts/lib/gate-env.mjs` → `exigeCodigoServido()` — la comprueba TODO gate
+// de navegador antes de abrir Chromium — decide si el servicio vivo sirve "el código de disco"
+// mirando esa fecha: en cuanto este gate tocaba `users.js`/`settings.js`/`index.js`, CUALQUIER gate
+// de navegador posterior, en la misma pasada del servicio y sin reiniciar, veía un fichero "más
+// nuevo que el arranque" y abortaba — en cascada, sin haber cambiado ni una línea real. Medido el
+// 9 sep 2026: de 214 gates del barrido completo, más de 100 abortaron así.
+// El arreglo: se guarda también la FECHA original de cada fichero (`statSync`, no solo su
+// contenido) y se restaura con `utimesSync` justo después de devolver el texto — el fichero queda
+// bit a bit Y minuto a minuto como estaba, no solo legible igual.
+//
 //   node scripts/gate-barrera-permisos.mjs
 import { spawnSync } from 'node:child_process';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, statSync, utimesSync } from 'node:fs';
 import { createServer as netServer } from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -63,21 +75,31 @@ async function arrancar() {
 // tarea). Un `git checkout` de emergencia compararía contra el último commit — que NUNCA tuvo esos
 // cambios — y se los llevaría por delante. Se guarda el contenido EXACTO de cada fichero que este
 // gate toca, ANTES de tocar nada, y la red de seguridad final restaura A ESO, nunca a HEAD.
+// También se guarda su FECHA original (`atime`/`mtime`): el contenido volver no basta si la fecha
+// se queda adelantada (ver cabecera del fichero).
 const SNAPSHOT = new Map();
 function instantaneaDe(fichero) {
   const abs = path.join(RAIZ, fichero);
-  if (!SNAPSHOT.has(abs)) SNAPSHOT.set(abs, readFileSync(abs, 'utf8'));
+  if (!SNAPSHOT.has(abs)) {
+    const st = statSync(abs);
+    SNAPSHOT.set(abs, { texto: readFileSync(abs, 'utf8'), atime: st.atime, mtime: st.mtime });
+  }
   return abs;
 }
+/** Devuelve un fichero snapshot-ado a su contenido Y su fecha originales. */
+function restaurar(abs, snap) {
+  writeFileSync(abs, snap.texto);
+  utimesSync(abs, snap.atime, snap.mtime);
+}
 
-/** Parchea un fichero real durante `fn` y lo devuelve tal cual estaba, PASE LO QUE PASE. */
+/** Parchea un fichero real durante `fn` y lo devuelve tal cual estaba (texto Y fecha), PASE LO QUE PASE. */
 async function conParche(fichero, buscar, cambiar, fn) {
   const abs = instantaneaDe(fichero);
-  const original = SNAPSHOT.get(abs);
-  if (!original.includes(buscar)) throw new Error('marcador no encontrado en ' + fichero + ': ' + buscar.slice(0, 60));
-  writeFileSync(abs, original.replace(buscar, cambiar));
+  const snap = SNAPSHOT.get(abs);
+  if (!snap.texto.includes(buscar)) throw new Error('marcador no encontrado en ' + fichero + ': ' + buscar.slice(0, 60));
+  writeFileSync(abs, snap.texto.replace(buscar, cambiar));
   try { return await fn(); }
-  finally { writeFileSync(abs, original); }
+  finally { restaurar(abs, snap); }
 }
 
 try {
@@ -142,12 +164,15 @@ try {
   // escribir, y ANTES de esto restaurar con `git checkout` se comió cambios legítimos sin commitear
   // de este mismo fichero — comparar contra HEAD está mal cuando HEAD nunca tuvo el trabajo de hoy.
   // Se compara contra la INSTANTÁNEA tomada al principio (`SNAPSHOT`), nunca contra git.
-  for (const [abs, original] of SNAPSHOT) {
-    let actual;
-    try { actual = readFileSync(abs, 'utf8'); } catch { actual = null; }
-    if (actual !== original) {
-      console.error('  ⚠️ RED DE SEGURIDAD: ' + path.relative(RAIZ, abs) + ' quedó sin revertir — restaurando desde la instantánea de este gate (NO desde git)');
-      writeFileSync(abs, original);
+  // Compara TEXTO y también FECHA: un `conParche` que restauró el texto pero murió antes de su
+  // propio `utimesSync` (mismo `timeout` externo) dejaría la fecha adelantada igual, y eso es
+  // justo lo que revienta el barrido — la red de seguridad tiene que cazar también eso.
+  for (const [abs, snap] of SNAPSHOT) {
+    let actual = null, st = null;
+    try { actual = readFileSync(abs, 'utf8'); st = statSync(abs); } catch { /* fichero no legible: se avisa abajo */ }
+    if (actual !== snap.texto || !st || st.mtimeMs !== snap.mtime.getTime()) {
+      console.error('  ⚠️ RED DE SEGURIDAD: ' + path.relative(RAIZ, abs) + ' quedó sin revertir (texto o fecha) — restaurando desde la instantánea de este gate (NO desde git)');
+      restaurar(abs, snap);
       fail++;
     }
   }

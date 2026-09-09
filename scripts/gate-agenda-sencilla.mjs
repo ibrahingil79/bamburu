@@ -31,7 +31,7 @@ const owner = db.prepare("SELECT id FROM admin_users WHERE role='owner' AND acti
 const HOY = new Date().toISOString().slice(0, 10);
 const tok = 'gas-' + TS, now = Math.floor(Date.now() / 1000);
 db.prepare('INSERT INTO admin_sessions (token,user_id,created_at,expires_at,csrf_token) VALUES (?,?,?,?,?)').run(tok, owner.id, now, now + 3600, 'x');
-const emps = []; let S = 0, Sesp = 0, CLI = 0, excId = 0, excDiaId = 0;
+const emps = []; let S = 0, Sesp = 0, CLI = 0, excId = 0, excDiaId = 0, tardeId = 0;
 function emp(n) { const id = db.prepare("INSERT INTO admin_users (name,email,password_hash,role,active) VALUES (?,?,?,'employee',1)").run(n, 'gas-' + TS + '-' + emps.length + '@t.local', 'x').lastInsertRowid; emps.push(id); return id; }
 let b;
 const call = (p, m, u, body) => p.evaluate(async (m, u, b) => { const o = { method: m, headers: { 'x-csrf-token': window.CSRF_TOKEN || '' } }; if (b) { o.headers['Content-Type'] = 'application/json'; o.body = JSON.stringify(b); } const r = await fetch(u, o); let j = null; try { j = await r.json(); } catch (e) {} return { status: r.status, body: j }; }, m, u, body);
@@ -161,7 +161,7 @@ try {
   // como «ese cliente no está registrado».
   console.log('\n[3-ter] el buscador encuentra a un cliente dado de alta DESPUÉS de cargar la pantalla');
   const TARDE = 'GATE Tardio ' + TS;
-  db.prepare("INSERT INTO clients (name,created_at) VALUES (?,datetime('now'))").run(TARDE);
+  tardeId = db.prepare("INSERT INTO clients (name,created_at) VALUES (?,datetime('now'))").run(TARDE).lastInsertRowid;
   await p.evaluate((A) => { document.querySelector('.agcell[data-col="' + A + '"][data-min="840"]').click(); }, A);   // 14:00
   await p.waitForFunction(() => document.getElementById('mCita').classList.contains('open'), { timeout: 8000 });
   await p.click('#cBusca');
@@ -226,6 +226,10 @@ finally {
   try { if (excDiaId) db.prepare('DELETE FROM horario_excepciones WHERE id=?').run(excDiaId); } catch {}
   for (const sid of [S, Sesp]) { try { db.prepare('DELETE FROM service_config WHERE product_id=?').run(sid); } catch {} try { db.prepare('DELETE FROM products WHERE id=?').run(sid); } catch {} }
   try { if (CLI) db.prepare('DELETE FROM clients WHERE id=?').run(CLI); } catch {}
+  // ⚙️ 9 SEP 2026 (`barrera-permisos-contamina-el-barrido`) — [3-ter] crea un SEGUNDO cliente
+  // («GATE Tardio …») para probar el buscador en caliente, y su id nunca se guardaba en ningún
+  // sitio que este `finally` mirara: se quedaba vivo para siempre, uno por pasada.
+  try { if (tardeId) db.prepare('DELETE FROM clients WHERE id=?').run(tardeId); } catch {}
   for (const uid of emps) { try { db.prepare('DELETE FROM admin_users WHERE id=?').run(uid); } catch {} }
   // El horario, como estaba. Y se comprueba: restaurar sin mirar es confiar en que valió.
   try {

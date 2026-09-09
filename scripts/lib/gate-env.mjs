@@ -20,14 +20,58 @@ import { perfilDesechable } from './perfil-chromium.mjs';
 
 export const APP_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
-// Aborta el gate dejando claro que NO es un aprobado. Código 2 (distinto del 1 de "hay fallos"):
-// 1 = el gate corrió y encontró fallos · 2 = el gate NO PUDO CORRER. No son lo mismo.
+// ⚙️ 9 SEP 2026 (`barrera-permisos-contamina-el-barrido`) — ABORTAR YA NO CIERRA EL PROCESO A
+// PELO. Antes `abortar()` hacía `process.exit(2)` en el sitio: si un gate ya había sembrado un
+// negocio, una factura o una fila (bastantes lo hacen ANTES de abrir el navegador, para tener
+// datos que enseñar), ese `exit()` mataba el proceso a media ejecución y su `finally` de limpieza
+// —que vive más abajo, esperando justo este caso— NUNCA llegaba a correr. Así se colaron los 26
+// negocios huérfanos y las facturas de prueba del barrido del 9 sep 2026: no porque cada gate
+// olvidara limpiar, sino porque `abortar()` no dejaba que lo intentaran.
+//
+// Ahora LANZA un error marcado (sigue imprimiendo el mismo mensaje al momento, para que se vea
+// aunque algo raro pase después). Un gate escrito con su `try { … } finally { limpieza }`
+// de siempre —que es como está escrito casi todo este árbol— atrapa esa excepción como
+// cualquier otra: su `finally` corre, limpia lo suyo, y el fallo se reporta igual. Solo cuando
+// NADIE la atrapa (queda como excepción no capturada) entra el guardián de abajo, que traduce
+// eso al código 2 de siempre — mismo comportamiento de cara al barrido, con la limpieza intacta
+// por el camino. Un gate cuya siembra viva FUERA de cualquier `try` (antes de abrir el propio
+// try) no queda protegido por esto: sigue siendo un fallo de ESE gate en concreto, cazado por
+// `verify-residuo-de-pruebas.mjs` y corregido ahí, uno a uno.
+export class GateAbortError extends Error {}
+
+// EL SEGUNDO PROBLEMA, que lanzar por sí solo no resuelve: casi todo gate atrapa CUALQUIER
+// excepción en un `catch (e) { fail++ }` genérico (para poder seguir contando fallos) y termina
+// con SU PROPIO `process.exit(fail ? 1 : 0)`. Si `abortar()` se limitara a lanzar, ese `catch`
+// se comería el `GateAbortError` como si fuera un fallo cualquiera, y el barrido perdería la
+// distinción entre "2 = no pudo arrancar" y "1 = corrió y algo falló" — que es justo la que
+// existe para no confundir "no se ha probado nada" con "se probó y falló" (ver cabecera de
+// `run-gates.mjs`). La limpieza no puede costar esa distinción.
+//
+// Se resuelve envolviendo `process.exit`: en cuanto `abortar()` dispara una vez, CUALQUIER
+// salida posterior del proceso —la limpieza ya corrió, y el gate cierra solo, con el código que
+// le parezca— se fuerza a 2. El gate decide cuándo sale; el CÓDIGO con el que sale, cuando hubo
+// un aborto de por medio, no lo decide él.
+let huboAborto = false;
+const exitOriginal = process.exit.bind(process);
+process.exit = (code) => exitOriginal(huboAborto ? 2 : code);
+
 function abortar(msg, pista) {
-  console.error('\n✗ GATE ABORTADO — no ha verificado NADA. Esto NO es un aprobado.');
-  console.error('  ' + msg);
-  if (pista) console.error('  ' + pista);
-  process.exit(2);
+  huboAborto = true;
+  const texto = 'GATE ABORTADO — no ha verificado NADA. Esto NO es un aprobado.\n  ' + msg + (pista ? '\n  ' + pista : '');
+  console.error('\n✗ ' + texto);
+  throw new GateAbortError(texto);
 }
+
+// El guardián: si el `GateAbortError` llega sin que nadie lo atrapara (el gate no tiene ni un
+// `catch` alrededor del punto donde se lanzó), el proceso sale igual con el 2 de siempre —
+// `process.exit` ya está envuelto arriba, así que basta con pedir la salida. Cualquier OTRA
+// excepción no capturada se comporta como Node manda: se imprime entera y sale con 1.
+function alFinal(err) {
+  if (err instanceof GateAbortError) process.exit(2);
+  else { console.error(err); process.exit(1); }
+}
+process.on('uncaughtException', alFinal);
+process.on('unhandledRejection', alFinal);
 
 // Ruta a la BD de un tenant, resuelta desde el repo. Si no existe, el gate aborta.
 export function tenantDb(slug = 'desarrollo-bamburu') {

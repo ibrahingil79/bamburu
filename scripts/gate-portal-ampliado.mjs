@@ -182,15 +182,35 @@ try {
   fail++; console.error('\n✗ EXCEPCIÓN: ' + e.message + '\n' + e.stack);
 } finally {
   try { if (browser) await browser.close(); } catch {}
-  try {
-    db.pragma('foreign_keys = ON');
-    db.prepare("DELETE FROM portal_mensajes WHERE texto LIKE 'GG-%' OR client_id IN (SELECT id FROM clients WHERE name LIKE 'GG-%')").run();
-    db.prepare("DELETE FROM portal_tokens WHERE client_id IN (SELECT id FROM clients WHERE name LIKE 'GG-%')").run();
-    db.prepare("DELETE FROM invoice_items WHERE invoice_id IN (SELECT id FROM invoices WHERE series='GGATE')").run();
-    db.prepare("DELETE FROM invoices WHERE series='GGATE'").run();
-    db.prepare("DELETE FROM clients WHERE name LIKE 'GG-%'").run();
-    db.prepare("DELETE FROM admin_sessions WHERE token LIKE '" + TOKEN_PREFIJO + "%'").run();
-  } catch (e) { console.error('  (limpieza incompleta: ' + e.message + ')'); }
+  // ⚙️ 9 SEP 2026 (`barrera-permisos-contamina-el-barrido`) — CADA BORRADO EN SU PROPIO try/catch:
+  // estaban los seis en un solo bloque, y si uno fallaba (p. ej. una FK que este gate no preveía),
+  // el `catch` cortaba ahí y los que venían DESPUÉS —clientes incluidos— nunca se ejecutaban. Un
+  // borrado que falla no puede costarle la limpieza a los demás (mismo hallazgo y misma cura que
+  // en `gate-informes-a-medida.mjs`).
+  db.pragma('foreign_keys = ON');
+  const limpiar = (etiqueta, fn) => { try { fn(); } catch (e) { console.error('  (limpieza de ' + etiqueta + ' incompleta: ' + e.message + ')'); } };
+  limpiar('mensajes del portal', () => db.prepare("DELETE FROM portal_mensajes WHERE texto LIKE 'GG-%' OR client_id IN (SELECT id FROM clients WHERE name LIKE 'GG-%')").run());
+  limpiar('tokens del portal', () => db.prepare("DELETE FROM portal_tokens WHERE client_id IN (SELECT id FROM clients WHERE name LIKE 'GG-%')").run());
+  // `portal_sesiones` faltaba: entrar de verdad al portal dentro del test deja aquí su propia
+  // sesión (distinta de `portal_tokens`, que es el enlace de un solo uso), y sin este borrado el
+  // cliente se quedaba enganchado para siempre — es justo lo que bloqueaba a 5 clientes viejos.
+  limpiar('sesiones del portal', () => db.prepare("DELETE FROM portal_sesiones WHERE client_id IN (SELECT id FROM clients WHERE name LIKE 'GG-%')").run());
+  // ⚙️ 9 SEP 2026 — FACTURA A FACTURA, no en un solo `DELETE ... WHERE series='GGATE'`. Si alguna
+  // ANTIGUA de este mismo gate quedó ANULADA de verdad en una limpieza manual (gana registro real
+  // en la cadena: `verifactu_registros` + `invoice_anulaciones`, y eso ya NO se puede borrar — es
+  // correcto que no se pueda), un DELETE en bloque revienta por esa UNA fila y con él se lleva por
+  // delante las facturas FRESCAS de esta misma pasada, que sí eran libres. Cada factura decide su
+  // propio destino; una atascada no le cuesta la limpieza a las demás.
+  for (const inv of db.prepare("SELECT id FROM invoices WHERE series='GGATE'").all()) {
+    limpiar('factura #' + inv.id, () => {
+      db.prepare('DELETE FROM invoice_items WHERE invoice_id=?').run(inv.id);
+      db.prepare('DELETE FROM invoices WHERE id=?').run(inv.id);
+    });
+  }
+  for (const cl of db.prepare("SELECT id FROM clients WHERE name LIKE 'GG-%'").all()) {
+    limpiar('cliente #' + cl.id, () => db.prepare('DELETE FROM clients WHERE id=?').run(cl.id));
+  }
+  limpiar('sesiones', () => db.prepare("DELETE FROM admin_sessions WHERE token LIKE '" + TOKEN_PREFIJO + "%'").run());
   try { db.close(); } catch {}
 }
 

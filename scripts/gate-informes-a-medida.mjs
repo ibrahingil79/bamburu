@@ -416,16 +416,28 @@ try {
   // LIMPIEZA. Por los ids creados Y por la marca, para que si el gate muere a mitad la pasada
   // siguiente no herede basura ni se enganche a ella.
   try { if (browser) await browser.close(); } catch {}
-  try {
-    for (const id of creado.paneles) db.prepare('DELETE FROM analytics_panels WHERE id=?').run(id);
-    db.prepare("DELETE FROM analytics_panels WHERE nombre LIKE 'GATE-D-%'").run();
-    db.prepare("DELETE FROM citas WHERE codigo LIKE 'GATE-D-%'").run();
-    if (creado.factura) db.prepare('DELETE FROM invoices WHERE id=?').run(creado.factura);
-    db.prepare("DELETE FROM invoices WHERE series='GATED'").run();
-    db.prepare("DELETE FROM recursos WHERE nombre LIKE 'GATE-D-%'").run();
-    db.prepare("DELETE FROM clients WHERE name LIKE 'GATE-D-%'").run();
-    db.prepare("DELETE FROM admin_sessions WHERE token LIKE '" + TOKEN_PREFIJO + "%'").run();
-  } catch (e) { console.error('  (limpieza incompleta: ' + e.message + ')'); }
+  // ⚙️ 9 SEP 2026 (`barrera-permisos-contamina-el-barrido`) — CADA BORRADO EN SU PROPIO try/catch,
+  // no uno grande envolviéndolos a todos. Estaban los ocho en el MISMO bloque: si el borrado de la
+  // factura fallaba (p. ej. por una fila que la referenciara y no se hubiera limpiado a tiempo), el
+  // `catch` cortaba ahí y los DELETE de `recursos` y `clients` —que venían DESPUÉS en el mismo
+  // bloque— nunca llegaban a ejecutarse. Así sobrevivían el cliente y la sala de prueba aunque la
+  // factura sí se limpiara, o al revés. Un borrado que falla no puede costarle la limpieza a los demás.
+  const limpiar = (etiqueta, fn) => { try { fn(); } catch (e) { console.error('  (limpieza de ' + etiqueta + ' incompleta: ' + e.message + ')'); } };
+  limpiar('paneles (por id)', () => { for (const id of creado.paneles) db.prepare('DELETE FROM analytics_panels WHERE id=?').run(id); });
+  limpiar('paneles (por marca)', () => db.prepare("DELETE FROM analytics_panels WHERE nombre LIKE 'GATE-D-%'").run());
+  limpiar('citas', () => db.prepare("DELETE FROM citas WHERE codigo LIKE 'GATE-D-%'").run());
+  // FACTURA A FACTURA, no en un solo `DELETE ... WHERE series='GATED'`: si alguna quedó ANULADA de
+  // verdad en una limpieza manual (gana `verifactu_registros` + `invoice_anulaciones`, y eso ya no
+  // se puede borrar — es correcto que no se pueda), un DELETE en bloque revienta por ESA fila y con
+  // él se lleva por delante las facturas frescas de esta pasada, que sí eran libres.
+  for (const inv of db.prepare("SELECT id FROM invoices WHERE series='GATED'").all()) {
+    limpiar('factura #' + inv.id, () => { db.prepare('DELETE FROM invoices WHERE id=?').run(inv.id); });
+  }
+  limpiar('recursos', () => db.prepare("DELETE FROM recursos WHERE nombre LIKE 'GATE-D-%'").run());
+  for (const cl of db.prepare("SELECT id FROM clients WHERE name LIKE 'GATE-D-%'").all()) {
+    limpiar('cliente #' + cl.id, () => db.prepare('DELETE FROM clients WHERE id=?').run(cl.id));
+  }
+  limpiar('sesiones', () => db.prepare("DELETE FROM admin_sessions WHERE token LIKE '" + TOKEN_PREFIJO + "%'").run());
   try { db.close(); } catch {}
 }
 

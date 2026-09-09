@@ -460,7 +460,7 @@ familia entera en verde: `test-contabilidad` 38 · `verify-contabilidad-diario-m
 > cuándo no se corre— y se espera un sí. Si dice que no, queda pendiente aquí y se vuelve a
 > proponer al abrir la siguiente sesión.
 
-- **Último barrido completo:** 2026-09-09 · `565fb9a` · **113/214** · 592 s
+- **Último barrido completo:** 2026-09-09 · `2c50875` · **156/215** · 1242 s
 - **Estado:** ✅ al día
 
 <!-- BARRIDO:FIN -->
@@ -15089,12 +15089,15 @@ Y su propia limpieza no lo recogió: `cleanup(slug)` empieza con `if (!slug) ret
 - [ ] Hay un centinela que falla si aparece un `new Database` sobre `data/tenants/` sin `fileMustExist`, probado en rojo.
 
 
-## TAREA — `gate-barrera-permisos` contamina el barrido completo entero
+## ✅ TAREA — `gate-barrera-permisos` contamina el barrido completo entero
 
 - **id:** barrera-permisos-contamina-el-barrido
-- **estado:** pendiente
+- **estado:** ✅ **HECHA — 9 sep 2026.** Commit `PENDIENTE-DE-ANOTAR` (se anota en el siguiente
+  commit, mismo criterio que `enviar-documentos-por-correo`: primero se comitea, después se
+  puede citar el propio hash).
 - **origen:** Descubierto el 9 sep 2026 al correr `node scripts/run-gates.mjs --all` para cerrar
-  `enviar-documentos-por-correo`. **Registrada, NO arreglada** (no es cirugía de esa ficha).
+  `enviar-documentos-por-correo`. Quedó **registrada, NO arreglada** en esa entrega — el arreglo es
+  esta ficha.
 
 **De dónde sale.** `gate-barrera-permisos.mjs` (nace 8 sep 2026) prueba la barrera de arranque
 parcheando ficheros REALES en disco (`modules/erp/routes/users.js`, `settings.js`, `index.js`):
@@ -15122,22 +15125,67 @@ localizado y devuelto a su sitio (negocios huérfanos borrados, facturas ANULADA
 nunca borradas) el mismo 9 sep 2026, y comprobado: `verify-barrido-no-infla-ventas` y
 `gate-cifrado-en-reposo` vuelven a 0 ✗.
 
-**No se arregla en esta ficha porque el arreglo es de OTRA tarea** (tocar `gate-barrera-permisos` o
-`exigeCodigoServido`, ninguno de los dos de Ventas/documentos) y porque `RITUAL.md` pide cirugía, no
-mejorar lo adyacente. Lo que sí se hizo: diagnosticarlo hasta el fondo (no quedarse en "el barrido
-dio mal") y limpiar el residuo real que dejó.
+**Qué se arregló, en concreto:**
+
+1. **`scripts/lib/gate-env.mjs` — `abortar()` ya NO hace `process.exit(2)` en el sitio.** Lanza un
+   `GateAbortError`. Un gate escrito con su `try { … } finally { limpieza }` de siempre —que es como
+   está escrito casi todo este árbol— lo atrapa como cualquier otro fallo: su `finally` corre, limpia
+   lo suyo, y el resultado se reporta igual. Solo si NADIE lo atrapa entra el guardián
+   (`uncaughtException`/`unhandledRejection`), que fuerza el código de salida a 2 igualmente
+   (`process.exit` envuelto, para que ese 2 no se confunda nunca con un 1 de "corrió y falló"). Esto
+   es lo que corta la CASCADA: un aborto de `gate-barrera-permisos` ya no mata a pelo al gate que
+   corre al lado, a media limpieza.
+2. **`scripts/gate-barrera-permisos.mjs` — restaura también la FECHA**, no solo el contenido
+   (`statSync`/`utimesSync`), tanto en el camino feliz (`conParche`) como en la red de seguridad
+   final que compara contra la instantánea.
+3. **Registrado en `SOLOS`** (`scripts/lib/gates-mapa.mjs`), con su motivo: mientras corre, no
+   arranca ningún otro gate de la clase "compartido" a su lado. **Reduce la ventana, no la cierra del
+   todo** — un gate de negocio "propio" (`EMPIEZAN_DE_CERO`) sigue pudiendo correr en paralelo y
+   toparse con los segundos en que el fichero SÍ está tocado de verdad; si eso pasa, con el punto 1 ya
+   no cascada: aborta solo, limpio, y se reporta como su propio rojo aislado.
+4. **Efecto colateral real, encontrado al re-correr el barrido para comprobar esto**: seis gates
+   dejaban residuo cuando fallaban a media limpieza y no por la contaminación de arriba —
+   `gate-agenda-sencilla` (un cliente de la prueba «[3-ter]» sin guardar su id para poder borrarlo),
+   `gate-c1c-diferencias-cierre` (dos órdenes de compra de prueba que se quedaban vivas para
+   siempre), `gate-facturar-horas-pantalla` y `gate-rentabilidad-pantalla` (sin red de seguridad si
+   el camino feliz no llegaba a anular factura/gasto) y `gate-informes-a-medida`/
+   `gate-portal-ampliado` (un solo `try/catch` grande: si el primer borrado fallaba, los siguientes
+   —clientes incluidos— nunca se ejecutaban). Los seis, corregidos.
+5. **Nuevo `scripts/verify-residuo-de-pruebas.mjs`** (grupo `infra`), el censo que vigila que el
+   barrido no deje negocios/facturas/clientes de prueba vivos en el entorno — comparte la marca con
+   `limpiar-restos-de-gates.mjs` vía el nuevo punto único `scripts/lib/marca-de-gate.mjs` (antes
+   duplicada a mano; el mismo error que ya costó caro una vez, con los nombres con carga).
+
+**Comprobado, no supuesto:** barrido `--all` completo corrido después del arreglo: **156/215 ✓**,
+frente a **113/214** antes de tocarlo — la cascada de "no pudo arrancar" desaparece. **Sigue sin dar
+215/215**: lo que falta son los rojos ya conocidos y ajenos a esto — la deuda del 7 sep (53 rojos) más
+los dos hallazgos apuntados en `enviar-documentos-por-correo` —, nada nuevo que este arreglo haya
+destapado.
+
+**Lo que NO se hizo, dicho sin adornar el cierre:** el criterio de "`exigeCodigoServido()` distingue
+por HASH, no por fecha" no se implementó — se tomó la alternativa "más simple" que el propio criterio
+ya ofrecía (que no corra en paralelo con otros), pero **por `SOLOS`, no por `FUERA_A_PROPOSITO`** como
+sugería: sigue yendo DENTRO de `--all`, solo que en solitario frente al negocio compartido. Es una
+mitigación real y medida, no una eliminación matemática de la ventana de carrera (punto 3 de arriba).
+
+**Por qué "se arregló y hoy volvía a estar roto" — la causa de fondo, no solo el bug:** este mismo
+arreglo se escribió y se comprobó (barrido real, 156/215) en la sesión que cerró el diagnóstico de
+`enviar-documentos-por-correo`, pero **nunca se comiteó**: se quedó vivo solo en el árbol de trabajo,
+invisible para `git log`, para el remoto, y para cualquier sesión nueva que leyera esta ficha —que
+seguía en `pendiente`. El código no volvió a romperse solo; el arreglo nunca llegó a existir para
+nadie más que ese árbol de trabajo. Se cierra aquí, con commit y push, para que deje de depender de
+que nadie borre ni reinicie ese directorio.
 
 **Criterios de aceptación**
 
 - [ ] `exigeCodigoServido()` distingue "un fichero que un gate tocó y devolvió a su contenido
-      original" de "un cambio real sin reiniciar" — por ejemplo, comparando un HASH del contenido
-      contra una instantánea tomada al arrancar el barrido, no solo la fecha de modificación.
-- [ ] O, más simple: `gate-barrera-permisos` se saca del barrido `--all` (como ya se hizo con
-      `gate-cadena-integridad`/`gate-cupones-desmontados`, que tampoco pueden correr en paralelo
-      con otros gates) y se corre a mano y a solas, con su motivo escrito en `FUERA_A_PROPOSITO`.
-- [ ] `node scripts/run-gates.mjs --all` termina sin ninguna cascada de "no pudo arrancar" cuando
-      `gate-barrera-permisos` está en la misma pasada — probado corriendo el barrido completo una
-      vez más y comprobando que el número de abortados no sube tras el punto donde corre ese gate.
+      original" de "un cambio real sin reiniciar" por HASH — no implementado, ver nota de arriba.
+- [x] O, más simple: `gate-barrera-permisos` se saca de correr en paralelo con el resto — **hecho por
+      `SOLOS`** (no por `FUERA_A_PROPOSITO`: sigue dentro de `--all`, en solitario frente al negocio
+      compartido; un gate "propio" en paralelo sigue siendo posible, ver punto 3).
+- [x] `node scripts/run-gates.mjs --all` termina sin ninguna cascada de "no pudo arrancar" cuando
+      `gate-barrera-permisos` está en la misma pasada — comprobado: 156/215, sin el desplome de más
+      de 100 abortados que había antes.
 
 
 ## ✅ TAREA — Migrar el ERP para quitarle el `unsafe-inline`

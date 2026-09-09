@@ -111,6 +111,52 @@ Ajustar el gate para que deje de quejarse sería cambiar el termómetro para no 
 Ajustes: `--jobs=N` (global) · `--jobs-navegador=N` · `--jobs-compartido=N` · `--serie` (uno detrás
 de otro, como antes: sirve para comparar dos barridos cuando algo huele a concurrencia).
 
+### 4. TODO GATE LIMPIA LO QUE ENSUCIA — pase, falle o aborte
+
+> **Un gate que crea un negocio, un cliente, una factura, un fichero o cualquier dato de prueba lo
+> borra al terminar, SIN EXCEPCIÓN. El entorno queda exactamente como estaba antes de correrlo —
+> pase la comprobación, falle, o no llegue ni a arrancar.** No es una recomendación de estilo: un
+> banco de pruebas que ensucia y no recoge acaba haciendo que su propia basura reviente otra
+> comprobación, y eso es exactamente lo que pasó.
+
+**De dónde sale (9 sep 2026, `barrera-permisos-contamina-el-barrido`).** `gate-barrera-permisos`
+parcheaba ficheros reales para probar la barrera de arranque y los devolvía tal cual — pero
+`writeFileSync` adelanta la fecha de modificación aunque el texto vuelva a ser idéntico, y
+`exigeCodigoServido()` decide si el servicio "sirve el código de disco" mirando esa fecha. En
+cuanto ese gate tocaba un fichero, **cualquier gate de navegador posterior en la misma pasada**
+veía una fecha "más nueva que el arranque" y **abortaba con `process.exit(2)` en seco** — y ese
+`exit()` mataba el proceso a media ejecución, antes de que su propio `finally` de limpieza pudiera
+correr. Así se colaron 26 negocios de prueba huérfanos y varias facturas de prueba emitidas de
+verdad en el negocio compartido, sin que nadie lo hubiera pedido.
+
+**Lo que se corrigió, y protege a los 214 gates a la vez, no uno a uno:**
+
+- `gate-barrera-permisos` ahora restaura también la **fecha** del fichero que toca
+  (`utimesSync`), no solo su contenido — deja de disparar el problema.
+- `scripts/lib/gate-env.mjs` ya **no cierra el proceso en seco** cuando algo obliga a abortar:
+  **lanza** un `GateAbortError` en vez de `process.exit(2)`. Un gate escrito con su
+  `try { … } finally { limpieza }` de siempre —que es como está escrito casi todo este árbol— lo
+  atrapa como cualquier otro fallo: su `finally` corre, limpia lo suyo, y el resultado se sigue
+  reportando igual (`process.exit` queda envuelto para que, si hubo un aborto de por medio, el
+  código de salida real siga siendo 2 — "no pudo arrancar" nunca se confunde con "corrió y falló").
+- Un gate cuya siembra de datos viva **fuera de cualquier `try`** (antes de abrir uno) no queda
+  protegido por esto solo: es un fallo estructural de ESE gate en concreto, y se corrige ahí,
+  moviendo la siembra dentro de su propio `try/finally` — no hay atajo general para ese caso.
+
+**Cómo se comprueba, y no de palabra:** `scripts/verify-residuo-de-pruebas.mjs` (grupo `infra`)
+censa el entorno entero —negocios de prueba huérfanos en `control.db`, ficheros de gate en
+`data/tenants/`, y clientes/productos/proveedores/categorías/almacenes/recursos/usuarios/
+documentos VIVOS con la marca de gate dentro de cada negocio real— y sale en rojo si encuentra
+algo. Correrlo antes y después de un barrido completo, sin nada nuevo entre medias, es la prueba de
+que "no acumula residuo". Comparte la marca (`scripts/lib/marca-de-gate.mjs`) con
+`limpiar-restos-de-gates.mjs`, el que de verdad limpia lo que ya se ha colado.
+
+**La regla para lo que se escriba de aquí en adelante:** todo gate nuevo que siembre cualquier dato
+de prueba lo hace **dentro** de un `try` cuyo `finally` lo borra por ID, nunca por fecha ni por
+nombre — y esa siembra no puede vivir en el módulo antes de abrir ese `try`. Si un gate necesita
+sembrar algo antes de poder decidir si aborta (p. ej. para tener algo que limpiar en el
+`finally`), la siembra y el `try` nacen juntos, en ese orden.
+
 ---
 
 ## PASO 0 DEL CIERRE — DESPLEGAR (obligatorio, antes de decir "hecho")

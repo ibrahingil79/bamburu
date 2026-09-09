@@ -25,32 +25,18 @@
 import Database from 'better-sqlite3';
 import fs from 'fs';
 import path from 'path';
+import { MARCA_SQL, MARCA_USU } from './lib/marca-de-gate.mjs';
 
 const HAZLO = process.argv.includes('--hazlo');
 const SOLO = (process.argv.find(a => a.startsWith('--tenant=')) || '').split('=')[1] || null;
 const RAIZ = path.resolve(new URL('..', import.meta.url).pathname);
 const DIR = path.join(RAIZ, 'data', 'tenants');
 
-// Cómo se reconoce lo que dejó un gate. Son los prefijos y marcas que usan los gates de este repo.
-// Deliberadamente NO incluye «prueba» a secas: hay datos sembrados legítimos que lo llevan.
-const MARCA_SQL = (col) => `(${col} LIKE 'GATE%' OR ${col} LIKE '%(gate %' OR ${col} LIKE '%(gate)%'
-  OR ${col} LIKE 'ZZ %' OR ${col} LIKE 'ZZ-%' OR ${col} LIKE 'GD2-%' OR ${col} LIKE '%gate %'
-  OR ${MARCA_CARGA(col)})`;
-
-// ⚙️ 5 SEP 2026 (autorizado por Ibrahin) — LOS NOMBRES CON CARGA, que no llevaban ninguna marca.
-// Salieron mirando el DOM de `/admin/quotes/new` durante `csp-erp-migrar-handlers`: en el
-// desplegable de cliente había un `<img src=x onerror=…>` y dos `<script>alert(1)</script>`, restos
-// de gates viejos de XSS. **Salen ESCAPADOS**, o sea que la defensa funciona y nunca ejecutaron
-// nada: son texto. Pero ensucian los desplegables del dueño y hacen que cualquier medida por
-// expresión regular sobre el HTML dé un falso positivo — pasó justo eso al medir esa pantalla.
-//
-// No llevan «GATE» ni «ZZ» delante, así que el limpiador NO los veía. Se reconocen por lo que son:
-// un nombre que trae marcado o un `javascript:` dentro. La regla de siempre sigue mandando encima:
-// si algo cuelga de ellos, se ARCHIVAN, no se borran.
-function MARCA_CARGA(col) {
-  return `(${col} LIKE '%<script%' OR ${col} LIKE '%onerror=%' OR ${col} LIKE '%onload=%'
-    OR ${col} LIKE '%<img %' OR ${col} LIKE '%<svg%' OR ${col} LIKE '%javascript:%')`;
-}
+// ⚙️ 9 SEP 2026 (`barrera-permisos-contamina-el-barrido`) — LA MARCA se mudó a
+// `scripts/lib/marca-de-gate.mjs`, punto único: la comparte con `verify-residuo-de-pruebas.mjs`
+// (el censo que vigila el barrido). Vivía duplicada aquí a mano; una marca nueva que se añadiera
+// solo en un sitio no la vería el otro — el mismo error que ya costó caro una vez (los nombres
+// con carga, 5 sep 2026, ver historia abajo).
 
 // De qué tablas puede colgar un cliente. Si tiene algo en alguna, NO se borra: se archiva.
 const DE_UN_CLIENTE = [
@@ -127,7 +113,6 @@ function procesar(slug, ruta) {
     const catQuedan = cat.filter(x => catConProd.has(x.id));
 
     // ── USUARIOS DE PRUEBA ──────────────────────────────────────────────────────────────────────
-    const MARCA_USU = "(name LIKE 'GATE%' OR name LIKE 'Gate %' OR name LIKE 'ZZ %' OR email LIKE '%gate%' OR email LIKE 'zz-%' OR email LIKE 'gas-%')";
     const usu = db.prepare(`SELECT id, name, email, role, active FROM admin_users WHERE role<>'owner' AND ${MARCA_USU}`).all();
     const usuBorrar = usu.filter(u => libre(db, u.id, DE_UN_USUARIO));
     const usuArchivar = usu.filter(u => !libre(db, u.id, DE_UN_USUARIO) && u.active);
