@@ -9818,6 +9818,67 @@ copia previa) escritura + lectura concurrentes intensas contra la misma base mie
 una medida, no con una suposición. Si se confirma, la reparación toca `conexiones-que-no-se-cierran`
 o el propio motor de conexiones — no `sacar-disa-paso-2-borrado`, que queda cerrada y limpia.
 
+**PASO 0 — RECOLECCIÓN FORENSE (9 sep 2026), sin escribir código nuevo. NO CIERRA LA FICHA** — solo
+el experimento aislado (pendiente, sin autorizar aún) puede dar una medida causal. Esto es lo que ya
+había, releído entero:
+
+1. **`journalctl -u bamburu`, ventana 15:50–16:15 completa (489 líneas).** Nada de
+   `SQLITE_BUSY`/`SQLITE_LOCKED`/`disk I/O error`/`ENOSPC`/"no space" en TODA la ventana — la
+   corrupción no dejó ningún error de bloqueo o de disco previo que se pueda leer directamente; el
+   primer síntoma es ya el `malformed` en sí. **6 aperturas de conexión** (`✅ ERP: Migraciones
+   completadas`) en los 2 min 25 s antes del primer error: 15:58:28 · 15:59:06 · 15:59:15 · 15:59:46 ·
+   16:00:30 · **16:00:47** (8 segundos antes del primer 500).
+2. **El primer error real, línea a línea (16:00:55):** `SqliteError: database disk image is
+   malformed` en `modules/erp/routes/products.js:102` — una petición normal leyendo `products`, FUERA
+   de cualquier migración. Es decir: **la página ya estaba rota en el fichero antes de las 16:00:55**;
+   esto no captura el instante en que se rompió, solo el instante en que alguien la leyó y lo notó.
+3. **El hallazgo fuerte, en `control.db` → `error_log` (persistido, 353 filas en la ventana completa
+   del histórico rodante, TODAS revisadas para el rango 15:50–16:15 vía `Database.abrirCopia`
+   readonly):** el primer error QUE SE PERSISTIÓ no es el de las 16:00:55 — es dos minutos más tarde,
+   **16:02:41**, y su traza es exacta:
+   `backfillCodes (modules/erp/codes.js:34) ← runMigrations (models.js:735) ← abrirBase
+   (tenant-middleware.js:94) ← getTenantDb (tenant-middleware.js:225) ← tenantMiddleware
+   (tenant-middleware.js:288)`.
+   Es decir: **una conexión RECIÉN ABIERTA, a mitad de su propia migración automática, se rompe los
+   dientes leyendo `products` justo en `backfillCodes`** — la función que en `models.js:735` hace
+   `backfillCodes(db, { table: 'products', column: 'product_code', entity: 'product' })` **sin
+   ninguna bandera que la salte** (a diferencia de los archivados D1/D2/B, que si están guardados no
+   vuelven a tocar nada): hace `SELECT id FROM products WHERE product_code IS NULL OR product_code=''`
+   y, si hay filas, una `UPDATE` dentro de una transacción — **en TODA apertura fresca de la base**,
+   sin excepción. Y el log lo pilla a los **2 segundos** de que OTRA apertura (16:02:39) hubiera
+   logueado su migración como completada — dos conexiones abriéndose casi a la vez, una acaba bien y
+   la otra se estrella exactamente en el punto que toca la tabla rota. **`products` no es una tabla
+   cualquiera que se corrompió por casualidad: es la que CUALQUIER apertura nueva de esta base toca
+   siempre, sin condición, dentro de su propia migración.**
+4. **`control.db` → `integrity_checks`:** el único registro para `desarrollo-bamburu` es del
+   **23 ago 2026** (`ok:1, total:832`) — **15 días antes del incidente**. El `quick_check` que el
+   relato original dice haber corrido "en las 18 bases" esa noche **no se guardó en esta tabla**: fue
+   una comprobación manual, no la vía normal del panel. No es una contradicción, es un hueco: esta
+   tabla no sirve como fuente para el rango del incidente.
+5. **`control.db` → `security_events`, ventana completa:** solo 4 filas, las cuatro de 2FA del
+   superadmin (activaciones/rescate), nada de `ratelimit:global` ni ninguna otra anomalía. El barrido
+   de esa noche no dejó huella aquí.
+6. **`logs/orquestador.log`:** sin ninguna entrada en la ventana del 7 sep — el barrido de esa noche
+   se lanzó a mano, no por el orquestador (coherente con que éste llevaba ya días sin ciclos activos).
+7. **`docs/barridos/2026-09-07-salida-completa.log`:** confirma el contexto de concurrencia declarado
+   (229 gates, hasta 4 a la vez, 2 con navegador, 2 sobre el negocio de desarrollo) pero **no lleva
+   marca de tiempo por gate** (solo duraciones) — no se puede reconstruir gate a gate qué corría
+   exactamente a las 16:00:55 desde este fichero. Limitación real, no rellenada por invención.
+8. **Disco lleno (hipótesis barata a descartar primero):** **sin rastro** de `ENOSPC`/"space" en toda
+   la ventana del journal. Se anota como "sin evidencia a favor" — no como "imposible": no hay
+   histórico de `df` de esa noche que lo confirme del todo. Disco hoy: 37% usado, sin tensión.
+
+**Conclusión del Paso 0, y lo que cambia:** la sospecha oficial de la ficha (repaso de conexiones
+chocando con carga concurrente) sigue en pie, pero el rastro más concreto que deja el propio incidente
+señala con más fuerza a un mecanismo más específico y no nombrado hasta ahora: **`backfillCodes`
+sobre `products`, sin bandera que la frene, ejecutándose dentro de la migración de CADA apertura
+fresca de conexión — y aperturas frescas se estaban amontonando (6 en menos de 2 min y medio) justo
+en el momento del incidente.** Las dos hipótesis no compiten: el churn de conexiones del repaso es
+probablemente LA RAZÓN de que hubiera tantas aperturas frescas seguidas: cuantas más rondas de
+apertura, más rondas de `backfillCodes` escribiendo sobre `products` desde procesos distintos a la
+vez. **Sigue sin haber una medida causal** — eso solo lo da el experimento aislado (Fase 2 del plan),
+que sigue sin autorizar.
+
 ---
 
 ## TAREA — Retirar los vestigios de superadmin que vigilaban la IA
