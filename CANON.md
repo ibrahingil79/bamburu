@@ -96,7 +96,20 @@ mira a la competencia directa.)
   mirar sus números por su cuenta también es el dueño. "El software trabaja, no el humano" no significa
   "el humano no mira".*
 
-## 4. Fase actual: ~~SANEAMIENTO TÉCNICO (la escalera queda aplazada)~~ → **LA COLA DE 97 TAREAS**
+## 4. Fase actual: ~~SANEAMIENTO TÉCNICO (la escalera queda aplazada)~~ → ~~LA COLA DE 97 TAREAS~~ →
+**TERMINAR EL PILAR 4 (VENTAS), por delante de todo**
+
+> 🔺🔺 **DECISIÓN DE IBRAHIN, 9 SEP 2026.** Mientras esto esté vigente, **lo siguiente es terminar el
+> Pilar 4 (Ventas)**: facturación recurrente, plantillas de documento, cobro online
+> (`enlace-pago-nivel-a`) y lo que le quede al pilar. **NO se toca infraestructura, seguridad ni
+> higiene hasta acabarlo** — única excepción: algo que rompa el propio trabajo de Ventas. Esto
+> **suspende, mientras dure**, el "la siguiente tarea es la primera `pendiente` en orden de documento
+> de §LA COLA" (párrafo de abajo) para todo lo que NO sea Ventas: se salta, no se reordena en
+> `TABLERO.md`. Detalle, motivo y el caso que lo disparó (`investigar-corrupcion-desarrollo-bamburu`,
+> cerrada "causa muy probable, sin reproducir", reparación anotada como **ANTES DE LANZAR**) en
+> `TABLERO.md`, al principio del documento — es la fuente completa, esto es el resumen de estrategia.
+> Se tacha en vez de borrarse: lo de abajo sigue siendo el criterio para tareas de Ventas y para
+> cuando este bloque quede derogado al terminar el pilar.
 
 > ⚙️⚙️ **DEROGADA. DECISIÓN DE IBRAHIN, 2 SEP 2026.** La fase de saneamiento técnico **ya no existe**.
 > Manda la lista de 97 tareas del 2 de septiembre (`TABLERO.md` §LA COLA), en el orden que decidió

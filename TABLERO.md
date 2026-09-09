@@ -1,4 +1,31 @@
-# TABLERO — ~~Fase activa de saneamiento técnico~~ · **LA COLA DE 97, EN EL ORDEN DE IBRAHIN**
+# TABLERO — ~~Fase activa de saneamiento técnico~~ · **LA COLA DE 97, EN EL ORDEN DE IBRAHIN** ·
+**⚙️ AHORA MISMO: MANDA TERMINAR EL PILAR 4 (ver bloque de abajo)**
+
+> 🔺🔺 **PILAR 4 (VENTAS) POR DELANTE DE TODO. DECISIÓN DE IBRAHIN, 9 SEP 2026.**
+>
+> **Lo siguiente es TERMINAR el Pilar 4 (Ventas):** facturación recurrente, plantillas de documento,
+> y lo que le quede al pilar (cobro online — `enlace-pago-nivel-a` — y cualquier otra pieza que falte).
+>
+> **NO se toca nada de infraestructura, seguridad ni higiene hasta que Ventas esté acabado.** Esto
+> **suspende, mientras dure**, el criterio de "la siguiente tarea es la primera `pendiente` en orden
+> de documento de §LA COLA" para cualquier tarea que NO sea de Ventas: se salta, no se borra ni se
+> reordena en el documento. **Única excepción: algo que rompa el propio trabajo de Ventas** — eso sí
+> se para a arreglar, porque si no Ventas no puede avanzar.
+>
+> **Motivo, con el caso que lo disparó:** `investigar-corrupcion-desarrollo-bamburu` (más abajo) cerró
+> el 9 sep 2026 con una causa muy probable identificada y **sin reproducir** — no se autorizó la Fase
+> 2 de reproducción aislada. La reparación (`backfill-codes-en-cada-apertura`, ficha nueva, más abajo)
+> queda anotada como **"arreglar ANTES DE LANZAR"**, no ahora: el mecanismo sospechoso solo muerde con
+> muchos negocios reales concurrentes a la vez, y hoy hay cero. No bloquea Ventas.
+>
+> **`ANTES DE LANZAR` es, desde hoy, un calificador de estado reconocido** (como ya lo son "SOLO
+> ANOTADA, NO CONSTRUIDA" o "bloqueada por decisión de producto"): una tarea real, con su diagnóstico
+> hecho, que se aplaza a propósito hasta el momento de salir al mercado — no se pierde, no se
+> "arregla de paso", y no cuenta como deuda de HOY.
+>
+> Se tacha en vez de borrarse, que es lo que manda este documento: lo de abajo (LA COLA en su orden
+> estricto, sin esta excepción) sigue siendo el criterio para TAREAS DE VENTAS y para cuando este
+> bloque quede derogado al terminar el pilar.
 
 > ⚙️⚙️ **LA FASE DE SANEAMIENTO QUEDA DEROGADA. DECISIÓN DE IBRAHIN, 2 SEP 2026.** **La lista de 97
 > tareas del 2 de septiembre (§LA COLA) deroga esta fase.** Lo que quedara de saneamiento **no
@@ -9785,10 +9812,13 @@ limpio verificado).
 
 ---
 
-## 🆘 TAREA — Investigar por qué se corrompió `desarrollo-bamburu.db` bajo carga
+## ✅ TAREA — Investigar por qué se corrompió `desarrollo-bamburu.db` bajo carga
 
 - **id:** investigar-corrupcion-desarrollo-bamburu
-- **estado:** pendiente
+- **estado:** ✅ **CERRADA — 9 sep 2026. Causa muy probable identificada, SIN REPRODUCIR.** Decisión
+  de Ibrahin: no se autoriza la Fase 2 (el experimento de reproducción aislada) — la prioridad pasa a
+  terminar el Pilar 4 (ver bloque al principio del documento). La reparación se anota como tarea
+  aparte, **"arreglar ANTES DE LANZAR"** (`backfill-codes-en-cada-apertura`, justo debajo).
 - **prioridad:** justo detrás de esta tarea, por decisión de Ibrahin (encargo del 7 sep 2026, noche)
 - **origen:** incidente real durante `sacar-disa-paso-2-borrado` (7 sep 2026, ~16:00)
 
@@ -9878,6 +9908,55 @@ probablemente LA RAZÓN de que hubiera tantas aperturas frescas seguidas: cuanta
 apertura, más rondas de `backfillCodes` escribiendo sobre `products` desde procesos distintos a la
 vez. **Sigue sin haber una medida causal** — eso solo lo da el experimento aislado (Fase 2 del plan),
 que sigue sin autorizar.
+
+**CIERRE — 9 sep 2026, decisión de Ibrahin.** No se hace la Fase 2. Se cierra con lo que hay: **causa
+muy probable identificada, sin reproducir.** No es lo mismo que "confirmado con una medida" (lo que
+pedía el criterio original de esta ficha) ni que "descartado" — es un tercer desenlace, honesto sobre
+lo que se sabe y lo que no, y así queda dicho. La reparación (que `backfillCodes` no corra en cada
+apertura fresca, sin bandera) **no se hace ahora**: pasa a la ficha `backfill-codes-en-cada-apertura`,
+justo debajo, marcada **"arreglar ANTES DE LANZAR"** — el mecanismo sospechoso solo muerde con muchos
+negocios reales concurrentes a la vez (muchas aperturas simultáneas de conexiones distintas), y hoy
+`desarrollo-bamburu` es el único negocio con ese volumen de tráfico. No bloquea el Pilar 4.
+
+## 🕐 TAREA — `backfillCodes` corre en cada apertura de conexión, sin bandera que lo frene
+
+- **id:** backfill-codes-en-cada-apertura
+- **estado:** pendiente — **ANTES DE LANZAR, no ahora** (ver bloque de prioridad al principio del
+  documento). No se construye sin nuevo encargo de Ibrahin.
+- **origen:** reparación identificada al investigar `investigar-corrupcion-desarrollo-bamburu` (más
+  arriba), causa muy probable sin reproducir experimentalmente.
+
+**El problema, medido en el incidente real:** `modules/erp/models.js:735` llama
+`backfillCodes(db, { table: 'products', column: 'product_code', entity: 'product' })` (y lo mismo para
+`clients`/`suppliers`) dentro de `runMigrations(db)`, que corre en **toda** apertura fresca de una
+conexión de tenant (`abrirBase()` en `core/tenant-middleware.js`) — a diferencia de las migraciones de
+archivado (D1/D2/B), `backfillCodes` **no tiene bandera que la salte** una vez ya no queda nada que
+rellenar: vuelve a hacer `SELECT id FROM products WHERE product_code IS NULL OR product_code=''` cada
+vez (normalmente 0 filas, así que normalmente barato), pero si hay filas escribe dentro de una
+transacción con un contador compartido (`code_counters`). Con muchas conexiones abriéndose casi a la
+vez sobre la misma base (el patrón que se midió la noche del incidente: 6 aperturas en 2 min y medio),
+esto multiplica las transacciones de escritura concurrentes sobre `products` justo en el momento de
+más churn de conexiones.
+
+**Qué haría falta (sin construir aún):** una bandera de "ya no quedan filas sin código" por tabla —
+mismo patrón que D1/D2/B (`settings` + flag), escrita tras el primer `backfillCodes` que confirme 0
+filas pendientes — para que una apertura fresca deje de tocar `products`/`clients`/`suppliers` en el
+camino común una vez el backfill ya terminó. **No se ha diseñado del todo**: falta decidir cómo se
+invalida la bandera si alguna vía todavía crea una fila sin código (¿la hay hoy?) antes de dar esto
+por "solo escribir el flag".
+
+**Por qué no ahora:** solo muerde con carga concurrente real sobre una misma base de negocio — hoy
+Bamburu tiene cero clientes reales con ese volumen; `desarrollo-bamburu` es un banco de pruebas.
+Arreglarlo antes de tener ni un negocio de verdad sería infraestructura por delante de Ventas, que es
+justo lo que la decisión de arriba prohíbe.
+
+**Criterios de aceptación (para cuando se construya):**
+- [ ] Una apertura fresca de una base ya "al día" (sin filas pendientes de código) no ejecuta ningún
+      `SELECT`/`UPDATE` de `backfillCodes` sobre `products`/`clients`/`suppliers`.
+- [ ] Sigue funcionando igual para una base con filas de verdad pendientes de código (import masivo,
+      restauración de una copia antigua).
+- [ ] Se decide y se prueba qué pasa si la bandera queda puesta y luego aparece una fila sin código
+      por una vía que no se había previsto (no puede quedar huérfana para siempre).
 
 ---
 
