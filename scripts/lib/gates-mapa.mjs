@@ -210,6 +210,11 @@ export const GRUPOS = {
     // grupo: quien toque la puerta de los adjuntos despierta a quien la vigila. También en `infra`,
     // que es donde vive el resto de la familia de seguridad.
     'gate-adjuntos-por-contenido',
+    // 9 sep 2026 (`enviar-documentos-por-correo`) — va AQUÍ y no en `compras`/`clientes` porque
+    // cruza los mismos tres papeles que `gate-documentos` (factura, albarán, pedido) con el mismo
+    // criterio: PDF adjunto, correo fijo de la ficha del cliente, registrado en Actividad. Se
+    // declara EL MISMO DÍA que nace: un gate fuera de este mapa no lo ejecuta nadie.
+    'gate-enviar-documentos-por-correo',
   ],
   // ── LA PUERTA PÚBLICA DE RESERVA (peldaño 7 · pieza 6) — DENTRO DEL BARRIDO (20 ago 2026) ────
   // SEGUNDA ZONA ENTERA que aparece fuera del mapa en el mismo día (la primera fue la agenda). Las

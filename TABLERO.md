@@ -460,7 +460,7 @@ familia entera en verde: `test-contabilidad` 38 · `verify-contabilidad-diario-m
 > cuándo no se corre— y se espera un sí. Si dice que no, queda pendiente aquí y se vuelve a
 > proponer al abrir la siguiente sesión.
 
-- **Último barrido completo:** 2026-09-07 · `5f1a342` · **153/213** · 1275 s
+- **Último barrido completo:** 2026-09-09 · `565fb9a` · **113/214** · 592 s
 - **Estado:** ✅ al día
 
 <!-- BARRIDO:FIN -->
@@ -9841,6 +9841,178 @@ dejan de decir algo útil. Apuntada para que no se quede como ruido permanente s
 
 ---
 
+## 📬 PILAR 4 · VENTAS — CERRAR EL HUECO DE "PDF + EMAIL EN CADA DOCUMENTO" · 9 sep 2026
+
+> Encargo directo de Ibrahin, 9 sep 2026, fuera del orden de §LA COLA (igual que las tres de
+> seguridad del 8 sep): hoy solo el presupuesto se manda por correo con su PDF adjunto. Dos fichas,
+> anotadas el mismo día y en este orden. **Se construye SOLO la Ficha 1 en esta sesión — la Ficha 2
+> queda anotada, sin construir**, por orden expresa de Ibrahin.
+
+## TAREA — Enviar factura, albarán y pedido por correo (como ya se hace con el presupuesto)
+
+- **id:** enviar-documentos-por-correo
+- **estado:** ✅ HECHA — 9 sep 2026
+- **origen:** encargo de Ibrahin, 9 sep 2026 · Pilar 4 (Ventas)
+- **fusiona y sustituye** a la ficha `pdf-por-correo-de-cualquier-documento` (Inventario 24 ago 2026
+  A17, más abajo en §LA COLA): mismo hueco, misma solución. Esa ficha queda tachada en su sitio con
+  un puntero a esta, para no duplicar la tarea en dos entradas — se tacha, no se borra.
+
+**Qué se construyó, reutilizando ENTERA la maquinaria del presupuesto (`emailQuoteSvc`,
+`core/mailer.js`, `email-templates.js`, `exigirCorreoActivo`) — nada nuevo montado al lado:**
+
+- **`emailInvoiceSvc`/`emailAlbaranSvc`/`emailPedidoSvc`**, espejo de `emailQuoteSvc` (`quotes.js`),
+  en `modules/erp/routes/invoices.js`, `albaranes.js` y `pedidos.js`. Cada uno: interruptor de
+  Ajustes → Avisos y correos (`exigirCorreoActivo`, con tres tipos nuevos en el catálogo
+  `CORREOS` de `avisos-preferencias.js`: `factura`, `albaran`, `pedido`) → genera el PDF con la
+  MISMA función que ya usa `/pdf` (`buildInvoicePaper`/`albaranDocumentBodyHtml`/
+  `orderDocumentBodyHtml` + `printableShell` + `renderPdfFromHtml`) → lo adjunta → envía con
+  `core/mailer.js` (Resend real).
+- **Tres plantillas nuevas** en el catálogo de `email-templates.js` (`factura`, `albaran`, `pedido`),
+  espejo literal de `presupuesto`: el negocio puede reescribir el texto desde Ajustes → Plantillas
+  de email; el PDF va adjunto siempre, lo diga el texto o no.
+- **Rutas nuevas** `POST /api/erp/{invoices,albaranes,pedidos}/:id/email`, declaradas en
+  `docs/seguridad/permisos-declarados.json` (la barrera de permisos del 8 sep las bloqueaba hasta
+  declararlas a propósito) con el mismo permiso que ya exige cada módulo para editar
+  (`invoices.create`, `albaranes.edit`, `pedidos.edit`).
+- **Botón "Enviar por correo"** en la ficha de cada documento, junto a "Descargar PDF", visible solo
+  en el estado correcto (factura no anulada · albarán confirmado · pedido confirmado) y con permiso.
+
+**LA DECISIÓN DE CONSTRUCCIÓN, y por qué NO es un espejo literal del presupuesto (se decide, se
+construye y se explica aquí, sin pararse a preguntar — RITUAL.md):** el presupuesto deja el
+destinatario **editable** (un campo "Para" pre-rellenado). Aquí el destinatario es **FIJO**: el
+correo vivo de la ficha del cliente, y punto — porque la regla de negocio que pidió Ibrahin es «va al
+correo del cliente que figura en su ficha», no «un correo cualquiera que se teclee en ese momento».
+Consecuencia: **sin correo en la ficha, el botón sale DESACTIVADO** con un aviso claro (y un enlace
+directo a "Completar ficha del cliente", el mismo patrón que ya usa Facturae cuando faltan datos) —
+**nunca falla en silencio**. Y por debajo, el endpoint bloquea igual (409) aunque alguien lo llame
+sin pasar por el botón: defensa en profundidad, no solo cosmética de la pantalla.
+
+**Registro de a quién y cuándo se mandó — mismo criterio que el presupuesto, tal cual pedía el
+encargo:** `emailQuoteSvc` **no tiene** columna `sent_at` — lo único que registra es la Actividad
+(`logActivity`, con el documento, el destinatario y la fecha). Se siguió el mismo patrón en las tres
+piezas nuevas, **sin añadir columnas nuevas** a `invoices`/`delivery_notes`/`customer_orders`: sería
+inventar un criterio que el propio presupuesto no cumple.
+
+**No se ha tocado Verifactu ni la lógica de facturación** — es solo presentación y envío del PDF que
+ya existía en las cuatro (`/pdf` seguía intacto, mismo cuerpo HTML).
+
+**REGLA DE SEGURIDAD (RITUAL.md), las tres preguntas obligatorias:**
+
+1. **¿Qué permiso exige cada ruta nueva?** Las tres exigen el MISMO permiso que ya exige editar ese
+   documento (`invoices.create`, `albaranes.edit`, `pedidos.edit`) — ninguna se conforma con "estar
+   dentro". Declarado en `docs/seguridad/permisos-declarados.json` y verificado por la barrera de
+   arranque (`compararConDeclaracion`), que rechazó el primer arranque hasta declararlas.
+2. **¿Qué datos personales toca, dónde se guardan y cómo se borran?** El correo del cliente (ya
+   vivía en `clients.email`; no se copia a ningún sitio nuevo) y el PDF adjunto (contenido del
+   propio documento, ya existente; no se guarda una copia server-side del envío). Lo único que se
+   añade a disco es la fila de Actividad (`activity_logs`: quién, qué documento, a qué correo,
+   cuándo) — sigue la regla permanente de archivar/no destruir del proyecto; se borra si el negocio
+   entero se borra (RGPD), igual que el resto de Actividad.
+3. **¿Qué pasa si falla a medias?** Si el PDF falla al generarse, **NO se envía email** (mismo
+   candado que el presupuesto: `try/catch` alrededor del render, error claro, nada a medias). Si
+   Resend falla, `{error}` sin lanzar → mensaje `ERR.EMAIL` al usuario, nada se registra en
+   Actividad (solo se registra el envío que de verdad salió). Si el interruptor de Ajustes está
+   apagado, se bloquea ANTES de generar el PDF (no se gasta el render para nada).
+
+**Prueba en rojo, tal como pedía el encargo:** se apagó el interruptor de «factura» en Ajustes →
+Avisos y correos (un estado real que el dueño puede poner) y se confirmó que el envío se **bloquea**
+con un 409 claro, en vez de salir igual o fallar en silencio.
+
+**Comprobado con navegador real, contra el servidor real (`node scripts/gate-enviar-documentos-por-correo.mjs`,
+declarado en el grupo `documentos` de `scripts/lib/gates-mapa.mjs` — no se queda invisible), sobre
+una FACTURA y un ALBARÁN reales del tenant (sin crear ninguno nuevo) y un PEDIDO de prueba que el
+propio gate crea y borra: 41 ✓ · 0 ✗.**
+
+- [x] Desde una factura real, pulsar "Enviar por correo" y que llegue el correo con el PDF de la
+      factura adjunto — comprobado con un envío REAL por Resend al buzón sumidero de pruebas
+      (`delivered@resend.dev`), no simulado. Ídem albarán y pedido.
+- [x] Cliente sin correo: el botón sale desactivado con aviso, no revienta — comprobado en las tres,
+      más el bloqueo del endpoint por debajo (defensa en profundidad).
+- [x] El documento queda marcado como enviado, con fecha — vía Actividad (`activity_logs`), mismo
+      criterio que el presupuesto.
+- [x] Prueba en rojo: correo de factura apagado en Ajustes → el envío se bloquea (409), no sale.
+- [x] Barrido completo (`node scripts/run-gates.mjs --all`), corrido — y **con un hallazgo que hay
+      que contar entero, no solo el titular verde.**
+
+**EL BARRIDO COMPLETO, LO QUE DE VERDAD PASÓ (9 sep 2026).** Dos pasadas de `--all` (214 gates)
+salieron con un desplome grande —113/214 y peor— que a primera vista parecía "esta ficha ha roto
+medio Bamburu". **No era eso.** Diagnosticado hasta el fondo, no supuesto:
+
+1. **`gate-barrera-permisos` (8 sep 2026) parchea ficheros reales en disco** (`users.js`,
+   `settings.js`, `index.js`) para probar la barrera de arranque, y los devuelve tal cual —
+   pero su CONTENIDO vuelve, no su FECHA. Cualquier gate de navegador que arranque DESPUÉS
+   —en el mismo proceso del servicio, sin reiniciar— se encuentra con `exigeCodigoServido()`
+   (`scripts/lib/gate-env.mjs`) viendo un fichero "más nuevo que el arranque" y **aborta en
+   cascada, uno tras otro**, aunque no haya cambiado ni una línea de código real. Es la
+   PRIMERA vez que alguien corre el `--all` completo desde que `gate-barrera-permisos` existe
+   (no estaba en el barrido del 7 sep), así que nadie lo había visto. **No es de esta ficha.**
+   Apuntado como ficha nueva (`barrera-permisos-contamina-el-barrido`, más abajo) — no se
+   arregla aquí: es cirugía de otra tarea.
+2. **Un efecto colateral MÍO, ya limpiado:** al matar la primera pasada contaminada (`kill`),
+   varios gates murieron a mitad sin pasar por su propio `finally` y dejaron residuo real en el
+   tenant compartido `desarrollo-bamburu`: **26 negocios de prueba huérfanos** (`gate-360-*`,
+   `gate-c5bis-*`, `gate-menu-*`…) con sus filas en `control.db` y sus ficheros `.db`, **4
+   ficheros fantasma** de `gate-cifrado-en-reposo`, y **7 facturas de prueba emitidas de
+   verdad** (`GATE-D-…`, `GG-…`, `GPP-…`, hasta 1.210 €) inflando las ventas del negocio
+   compartido. Todo localizado y limpiado por su cauce normal —los negocios huérfanos
+   borrados (no eran negocios vivos: se comprobó que no tenían filas dependientes reales), y
+   **las 7 facturas ANULADAS** (nunca borradas) por la vía real (`POST …/anular`, con motivo,
+   cadena Verifactu intacta). Confirmado después: `verify-barrido-no-infla-ventas` y
+   `gate-cifrado-en-reposo` vuelven a 0 ✗.
+3. **Una comprobación de verdad caducada por MI crecimiento legítimo**, y corregida en la
+   misma entrega (regla del proyecto — "un titular se corrige con el cuerpo que lo
+   desarrolla"): `verify-plantillas-email.mjs` tenía clavados "10 tipos" y "20 plantillas de
+   fábrica"; con `factura`/`albaran`/`pedido` nuevos son 13 y 23. Actualizado con su fecha y
+   motivo escritos al lado, **48 ✓ · 0 ✗** tras el arreglo.
+4. **El resto de lo que salió en rojo** (`gate-impresion`, `test-oficio`, `gate-citas-mes`,
+   `gate-cliente-ficha-completa`, `verify-quotes`, `verify-albaranes`, `verify-pedidos`,
+   `verify-mostrador`, `verify-sustitutiva`, `verify-margen`, `verify-constructor`,
+   `verify-responsable`, `verify-informes`, `verify-plan-financiero`, y la mayoría de la lista
+   larga) **es deuda anterior a esta ficha, comprobada contra el barrido del 7 sep 2026**
+   (`docs/barridos/2026-09-07-salida-completa.log`, 176/229, 53 rojos): son los MISMOS
+   nombres, con las MISMAS cifras de OK. `verify-quotes`/`verify-albaranes` fallan hoy por el
+   MISMO motivo que entonces (una clasificación fiscal sin confirmar en `createInvoice`,
+   reproducido a mano, ajeno por completo al envío de correo). **Cero nombres nuevos que no se
+   expliquen por el punto 1 o el punto 2 de arriba.**
+5. **Dos hallazgos de verdad, pre-existentes y AJENOS a esta ficha, apuntados y NO tocados**
+   (no es cirugía de `enviar-documentos-por-correo`): el libro de ventas no cuadra con las
+   facturas vivas por 1.282,60 € (`verify-contabilidad-backfill`, el hueco NO cambió al
+   limpiar las 7 facturas de prueba, así que no es residuo de hoy) y dos oportunidades
+   `cliente_en_riesgo` de más en el negocio compartido (`verify-avisos-crm-riesgo`). Ninguno
+   de los dos toca facturas/albaranes/pedidos/presupuestos ni su envío.
+
+**Lo único que queda de "esta ficha, comprobado y verde":** `gate-enviar-documentos-por-correo`
+**41 ✓ · 0 ✗** (tres veces, la última tras limpiar todo lo de arriba) y `gate-documentos`
+—el gate cruzado de los seis papeles— en **24 ✓ · 11 ✗**, IDÉNTICO al 7 sep 2026 (mismo 24 OK,
+mismo motivo), o sea: no ha empeorado ni una comprobación real por construir esto.
+
+## TAREA — Botón de pago propio en la factura (nivel A: enlace, sin cobrar por Bamburu)
+
+- **id:** enlace-pago-nivel-a
+- **estado:** pendiente — **SOLO ANOTADA, NO CONSTRUIDA** (orden expresa de Ibrahin, 9 sep 2026)
+- **origen:** encargo de Ibrahin, 9 sep 2026 · Pilar 4 (Ventas) · continúa a `enviar-documentos-por-correo`
+
+Un campo en **Ajustes del negocio** donde el autónomo pega **su propio** enlace de cobro (Stripe,
+PayPal, Bizum de negocio, su banco… cualquiera). Bamburu lo muestra como botón **"Pagar"** en la
+**FACTURA** (en el PDF y en el correo).
+
+**Regla de producto (decisión de Ibrahin):** Bamburu **NO impone pasarela ni toca el dinero**. Solo
+deja la plataforma lista para que cada negocio enchufe la suya. **Bamburu no comprueba si se
+pagó** — eso lo concilia el autónomo. (El **nivel B** — conexión real que marca la factura como
+cobrada sola — queda para más adelante y **NO entra aquí**.)
+
+Si el negocio no ha puesto enlace, **no aparece ningún botón**.
+
+**Criterios de aceptación (para cuando se construya)**
+
+- [ ] Ajustes del negocio tiene un campo para pegar el enlace de cobro propio.
+- [ ] Con enlace puesto, la factura (PDF + correo) muestra un botón "Pagar" que lleva a ESE enlace.
+- [ ] Sin enlace, no aparece ningún botón — no se inventa uno ni se avisa de que falta.
+- [ ] Bamburu no marca nada como cobrado por este camino: es solo el botón, la conciliación es del
+      autónomo.
+
+---
+
 ## BLOQUE 1 — QUE BAMBURU PUEDA COBRAR
 
 > **Sin esto es una demostración, no un producto.** Hoy no existe ninguna forma de cobrarle a un
@@ -13044,20 +13216,23 @@ Hoy la facturación recurrente **siempre deja un borrador** para que alguien lo 
 - [ ] Si algo impide emitirla, **se avisa** en vez de emitir algo mal.
 - [ ] Lo que se emite solo entra en la cadena legal igual que lo demás.
 
-## TAREA — Mandar por correo el PDF de cualquier documento
+## ~~TAREA — Mandar por correo el PDF de cualquier documento~~ · ⚙️ FUSIONADA — 9 sep 2026
 
 - **id:** pdf-por-correo-de-cualquier-documento
-- **estado:** pendiente
+- ~~**estado:** pendiente~~ **⚙️ FUSIONADA el 9 sep 2026 en la ficha `enviar-documentos-por-correo`**
+  (encargo directo de Ibrahin, fuera del orden de esta cola — sección «📬 PILAR 4 · VENTAS», antes
+  de BLOQUE 1). Mismo hueco exacto, misma solución; se tacha en vez de borrarse, que es lo que manda
+  este documento, para poder reconstruir qué se creía y cuándo.
 - **origen:** Inventario 24 ago 2026 A17
 
-Hoy solo el presupuesto se manda por correo. Facturas, albaranes y pedidos hay que descargarlos y adjuntarlos a mano.
+~~Hoy solo el presupuesto se manda por correo. Facturas, albaranes y pedidos hay que descargarlos y adjuntarlos a mano.~~ **Ya no: ver `enviar-documentos-por-correo`, HECHA el 9 sep 2026.**
 
-**Criterios de aceptación**
+~~**Criterios de aceptación**~~
 
-- [ ] **Cualquier** documento se manda por correo desde su pantalla.
-- [ ] El correo lleva el PDF y un texto que el negocio puede cambiar.
-- [ ] Queda registrado **a quién y cuándo** se mandó.
-- [ ] Si el correo no sale, **se dice**.
+- [x] **Cualquier** documento se manda por correo desde su pantalla. *(factura, albarán y pedido — el presupuesto ya lo tenía)*
+- [x] El correo lleva el PDF y un texto que el negocio puede cambiar.
+- [x] Queda registrado **a quién y cuándo** se mandó.
+- [x] Si el correo no sale, **se dice**.
 
 ## TAREA — Plantillas de documento a tu gusto
 
@@ -14912,6 +15087,57 @@ Y su propia limpieza no lo recogió: `cleanup(slug)` empieza con `if (!slug) ret
 - [ ] Ningún guion de `scripts/` puede **crear** una base de datos de negocio: abrir una que no existe falla, no la inventa.
 - [ ] Un gate cuyo montaje falle **se para y lo dice**, en vez de seguir con un `slug` nulo.
 - [ ] Hay un centinela que falla si aparece un `new Database` sobre `data/tenants/` sin `fileMustExist`, probado en rojo.
+
+
+## TAREA — `gate-barrera-permisos` contamina el barrido completo entero
+
+- **id:** barrera-permisos-contamina-el-barrido
+- **estado:** pendiente
+- **origen:** Descubierto el 9 sep 2026 al correr `node scripts/run-gates.mjs --all` para cerrar
+  `enviar-documentos-por-correo`. **Registrada, NO arreglada** (no es cirugía de esa ficha).
+
+**De dónde sale.** `gate-barrera-permisos.mjs` (nace 8 sep 2026) prueba la barrera de arranque
+parcheando ficheros REALES en disco (`modules/erp/routes/users.js`, `settings.js`, `index.js`):
+escribe una versión modificada, lanza un `index.js` hijo en un puerto propio para comprobar que no
+arranca (o arranca y avisa), y **devuelve el CONTENIDO original** en su `finally`. El contenido
+vuelve; **la fecha de modificación del fichero, no** — cada `writeFileSync` la adelanta, aunque el
+texto acabe siendo idéntico al que había.
+
+**Por qué revienta el barrido.** `scripts/lib/gate-env.mjs` → `exigeCodigoServido()` (la comprueban
+TODOS los gates de navegador vía `launchOpts()`) compara el fichero más nuevo de `modules/core/index.js`
+contra la hora de arranque del `bamburu.service` **vivo**. En cuanto `gate-barrera-permisos` toca
+esos tres ficheros, CUALQUIER gate de navegador que llame a `launchOpts()` DESPUÉS de ese instante
+—en la misma pasada del servicio, sin reiniciar— ve un fichero "más nuevo que el arranque" y
+**aborta con código 2** ("no ha verificado NADA"), en cascada, aunque no haya cambiado ni una línea
+real de producto. Medido el 9 sep 2026: de 214 gates, más de 100 abortaron así en cuanto
+`gate-barrera-permisos` corrió en medio del barrido — es la PRIMERA vez que alguien corre el
+`--all` completo desde que ese gate existe (no estaba en el barrido del 7 sep 2026), así que nadie
+lo había visto.
+
+**Efecto colateral, ya limpiado (no queda pendiente):** varios de los gates abortados a mitad
+(algunos vía navegador matado a la fuerza al interrumpir la primera pasada contaminada) dejaron
+residuo real en el tenant compartido `desarrollo-bamburu` — 26 negocios de prueba huérfanos, 4
+ficheros fantasma de `gate-cifrado-en-reposo` y 7 facturas de prueba emitidas de verdad. Todo
+localizado y devuelto a su sitio (negocios huérfanos borrados, facturas ANULADAS por la vía real,
+nunca borradas) el mismo 9 sep 2026, y comprobado: `verify-barrido-no-infla-ventas` y
+`gate-cifrado-en-reposo` vuelven a 0 ✗.
+
+**No se arregla en esta ficha porque el arreglo es de OTRA tarea** (tocar `gate-barrera-permisos` o
+`exigeCodigoServido`, ninguno de los dos de Ventas/documentos) y porque `RITUAL.md` pide cirugía, no
+mejorar lo adyacente. Lo que sí se hizo: diagnosticarlo hasta el fondo (no quedarse en "el barrido
+dio mal") y limpiar el residuo real que dejó.
+
+**Criterios de aceptación**
+
+- [ ] `exigeCodigoServido()` distingue "un fichero que un gate tocó y devolvió a su contenido
+      original" de "un cambio real sin reiniciar" — por ejemplo, comparando un HASH del contenido
+      contra una instantánea tomada al arrancar el barrido, no solo la fecha de modificación.
+- [ ] O, más simple: `gate-barrera-permisos` se saca del barrido `--all` (como ya se hizo con
+      `gate-cadena-integridad`/`gate-cupones-desmontados`, que tampoco pueden correr en paralelo
+      con otros gates) y se corre a mano y a solas, con su motivo escrito en `FUERA_A_PROPOSITO`.
+- [ ] `node scripts/run-gates.mjs --all` termina sin ninguna cascada de "no pudo arrancar" cuando
+      `gate-barrera-permisos` está en la misma pasada — probado corriendo el barrido completo una
+      vez más y comprobando que el número de abortados no sube tras el punto donde corre ese gate.
 
 
 ## ✅ TAREA — Migrar el ERP para quitarle el `unsafe-inline`

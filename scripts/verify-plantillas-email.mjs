@@ -100,7 +100,10 @@ try {
   // 10: el sistema de citas trajo `confirmacion_cita` y `recordatorio_cita`, y los avisos
   // `resumen_avisos`. Crecimiento legítimo, comprobación caducada. Con la lista escrita, añadir un
   // tipo obliga a pasar por aquí y decidir a qué familia va — que es justo lo que hay que decidir.
+  // 9 sep 2026 (`enviar-documentos-por-correo`) — de 10 a 13: `factura`, `albaran` y `pedido`, espejo
+  // de `presupuesto` (familia CLIENTE, un solo tono), para poder enviar esos tres documentos igual.
   const TIPOS_ESPERADOS = ['cobro_factura', 'cobro_cuenta', 'comercial', 'presupuesto', 'orden_compra',
+                           'factura', 'albaran', 'pedido',
                            'recuperar_password', 'portal_cliente', 'confirmacion_cita', 'recordatorio_cita', 'resumen_avisos'];
   const faltan = TIPOS_ESPERADOS.filter(t => !tipos.includes(t));
   const sobran = tipos.filter(t => !TIPOS_ESPERADOS.includes(t));
@@ -125,8 +128,9 @@ try {
       renderizadas++;
     }
   }
-  // 20 = tipos × tonos. Sube cuando entra un tipo nuevo; el recuento se dice, no se adivina.
-  ok(renderizadas === 20, 'las plantillas de fábrica renderizan y pasan su propia red de seguridad', renderizadas + ' plantillas');
+  // 23 = tipos × tonos (20 + los 3 nuevos de `enviar-documentos-por-correo`, un solo tono cada uno).
+  // Sube cuando entra un tipo nuevo; el recuento se dice, no se adivina.
+  ok(renderizadas === 23, 'las plantillas de fábrica renderizan y pasan su propia red de seguridad', renderizadas + ' plantillas');
 
   // ── 2. LA PRUEBA DE VERDAD: lo guardado es lo que se envía ───────────────────
   console.log('\n[2] Lo guardado es lo que se envía (no el código)');

@@ -1,7 +1,7 @@
 {
-  "generado_en": "2026-09-07T20:09:16.140Z",
+  "generado_en": "2026-09-09T10:29:30.506Z",
   "generado_por": "node scripts/censo-permisos-rutas.mjs --declarar",
-  "total_rutas": 573,
+  "total_rutas": 576,
   "rutas": {
     "GET /": {
       "veredicto": "sin guarda"
@@ -969,6 +969,12 @@
         "albaranes.edit"
       ]
     },
+    "POST /api/erp/albaranes/:id/email": {
+      "veredicto": "permiso",
+      "permisos": [
+        "albaranes.edit"
+      ]
+    },
     "POST /api/erp/albaranes/:id/factura": {
       "veredicto": "permiso",
       "permisos": [
@@ -1846,6 +1852,12 @@
         "cobros.read"
       ]
     },
+    "POST /api/erp/invoices/:id/email": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.create"
+      ]
+    },
     "POST /api/erp/invoices/:id/payments": {
       "veredicto": "permiso",
       "permisos": [
@@ -1973,6 +1985,12 @@
       ]
     },
     "POST /api/erp/pedidos/:id/confirmar": {
+      "veredicto": "permiso",
+      "permisos": [
+        "pedidos.edit"
+      ]
+    },
+    "POST /api/erp/pedidos/:id/email": {
       "veredicto": "permiso",
       "permisos": [
         "pedidos.edit"

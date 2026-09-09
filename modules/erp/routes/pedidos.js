@@ -17,6 +17,9 @@ import { jsonForScript } from '../../../core/escape.js';
 import { fechaEs } from '../voz.js';   // la fecha, en cristiano (24/08/2026)
 import { fmtEur as dineroEs } from '../margen.js';   // el dinero, como en España
 import { validateFiscalClassification } from '../../../core/fiscal-classification.js';
+import { sendEmail } from '../../../core/mailer.js';
+import { renderEmail, TONO_UNICO } from '../email-templates.js';   // Pilar 4 · enviar-documentos-por-correo
+import { exigirCorreoActivo } from '../avisos-preferencias.js';   // interruptor de Ajustes → Avisos y correos
 
 // ════════════════════════════════════════════════════════════════════════════
 // PILAR 4 · VENTAS · PIEZA 2a — PEDIDO + RESERVA DE STOCK.
@@ -281,6 +284,47 @@ ${membreteHtml({ emisor, otra: cliente, rotuloOtra: 'Cliente',
 ${o.notes ? `<div style="margin-top:16px;color:var(--text2)">${esc(o.notes)}</div>` : ''}`;
 }
 
+// EMAIL AL CLIENTE (enviar-documentos-por-correo, 9 sep 2026) — ESPEJO de emailQuoteSvc
+// (quotes.js), con la misma diferencia deliberada que la factura y el albarán: el destinatario
+// NO es editable, va SIEMPRE al correo VIVO de la ficha del cliente. Sin correo, no se envía —
+// el botón de la pantalla sale desactivado y esto es el cerrojo de verdad por si llega una
+// petición directa. No toca la reserva de stock ni la lógica del pedido: solo presentación y
+// envío del PDF que ya existe. opts.sendEmail/opts.renderPdf inyectables (mock en tests).
+export async function emailPedidoSvc(db, id, opts = {}) {
+  exigirCorreoActivo(db, 'pedido');
+  const o = db.prepare('SELECT * FROM customer_orders WHERE id=?').get(id);
+  if (!o) { const e = new Error('Pedido no encontrado'); e.status = 404; throw e; }
+  if (o.status !== 'confirmado') { const e = new Error('Solo se puede enviar por email un pedido confirmado'); e.status = 400; throw e; }
+  const client = db.prepare('SELECT email FROM clients WHERE id=?').get(o.client_id);
+  const to = String((client && client.email) || '').trim();
+  if (!to) { const e = new Error('El cliente no tiene correo. Añádelo en su ficha para poder enviarle este pedido.'); e.status = 409; throw e; }
+  if (typeof opts.sendEmail !== 'function') { const e = new Error('El envío de email no está configurado'); e.status = 500; throw e; }
+  const items = getItems(db, id);
+  const { emisor, cliente } = docParties(db, o);
+  const sym = o.currency_symbol || '€';
+  const empresa = emisor.name || 'Bamburu';
+  // PDF ADJUNTO: MISMO HTML imprimible que /pdf y que la pantalla (orderDocumentBodyHtml). Si la
+  // generación del PDF FALLA, se ERRA claro y NO se envía email (nada de email sin adjunto).
+  const renderPdf = typeof opts.renderPdf === 'function' ? opts.renderPdf : renderPdfFromHtml;
+  let pdf;
+  try {
+    pdf = await renderPdf(printableShell(orderDocumentBodyHtml(o, items, emisor, cliente, sym), { title: 'Pedido ' + (o.order_number || ('#' + id)) }));
+  } catch (e) {
+    const err = new Error('No se pudo generar el PDF del pedido: ' + (e.message || e) + '. No se ha enviado el email.'); err.status = 502; throw err;
+  }
+  if (!pdf || !pdf.length) { const e = new Error('El PDF del pedido salió vacío. No se ha enviado el email.'); e.status = 502; throw e; }
+  const fname = ('Pedido-' + (o.order_number || ('' + id)) + '.pdf').replace(/[\/\\]/g, '-');
+  const tpl = renderEmail(db, 'pedido', TONO_UNICO, { numero: o.order_number || String(id), empresa });
+  const payload = {
+    from: empresa + ' <noreply@bamburu.com>', to, subject: tpl.subject, html: tpl.html, text: tpl.text,
+    attachments: [{ filename: fname, content: pdf }],
+  };
+  if (emisor.email) payload.replyTo = emisor.email;
+  const { data, error } = await opts.sendEmail(payload);
+  if (error) { const e = new Error(ERR.EMAIL); e.status = 502; throw e; }
+  return { sent: true, to, order_number: o.order_number, id: data && data.id };
+}
+
 // ── Rutas ────────────────────────────────────────────────────────────────────
 
 export function createPedidoRoutes(db) {
@@ -357,6 +401,17 @@ export function createPedidoRoutes(db) {
       const r = orderToInvoiceSvc(db, parseInt(c.req.param('id')));
       logActivity(db, c.get('session'), 'Facturó pedido', ENTITY.CUSTOMER_ORDER, parseInt(c.req.param('id')), r.invoice_number);
       return c.json({ ...r, message: 'Pedido facturado en ' + r.invoice_number });
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
+  });
+
+  // POST /api/erp/pedidos/:id/email — enviar-documentos-por-correo (9 sep 2026). ESPEJO de
+  // /api/erp/quotes/:id/email: PDF adjunto, correo FIJO (el vivo de la ficha del cliente),
+  // registrado en la actividad con quién y cuándo (mismo criterio que el presupuesto).
+  api.post('/:id/email', requirePerm('pedidos.edit'), async c => {
+    try {
+      const r = await emailPedidoSvc(db, parseInt(c.req.param('id')), { sendEmail });
+      logActivity(db, c.get('session'), 'Envió pedido por email', ENTITY.CUSTOMER_ORDER, parseInt(c.req.param('id')), (r.order_number || '') + ' → ' + r.to);
+      return c.json({ ...r, message: 'Pedido enviado por email a ' + r.to });
     } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
 
@@ -635,6 +690,14 @@ export function createPedidoRoutes(db) {
 
     const [lbl, badge] = displayEstado(o);
     const isBorrador = o.status === 'borrador', isConfirmado = o.status === 'confirmado';
+    // enviar-documentos-por-correo (9 sep 2026) — correo VIVO de la ficha del cliente. Sin
+    // correo, el botón sale DESACTIVADO con un aviso claro, nunca falla en silencio.
+    const clientEmail = String(db.prepare('SELECT email FROM clients WHERE id=?').get(o.client_id)?.email || '').trim();
+    const puedeEnviarEmail = isConfirmado && can(c, 'pedidos.edit');
+    const emailBtnHtml = !puedeEnviarEmail ? '' : clientEmail
+      ? `<button data-act="email" class="btn btn-secondary">Enviar por correo</button>`
+      : `<button data-act="email" class="btn btn-secondary" disabled title="Este cliente no tiene correo. Añádelo en su ficha para poder enviarle este pedido.">Enviar por correo</button>`
+        + `<a href="/admin/clients?editar=${o.client_id}" class="btn btn-secondary btn-sm">Completar ficha del cliente</a>`;
     const panel = `
 <div class="card"><div class="card-body">
   <div style="margin-bottom:12px"><span class="badge ${badge}">${esc(lbl)}</span></div>
@@ -646,6 +709,7 @@ export function createPedidoRoutes(db) {
   <div class="dp-actions" style="margin-top:14px;display:flex;flex-direction:column;gap:.5rem">
     <button data-act="imprimir" class="btn btn-secondary">Imprimir</button>
     <a href="/admin/pedidos/${id}/pdf" class="btn btn-secondary">Descargar PDF</a>
+    ${emailBtnHtml}
     ${isBorrador && can(c, 'pedidos.edit') ? `<a href="/admin/pedidos/${id}/edit" class="btn btn-secondary">Editar</a><button data-act="confirmar" class="btn btn-primary">Confirmar pedido</button>` : ''}
     ${isConfirmado && can(c, 'albaranes.create') && hasPending ? `<a href="/admin/albaranes/new?order=${id}" class="btn btn-primary">Crear albarán (entregar)</a>` : ''}
     ${isConfirmado && !invoice && can(c, 'pedidos.edit') ? `<button data-act="facturar" class="btn btn-secondary">Facturar pedido</button>` : ''}
@@ -683,6 +747,10 @@ export function createPedidoRoutes(db) {
       validar:v2 => !String(v2.m||'').trim() ? { campo:'m', mensaje:'El motivo es obligatorio.' } : null });
     if(!v) return;
     try{ const d=await call('/anular-y-rehacer',{motivo:String(v.m).trim()}); location.href='/admin/pedidos/'+d.id+'/edit'; }catch(e){ toast(e.message,'err'); } }
+  async function emailPedido(){
+    if(!await window.confirmarEnPagina({ titulo:'Enviar el pedido por correo',
+      texto:'Se manda a ${esc(clientEmail)}.', aceptar:'Sí, enviar' })) return;
+    try{ const d=await call('/email'); toast(d.message); }catch(e){ toast(e.message,'err'); } }
 
       // 5 SEP 2026 — LOS CUATRO SON CONDICIONALES y dependen del estado del pedido: Confirmar solo
       // en borrador; Facturar solo si esta confirmado y sin factura; Anular y Anular-y-rehacer solo
@@ -691,6 +759,7 @@ export function createPedidoRoutes(db) {
       const _eng = (act, fn) => document.querySelector('[data-act="' + act + '"]')?.addEventListener('click', fn);
       _eng('confirmar', () => confirmar());
       _eng('facturar', () => facturar());
+      _eng('email', () => emailPedido());
       _eng('anular', () => anular());
       _eng('anular-rehacer', () => anularYRehacer());
 </script>`;

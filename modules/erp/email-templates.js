@@ -265,6 +265,72 @@ export const CATALOGO = {
     },
   },
 
+  // 9 sep 2026 (enviar-documentos-por-correo) — LAS TRES SIGUIENTES son el ESPEJO de `presupuesto`
+  // de arriba, una por cada documento que hasta hoy solo se podía descargar: factura, albarán y
+  // pedido. Mismo hueco `numero`, mismo PDF adjunto siempre, mismo botón "Enviar por correo".
+  factura: {
+    familia: FAMILIA_CLIENTE,
+    label: 'Envío de factura',
+    descripcion: 'El correo con el que le mandas una factura a un cliente. El PDF va adjunto siempre, lo digas o no en el texto.',
+    tonos: null,
+    huecos: [
+      { clave: 'numero', label: 'Nº de factura' },
+      { clave: 'empresa', label: 'Tu negocio' },
+    ],
+    requeridos: ['numero'],
+    ejemplo: { numero: 'F2026-0042', empresa: 'Tu Negocio' },
+    fabrica: {
+      _: {
+        subject: 'Factura {{numero}} — {{empresa}}',
+        html: MARCO('<p>Hola,</p>'
+          + '<p>Adjuntamos tu factura nº <strong>{{numero}}</strong>.</p>'
+          + '<p style="color:#6b7280;font-size:12px;margin-top:24px">Enviado desde {{empresa}} con Bamburu.</p>'),
+      },
+    },
+  },
+
+  albaran: {
+    familia: FAMILIA_CLIENTE,
+    label: 'Envío de albarán',
+    descripcion: 'El correo con el que le mandas un albarán de entrega a un cliente. El PDF va adjunto siempre, lo digas o no en el texto.',
+    tonos: null,
+    huecos: [
+      { clave: 'numero', label: 'Nº de albarán' },
+      { clave: 'empresa', label: 'Tu negocio' },
+    ],
+    requeridos: ['numero'],
+    ejemplo: { numero: 'DEL-0012', empresa: 'Tu Negocio' },
+    fabrica: {
+      _: {
+        subject: 'Albarán {{numero}} — {{empresa}}',
+        html: MARCO('<p>Hola,</p>'
+          + '<p>Adjuntamos tu albarán de entrega nº <strong>{{numero}}</strong>.</p>'
+          + '<p style="color:#6b7280;font-size:12px;margin-top:24px">Enviado desde {{empresa}} con Bamburu.</p>'),
+      },
+    },
+  },
+
+  pedido: {
+    familia: FAMILIA_CLIENTE,
+    label: 'Envío de pedido',
+    descripcion: 'El correo con el que le mandas la confirmación de un pedido a un cliente. El PDF va adjunto siempre, lo digas o no en el texto.',
+    tonos: null,
+    huecos: [
+      { clave: 'numero', label: 'Nº de pedido' },
+      { clave: 'empresa', label: 'Tu negocio' },
+    ],
+    requeridos: ['numero'],
+    ejemplo: { numero: 'PED-0031', empresa: 'Tu Negocio' },
+    fabrica: {
+      _: {
+        subject: 'Pedido {{numero}} — {{empresa}}',
+        html: MARCO('<p>Hola,</p>'
+          + '<p>Adjuntamos tu pedido nº <strong>{{numero}}</strong>.</p>'
+          + '<p style="color:#6b7280;font-size:12px;margin-top:24px">Enviado desde {{empresa}} con Bamburu.</p>'),
+      },
+    },
+  },
+
   orden_compra: {
     familia: FAMILIA_CLIENTE,
     label: 'Orden de compra al proveedor',

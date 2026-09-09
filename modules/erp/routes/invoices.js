@@ -27,6 +27,7 @@ import { paymentsSum, invoiceCobro, cobroState, isCobrable, ESTADO_LABEL,
 
   invoiceProximaAccion, invoiceActionHistory, registerCollectionAction, collectionEmail } from '../cobros.js';
 import { sendEmail } from '../../../core/mailer.js';
+import { renderEmail, TONO_UNICO } from '../email-templates.js';   // Pilar 4 · enviar-documentos-por-correo
 import { ENTITY } from '../../../core/activity-entities.js';
 import { fechaEs } from '../voz.js';   // la fecha, en cristiano (24/08/2026)
 import { fmtEur as dineroEs } from '../margen.js';   // el dinero, como en España
@@ -721,6 +722,47 @@ ${inv.notes ? `<div style="margin-top:16px;color:var(--text2)">${escHtml(inv.not
 </div>`;
 }
 
+// EMAIL AL CLIENTE (enviar-documentos-por-correo, 9 sep 2026) — ESPEJO de emailQuoteSvc
+// (quotes.js), con UNA diferencia deliberada: aquí el destinatario NO es editable. Va SIEMPRE
+// al correo VIVO de la ficha del cliente (nunca al de la foto congelada: si lo corrigió después
+// de emitir, es el corregido el que vale). Si no tiene, no se envía — el botón de la pantalla
+// sale desactivado y esto es el cerrojo de verdad, por si llega una petición directa.
+// No se toca ni Verifactu ni la lógica de facturación: es solo presentación y envío del PDF que
+// ya existe. Confirm-first (lo pulsa el usuario). opts.sendEmail/opts.renderPdf inyectables
+// (mock en tests), igual que en el presupuesto.
+export async function emailInvoiceSvc(db, id, opts = {}) {
+  exigirCorreoActivo(db, 'factura');
+  const inv = db.prepare('SELECT * FROM invoices WHERE id=?').get(id);
+  if (!inv) { const e = new Error('Factura no encontrada'); e.status = 404; throw e; }
+  if (inv.status === 'anulada') { const e = new Error('No se puede enviar por email una factura anulada'); e.status = 400; throw e; }
+  const client = inv.client_id ? db.prepare('SELECT email FROM clients WHERE id=?').get(inv.client_id) : null;
+  const to = String((client && client.email) || '').trim();
+  if (!to) { const e = new Error('El cliente no tiene correo. Añádelo en su ficha para poder enviarle esta factura.'); e.status = 409; throw e; }
+  if (typeof opts.sendEmail !== 'function') { const e = new Error('El envío de email no está configurado'); e.status = 500; throw e; }
+  // PDF ADJUNTO: MISMO HTML imprimible que /pdf y que la pantalla (buildInvoicePaper). Si la
+  // generación del PDF FALLA, se ERRA claro y NO se envía email (nada de email sin adjunto).
+  const renderPdf = typeof opts.renderPdf === 'function' ? opts.renderPdf : renderPdfFromHtml;
+  let pdf;
+  try {
+    const paper = await buildInvoicePaper(db, inv);
+    pdf = await renderPdf(printableShell(paper, { title: 'Factura ' + inv.invoice_number }));
+  } catch (e) {
+    const err = new Error('No se pudo generar el PDF de la factura: ' + (e.message || e) + '. No se ha enviado el email.'); err.status = 502; throw err;
+  }
+  if (!pdf || !pdf.length) { const e = new Error('El PDF de la factura salió vacío. No se ha enviado el email.'); e.status = 502; throw e; }
+  const fname = ('Factura-' + (inv.invoice_number || ('' + id)) + '.pdf').replace(/[\/\\]/g, '-');
+  const empresa = inv.company_name || 'Bamburu';
+  const tpl = renderEmail(db, 'factura', TONO_UNICO, { numero: inv.invoice_number, empresa });
+  const payload = {
+    from: empresa + ' <noreply@bamburu.com>', to, subject: tpl.subject, html: tpl.html, text: tpl.text,
+    attachments: [{ filename: fname, content: pdf }],
+  };
+  if (inv.company_email) payload.replyTo = inv.company_email;
+  const { data, error } = await opts.sendEmail(payload);
+  if (error) { const e = new Error(ERR.EMAIL); e.status = 502; throw e; }   // sin volcar el objeto de Resend
+  return { sent: true, to, invoice_number: inv.invoice_number, id: data && data.id };
+}
+
 // ════════════════════════════════════════════════════════════════════════════
 // PILAR 4 · MOSTRADOR (PIEZA A) — TICKET = FACTURA SIMPLIFICADA (Verifactu F2).
 // El documento de mostrador en España es una factura simplificada: se registra como una
@@ -1136,6 +1178,18 @@ export function createInvoiceRoutes(db) {
       const r = emitSustitutivaSvc(db, parseInt(c.req.param('id')), c.get('validated').client_id);
       logActivity(db, c.get('session'), 'Emitió factura completa (sustitutiva de ticket)', ENTITY.INVOICE, r.id, r.invoice_number + ' sustituye a ' + r.ticket_number);
       return c.json({ ...r, message: 'Factura completa ' + r.invoice_number + ' emitida (sustituye al ticket ' + r.ticket_number + ')' }, 201);
+    } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
+  });
+
+  // POST /api/erp/invoices/:id/email — enviar-documentos-por-correo (9 sep 2026). ESPEJO de
+  // /api/erp/quotes/:id/email: PDF adjunto, correo FIJO (el vivo de la ficha del cliente, no
+  // editable aquí), registrado en la actividad con quién y cuándo (mismo criterio que el
+  // presupuesto). No toca Verifactu ni la lógica de facturación.
+  api.post('/:id/email', requirePerm('invoices.create'), async c => {
+    try {
+      const r = await emailInvoiceSvc(db, parseInt(c.req.param('id')), { sendEmail });
+      logActivity(db, c.get('session'), 'Envió factura por email', ENTITY.INVOICE, parseInt(c.req.param('id')), r.invoice_number + ' → ' + r.to);
+      return c.json({ ...r, message: 'Factura enviada por email a ' + r.to });
     } catch (e) { return c.json({ error: safeError(e) }, e.status || 500); }
   });
 
@@ -2086,6 +2140,16 @@ export function createInvoiceRoutes(db) {
         ? `<div class="dp-row"><span class="k">Proyecto</span><span class="v"><select id="invProyecto" class="form-control" style="max-width:230px"><option value="">— Sin proyecto —</option>${proyOptions}</select></span></div>`
         : (proyNombreActual ? `<div class="dp-row"><span class="k">Proyecto</span><span class="v">${escHtml((proyNombreActual.codigo ? proyNombreActual.codigo + ' · ' : '') + proyNombreActual.nombre)}</span></div>` : '');
 
+      // enviar-documentos-por-correo (9 sep 2026) — el correo VIVO de la ficha del cliente (nunca
+      // el de la foto congelada: si lo corrigió después de emitir, vale el corregido). Sin cliente
+      // o sin correo, el botón sale DESACTIVADO con un aviso claro, nunca falla en silencio.
+      const clientEmail = inv.client_id ? String(db.prepare('SELECT email FROM clients WHERE id=?').get(inv.client_id)?.email || '').trim() : '';
+      const puedeEnviarEmail = inv.status !== 'anulada' && can(c, 'invoices.create');
+      const emailBtnHtml = !puedeEnviarEmail ? '' : clientEmail
+        ? `<button data-iv="email" class="btn btn-secondary">Enviar por correo</button>`
+        : `<button data-iv="email" class="btn btn-secondary" disabled title="${inv.client_id ? 'Este cliente no tiene correo. Añádelo en su ficha para poder enviarle esta factura.' : 'Esta factura no tiene un cliente asociado (venta de mostrador).'}">Enviar por correo</button>`
+          + (inv.client_id ? `<a href="/admin/clients?editar=${inv.client_id}" class="btn btn-secondary btn-sm">Completar ficha del cliente</a>` : '');
+
       const panel = `
 <style>
   .fe-nota{border-radius:8px;padding:.7rem .9rem;font-size:12px;line-height:1.5;margin-top:12px}
@@ -2103,6 +2167,7 @@ export function createInvoiceRoutes(db) {
   <div class="dp-actions" style="margin-top:14px">
     <button data-act="imprimir" class="btn btn-primary">Imprimir</button>
     <a href="/admin/invoices/${inv.id}/pdf" class="btn btn-secondary">Descargar PDF</a>
+    ${emailBtnHtml}
     ${feStatus?.ready ? `<a href="/admin/invoices/${inv.id}/facturae.xml" class="btn btn-secondary">Generar Facturae</a>` : ''}
     ${esTicketSustituible && can(c, 'invoices.create') ? `<button data-iv="sust-abrir" class="btn btn-primary">Emitir factura completa</button>` : ''}
     ${inv.status === 'emitida' ? `<button data-iv="anular" class="btn btn-danger">Anular</button>
@@ -2160,6 +2225,18 @@ ${esTicketSustituible ? `
       location.reload();
     } catch(e){ toast(e.message,'err'); }
   }
+  async function emailFactura(){
+    if(!await window.confirmarEnPagina({ titulo:'Enviar la factura por correo',
+      texto:'Se manda a ${escHtml(clientEmail)}.', aceptar:'Sí, enviar' })) return;
+    try {
+      let r; try{ r = await fetch('/api/erp/invoices/${inv.id}/email', {
+        method:'POST', headers:{'Content-Type':'application/json','x-csrf-token':CSRF}, body:'{}'
+      }); }catch(_e){ throw new Error(window.ERR.NET); }
+      let d; try{ d = await r.json(); }catch(_e){ d=null; }
+      if (!r.ok || !d || d.error) throw new Error(window.cleanErrMsg((d&&d.error)||''));
+      toast(d.message);
+    } catch(e){ toast(e.message,'err'); }
+  }
   ${esTicketSustituible ? `
   let _nuevo=false;
   async function openSust(){
@@ -2197,6 +2274,7 @@ ${esTicketSustituible ? `
         var a = t.getAttribute('data-iv');
         if (a === 'sust-abrir') openSust();
         else if (a === 'anular') anularFactura();
+        else if (a === 'email') emailFactura();
         else if (a === 'sust-cerrar') closeModal('sustModal');
         else if (a === 'sust-nuevo') toggleNuevo();
       });

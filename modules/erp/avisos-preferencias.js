@@ -146,6 +146,11 @@ export const CORREOS = [
   { tipo: 'comercial',         clase: 'boton', quien: 'A un cliente con una oportunidad abierta en el CRM.' },
   { tipo: 'presupuesto',       clase: 'boton', quien: 'A tu cliente cuando le mandas un presupuesto.' },
   { tipo: 'orden_compra',      clase: 'boton', quien: 'A tu proveedor cuando le mandas una orden de compra.' },
+  // 9 sep 2026 (enviar-documentos-por-correo) — espejo de 'presupuesto': factura, albarán y pedido
+  // ganan el mismo botón de envío y el mismo interruptor granular.
+  { tipo: 'factura',           clase: 'boton', quien: 'A tu cliente cuando le mandas una factura.' },
+  { tipo: 'albaran',           clase: 'boton', quien: 'A tu cliente cuando le mandas un albarán de entrega.' },
+  { tipo: 'pedido',            clase: 'boton', quien: 'A tu cliente cuando le mandas la confirmación de un pedido.' },
 ];
 
 export const CORREOS_SIN_INTERRUPTOR = [
