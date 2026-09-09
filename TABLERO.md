@@ -460,7 +460,7 @@ familia entera en verde: `test-contabilidad` 38 · `verify-contabilidad-diario-m
 > cuándo no se corre— y se espera un sí. Si dice que no, queda pendiente aquí y se vuelve a
 > proponer al abrir la siguiente sesión.
 
-- **Último barrido completo:** 2026-09-09 · `2c50875` · **156/215** · 1242 s
+- **Último barrido completo:** 2026-09-09 · `692f97b` · **160/215** · 1243 s
 - **Estado:** ✅ al día
 
 <!-- BARRIDO:FIN -->
@@ -15160,6 +15160,18 @@ frente a **113/214** antes de tocarlo — la cascada de "no pudo arrancar" desap
 los dos hallazgos apuntados en `enviar-documentos-por-correo` —, nada nuevo que este arreglo haya
 destapado.
 
+**⚙️ TERCERA PASADA, la que de verdad prueba "sin cascada" (9 sep 2026, tarde):** con `SOLOS` ya
+puesto, un barrido más aisló el último resquicio (dos gates de compras seguían dejando residuo
+propio en solitario, no de la cascada) y salió **160/215 ✓, CERO abortos** (`🛑`) — ni uno, la
+primera vez que el `--all` entero termina sin ninguno desde que `gate-barrera-permisos` existe.
+De paso, `verify-residuo-de-pruebas.mjs` señaló 2 filas que NO son resto: `GATE Rent Cliente` y
+`GATE Rent Proveedor`, el fondo de armario declarado y REUTILIZADO a propósito por
+`gate-rentabilidad-pantalla`/`gate-facturar-horas-pantalla`/`gate-coste-horas-pantalla` (sus
+facturas están en la cadena, no se pueden borrar, y crear uno nuevo por pasada fue justo lo que
+llegó a 79 «GATE Rent Proveedor» en su día). Añadidas como excepción ESCRITA y nombrada
+(`EXCEPCIONES_PERMANENTES`, dos filas concretas, no un comodín) — con ellas, el censo vuelve a
+**0 restos**, comprobado con el `--sembrar-rojo` de nuevo en verde.
+
 **Lo que NO se hizo, dicho sin adornar el cierre:** el criterio de "`exigeCodigoServido()` distingue
 por HASH, no por fecha" no se implementó — se tomó la alternativa "más simple" que el propio criterio
 ya ofrecía (que no corra en paralelo con otros), pero **por `SOLOS`, no por `FUERA_A_PROPOSITO`** como
@@ -15182,8 +15194,10 @@ que nadie borre ni reinicie ese directorio.
       `SOLOS`** (no por `FUERA_A_PROPOSITO`: sigue dentro de `--all`, en solitario frente al negocio
       compartido; un gate "propio" en paralelo sigue siendo posible, ver punto 3).
 - [x] `node scripts/run-gates.mjs --all` termina sin ninguna cascada de "no pudo arrancar" cuando
-      `gate-barrera-permisos` está en la misma pasada — comprobado: 156/215, sin el desplome de más
-      de 100 abortados que había antes.
+      `gate-barrera-permisos` está en la misma pasada — comprobado dos veces: 156/215 primero, y
+      **160/215 con CERO abortos** en la pasada final, sin el desplome de más de 100 que había antes.
+- [x] Correrlo dos veces seguidas no acumula residuo — comprobado con `verify-residuo-de-pruebas.mjs`
+      (0 restos antes y después, con las dos excepciones declaradas) y con el `--sembrar-rojo` propio.
 
 
 ## ✅ TAREA — Migrar el ERP para quitarle el `unsafe-inline`

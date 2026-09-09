@@ -88,6 +88,15 @@ const TABLAS_MARCA = [
   ['recursos', 'nombre', null],
 ];
 
+// ⚙️ 9 SEP 2026 — EXCEPCIONES ESCRITAS, no una lista que crece sola. `gate-rentabilidad-pantalla`,
+// `gate-facturar-horas-pantalla` y `gate-coste-horas-pantalla` REUTILIZAN a propósito este cliente
+// y este proveedor en cada pasada —«SE REUTILIZAN, NO SE CREAN CADA VEZ», comentario de esos tres
+// gates— porque sus facturas quedan en la cadena de VERI*FACTU y no se pueden borrar; crear uno
+// nuevo por pasada fue justo lo que en su día llegó a 79 «GATE Rent Proveedor». Esto NO es un
+// resto: es el fondo de armario declarado de esos tres gates. Cualquier OTRO nombre de gate sigue
+// cazándose igual — esta lista no es un comodín, son dos filas concretas y su motivo.
+const EXCEPCIONES_PERMANENTES = new Set(['GATE Rent Cliente', 'GATE Rent Proveedor']);
+
 function censarFilasDeFixture(db, slug) {
   const hay = n => { try { return !!db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(n); } catch { return false; } };
   for (const [tabla, col, condVivo] of TABLAS_MARCA) {
@@ -96,7 +105,7 @@ function censarFilasDeFixture(db, slug) {
     let filas;
     try { filas = db.prepare(`SELECT id, ${col} AS n FROM ${tabla} WHERE ${MARCA_SQL(col)}${filtroVivo}`).all(); }
     catch { continue; }
-    for (const f of filas) anota('fixture-visible', `${slug}: ${tabla}#${f.id} (${JSON.stringify(f.n)})`);
+    for (const f of filas) if (!EXCEPCIONES_PERMANENTES.has(f.n)) anota('fixture-visible', `${slug}: ${tabla}#${f.id} (${JSON.stringify(f.n)})`);
   }
   if (hay('admin_users')) {
     let usu;
