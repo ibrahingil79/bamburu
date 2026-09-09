@@ -15092,9 +15092,7 @@ Y su propia limpieza no lo recogió: `cleanup(slug)` empieza con `if (!slug) ret
 ## ✅ TAREA — `gate-barrera-permisos` contamina el barrido completo entero
 
 - **id:** barrera-permisos-contamina-el-barrido
-- **estado:** ✅ **HECHA — 9 sep 2026.** Commit `PENDIENTE-DE-ANOTAR` (se anota en el siguiente
-  commit, mismo criterio que `enviar-documentos-por-correo`: primero se comitea, después se
-  puede citar el propio hash).
+- **estado:** ✅ **HECHA — 9 sep 2026.** Commit `42060f4`.
 - **origen:** Descubierto el 9 sep 2026 al correr `node scripts/run-gates.mjs --all` para cerrar
   `enviar-documentos-por-correo`. Quedó **registrada, NO arreglada** en esa entrega — el arreglo es
   esta ficha.
