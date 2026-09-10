@@ -487,7 +487,7 @@ familia entera en verde: `test-contabilidad` 38 · `verify-contabilidad-diario-m
 > cuándo no se corre— y se espera un sí. Si dice que no, queda pendiente aquí y se vuelve a
 > proponer al abrir la siguiente sesión.
 
-- **Último barrido completo:** 2026-09-09 · `692f97b` · **160/215** · 1243 s
+- **Último barrido completo:** 2026-09-10 · `45ddaff` · **155/215** · 1274 s
 - **Estado:** ✅ al día
 
 <!-- BARRIDO:FIN -->
@@ -10126,10 +10126,140 @@ medio Bamburu". **No era eso.** Diagnosticado hasta el fondo, no supuesto:
 —el gate cruzado de los seis papeles— en **24 ✓ · 11 ✗**, IDÉNTICO al 7 sep 2026 (mismo 24 OK,
 mismo motivo), o sea: no ha empeorado ni una comprobación real por construir esto.
 
+## 🎨 PILAR 4 · VENTAS — TRES FICHAS PARA CERRARLO · 10 sep 2026
+
+> Encargo directo de Ibrahin, 10 sep 2026, fuera del orden de §LA COLA (mismo criterio que las tres
+> de seguridad del 8 sep y el hueco de PDF+email del 9 sep): **tres fichas, en este orden, las tres
+> apuntadas HOY aunque solo se construya la primera.**
+>
+> **Ficha 1 — `plantillas-documento` (CONSTRUIR AHORA).** **Ficha 2 —
+> `facturacion-recurrente-autoemision`** (SOLO ANOTAR). **Ficha 3 — `enlace-pago-nivel-a`** (ya
+> anotada el 9 sep; se confirma aquí que sigue en cola, ahora detrás de la Ficha 2 — antes iba
+> justo después de `enviar-documentos-por-correo`, un sitio más arriba).
+
+## ✅ TAREA — plantillas-documento (logo, color de acento y datos del negocio en los cuatro documentos)
+
+- **id:** plantillas-documento
+- **estado:** ✅ HECHA — 10 sep 2026 · commit `45ddaff`
+- **origen:** encargo de Ibrahin, 10 sep 2026 · Pilar 4 (Ventas) · Ficha 1 de 3
+
+**QUÉ SE PIDIÓ:** una pantalla en Ajustes donde el negocio personaliza el aspecto de sus documentos
+con logo, color de acento y sus propios datos, aplicado a los cuatro documentos (presupuesto, pedido,
+albarán, factura), sin tocar el contenido legal de la factura (QR Verifactu, leyenda, huella
+encadenada, importes, líneas).
+
+**LO QUE YA EXISTÍA, Y NO SE TOCÓ (hallazgo antes de construir nada):** el LOGO y los DATOS DEL
+NEGOCIO de esta ficha **ya estaban construidos y en producción**, de la tarea
+`adjuntos-validados-por-contenido` (4 sep 2026) y la unificación del membrete
+`partesDe()`/`membreteHtml()` (`documentos.js`, C-0): sube y valida por contenido (`mimeReal`,
+reutilizado tal cual — nada nuevo montado al lado), se guarda como adjunto (`company_logo_id`), se
+congela al emitir (una factura de marzo no cambia de logo hoy) y ya sale en los seis papeles (los
+cuatro de esta ficha + orden de compra + ticket de mostrador). Los datos del negocio (nombre, NIF,
+dirección, contacto) ya se leían de `company_config` en la cabecera de los cuatro documentos — nada
+que crear ahí tampoco. **Lo único que faltaba de las tres cosas del encargo era el COLOR DE ACENTO**,
+y es lo único que construye esta ficha.
+
+**LO QUE SE CONSTRUYÓ — el color de acento:**
+
+- **`company_config.accent_color`** (migración aditiva, `models.js`). Vacío = «no ha elegido
+  ninguno».
+- **`documentos.js`**: `ACCENT_DEFAULT` (`#2456D6`, el mismo azul que YA pintaba el borde del total
+  del pedido y el presupuesto antes de esta ficha — elegir no elegir no cambia nada) y
+  `colorAcentoValido()` (hex de 6 dígitos o `null`, falla cerrado igual que `logoDataUri`).
+  `partesDe()` devuelve `emisor.accentColor` **siempre resuelto** (nunca vacío) en sus dos ramas.
+- **DECISIÓN DE CONSTRUCCIÓN — el color NO se congela, y es a propósito** (se decide, se construye y
+  se explica aquí, sin pararse a preguntar — RITUAL.md): a diferencia del nombre/NIF/dirección/logo,
+  el color no describe ningún hecho legal ni económico del documento, así que no hay nada que
+  fotografiar; se lee SIEMPRE en vivo de `company_config`, para los documentos de hoy y los de marzo
+  por igual. Consecuencia deliberada: **no se ha tocado ni una columna ni un INSERT de `invoices`
+  —las mismas filas que calculan `verifactu_hash`**, el límite innegociable del encargo—, porque no
+  había ninguna necesidad de negocio que justificara acercarse a ese código solo para pintar un
+  borde.
+- **Se aplica a la cabecera y las líneas** de los cuatro documentos: el borde bajo el
+  número/fecha (la cabecera), el borde de las columnas de la tabla y el borde del TOTAL (las
+  líneas) — en `quotes.js`, `pedidos.js`, `albaranes.js` e `invoices.js` (factura completa Y ticket
+  de mostrador, el sexto papel que comparte membrete). Siempre por color literal ya resuelto en JS,
+  sin depender de que ninguna hoja de estilos ambiente lo defina (ni la de pantalla ni la del PDF
+  standalone tienen que coincidir para que funcione).
+- **Ajustes → empresa**: un `<input type="color">` junto al logo, con botón «Usar el de por
+  defecto»; se guarda con el mismo «Guardar cambios» de siempre (`PUT /api/erp/settings/company`),
+  validado por `companySchema` (hex de 6 dígitos o vacío; cualquier otra cosa, 400 con aviso claro).
+
+**Comprobado con navegador real, contra el servidor real** (`node scripts/gate-documentos.mjs`,
+extendido con la sección `[23]`, sobre negocios de prueba reales — logo Y color, no solo color):
+**65 ✓ · 1 ✗.**
+
+- [x] Subir logo y elegir color en Ajustes, generar el PDF de una factura real y ver el logo y el
+      color aplicados, con QR + leyenda + huella intactos — comprobado en factura, presupuesto,
+      pedido y albarán (y de propina, ticket y orden de compra, que comparten el mismo membrete).
+- [x] Sin logo, el PDF sale como hoy, no falla — ya lo cubría `adjuntos-validados-por-contenido`;
+      re-confirmado aquí (sección `[7]`).
+- [x] Fichero que no es imagen: se rechaza con aviso claro, no revienta — el logo ya lo hacía
+      (`adjuntos-validados-por-contenido`); el color, igual: `rojo` (no-hex) → HTTP 400, no se queda
+      guardado a medias.
+- [x] Prueba en rojo: se rompió a propósito `colorAcentoValido()` (`documentos.js`, forzada a
+      devolver `null` siempre) y se relanzó el gate — la sección `[23]` cayó a rojo exactamente en
+      las aserciones que miran el color guardado (`#FF6600` dejó de aparecer en factura, presupuesto,
+      pedido y albarán), sin tocar las del logo ni las de Verifactu. Revertido y confirmado verde
+      otra vez (65 ✓ · 1 ✗, idéntico).
+- [x] Barrido completo sin rojos nuevos — `node scripts/run-gates.mjs --all` → **155/215**, 1274 s.
+      Sin rojos nuevos de esta ficha: `gate-documentos` da exactamente **65 ✓ · 1 ✗**, el mismo ✗ ya
+      explicado abajo (ajeno). De los otros 59 rojos + 11 en DEUDA, ninguno toca `documentos.js`,
+      `company_config`, ni la pantalla de Ajustes → empresa; la mayoría son los MISMOS nombres que
+      el 9 sep 2026 (`gate-impresion`, `test-oficio`, `gate-citas-mes`, `verify-quotes`,
+      `verify-albaranes`, `verify-pedidos`, `verify-mostrador`, `verify-sustitutiva`, `verify-margen`,
+      `verify-constructor`, `verify-responsable`, `verify-informes`, `verify-plan-financiero`…) más
+      dos causas AJENAS y ya conocidas que arrastran cascada propia: **(1)** la contaminación de
+      `gate-barrera-permisos` (documentada el 9 sep 2026: parchea ficheros en disco y aborta en
+      cascada todo lo que arranca después en el mismo barrido — de ahí los 11 `ABORTADO`/DEUDA) y
+      **(2)** un producto sembrado `fiscal_treatment='pending'` sin confirmar en varios fixtures de
+      gate ajenos (el mismo motivo que se corrigió SOLO en el fixture de `gate-documentos`, ver
+      abajo), que hoy tumba también a `test-neto-cero-reserva` y otros con el mismo mensaje: «Falta
+      confirmar la clasificación fiscal de una línea antes de emitir». Registro completo del barrido
+      guardado en `docs/barridos/2026-09-10-barrido-completo.log`.
+
+**El único ✗ que queda en `gate-documentos.mjs` es AJENO a esta ficha** (sección `[22]`): el albarán
+de prueba ahora SÍ enseña el correo del cliente en el HTML de su pantalla — pero en el PANEL, no en
+el papel. Lo mete `enviar-documentos-por-correo` (9 sep 2026) en el texto de confirmación del botón
+«Enviar por correo» (`Se manda a ${clientEmail}.`). La aserción de este gate es del 21 ago 2026,
+anterior a esa ficha, y mira el HTML de la página entera, no solo `.docpaper`. Apuntado, no tocado:
+no es cirugía de `plantillas-documento`.
+
+**Hallazgo de propina, corregido en el fixture del propio gate (ajeno a esta ficha, no al
+producto):** el producto que `gate-documentos.mjs` siembra para sus facturas de prueba nacía con
+`fiscal_treatment='pending'` (el default desde S5) sin confirmarlo, así que **`createInvoice`
+rechazaba TODAS las facturas de prueba de este gate desde que S5 existe** — 10 de sus 35 aserciones
+llevaban en rojo por eso. Corregido sembrando el producto ya `taxable` — un cambio de una línea en el
+fixture del gate, no en `createInvoice` ni en ningún producto real.
+
+## TAREA — facturacion-recurrente-autoemision (SOLO ANOTADA, NO CONSTRUIDA)
+
+- **id:** facturacion-recurrente-autoemision
+- **estado:** pendiente — **SOLO ANOTADA, NO CONSTRUIDA** (orden expresa de Ibrahin, 10 sep 2026)
+- **origen:** encargo de Ibrahin, 10 sep 2026 · Pilar 4 (Ventas) · Ficha 2 de 3, detrás de
+  `plantillas-documento`
+
+Que el dueño pueda marcar una recurrente para que se emita SOLA cada periodo, sin dejar borrador.
+
+**Freno, decisión de Ibrahin:** NUNCA por defecto — el dueño la activa recurrente a recurrente. Hoy
+una recurrente **siempre** deja borrador y se emite a mano; **ese sigue siendo el comportamiento por
+defecto**, y esta ficha no lo cambia hasta que se construya (y aun construida, el freno se queda:
+cada recurrente nace sin autoemisión, y hay que encenderla una a una).
+
+**Criterios de aceptación (para cuando se construya)**
+
+- [ ] Cada recurrente tiene su propio interruptor de autoemisión, apagado por defecto.
+- [ ] Con el interruptor apagado (el caso de hoy y el de cualquier recurrente nueva), nada cambia:
+      sigue dejando borrador para que el dueño lo revise y emita a mano.
+- [ ] Con el interruptor encendido, al llegar el periodo se emite sola, sin dejar borrador a medias.
+- [ ] Encenderlo es una acción explícita del dueño, recurrente por recurrente — nunca un cambio
+      masivo ni una migración que lo active para las que ya existen.
+
 ## TAREA — Botón de pago propio en la factura (nivel A: enlace, sin cobrar por Bamburu)
 
 - **id:** enlace-pago-nivel-a
-- **estado:** pendiente — **SOLO ANOTADA, NO CONSTRUIDA** (orden expresa de Ibrahin, 9 sep 2026)
+- **estado:** pendiente — **SOLO ANOTADA, NO CONSTRUIDA** (orden expresa de Ibrahin, 9 sep 2026;
+  confirmada en cola el 10 sep 2026, Ficha 3 de 3 — detrás de `facturacion-recurrente-autoemision`)
 - **origen:** encargo de Ibrahin, 9 sep 2026 · Pilar 4 (Ventas) · continúa a `enviar-documentos-por-correo`
 
 Un campo en **Ajustes del negocio** donde el autónomo pega **su propio** enlace de cobro (Stripe,
