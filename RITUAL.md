@@ -180,6 +180,19 @@ Dos redes de seguridad más, para que esto no dependa de acordarse:
 - `gate-agenda-visual` termina pidiendo la pantalla **a la dirección pública** y comprobando que sirve
   el código nuevo.
 
+## LO VISIBLE LO VE IBRAHIN ANTES DE CERRAR (regla nueva, 10 sep 2026)
+
+> **Encargo directo de Ibrahin.** Antes de escribirla se buscó, en `RITUAL.md`/`CANON.md`/
+> `TABLERO.md`/`CLAUDE.md` y en todo su historial de `git`, una regla anterior que dijera que una
+> tarea con resultado visible se cierra sola sin su visto bueno, y **no apareció ninguna** — ni una
+> versión distinta que se haya corregido en algún commit. Esto no es una corrección de algo que se
+> coló: es una regla **nueva**, y se deja escrito así de claro para no inventar un historial que no
+> hay.
+
+**Ninguna tarea con un resultado que se pueda ver y probar (una pantalla, un botón, un documento) se
+cierra hasta que Ibrahin la haya visto y dado el OK. La máquina la deja lista, avisa «míralo aquí» y
+espera. Las tareas sin nada visible se cierran solas.**
+
 ## REGLA DE SEGURIDAD — obligatoria en toda tarea, sin excepción
 
 Ninguna tarea se cierra en verde sin responder estas tres, por escrito, en el cierre:

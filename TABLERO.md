@@ -524,6 +524,23 @@ familia entera en verde: `test-contabilidad` 38 · `verify-contabilidad-diario-m
 > perseguir un rojo intermitente»). Si Ibrahin quiere una pasada nueva de todas formas, se pide y se
 > corre.
 
+> 🛑 **REGLA NUEVA — 10 sep 2026: LO VISIBLE LO VE IBRAHIN ANTES DE CERRAR.** Encargo directo de
+> Ibrahin. Escrita entera en `RITUAL.md`, junto a «PASO 0 DEL CIERRE — DESPLEGAR». **Antes de
+> escribirla se buscó una regla anterior que dijera lo contrario** (`RITUAL.md`/`CANON.md`/
+> `TABLERO.md`/`CLAUDE.md`, más todo el historial de `git` de esos cuatro ficheros) **y no apareció
+> ninguna** — no hay un «cuándo cambió» que contar, porque no hay rastro de que existiera nunca una
+> versión distinta. Es una regla nueva, no una corrección; se deja dicho así para no inventar un
+> historial que no está.
+>
+> **La regla, literal:** ninguna tarea con un resultado que se pueda ver y probar (una pantalla, un
+> botón, un documento) se cierra hasta que Ibrahin la haya visto y dado el OK — la máquina la deja
+> lista, avisa «míralo aquí» y espera. Las tareas sin nada visible se cierran solas.
+>
+> **No cambia con retroactividad**: `plantillas-documento` (Ficha 1, 10 sep 2026) ya se cerró como
+> `✅ HECHA` ANTES de esta regla, con resultado visible (el selector de color en Ajustes) y sin que
+> Ibrahin lo viera primero — no se reabre ni se toca, es la última tarea a la que no le aplicaba
+> todavía. De aquí en adelante sí.
+
 ## 👁️ EN VIGILANCIA — UN MODELO POR PAPEL (desde el 1 sep 2026)
 
 > **Decisión de Ibrahin, 1 sep 2026.** Hasta hoy los tres papeles iban en **Opus** y una tarea
