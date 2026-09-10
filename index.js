@@ -1612,6 +1612,76 @@ app.post('/stripe/webhook', async (c) => {
   return c.json({ recibido: true });
 });
 
+// ── SEGUNDO WEBHOOK DE STRIPE: CONNECT (tarea `cobro-online-facturas`, 10 sep 2026, evolución de
+// `enlace-pago-nivel-a`) ─────────────────────────────────────────────────────────────────────────
+// URL Y SECRETO DISTINTOS del webhook de arriba, y a propósito: aquel es la suscripción de Bamburu
+// (una cuenta, la de Bamburu). Este es cada autónomo cobrando con SU PROPIA cuenta conectada —
+// Stripe manda estos eventos con `evento.account` puesto, no con un `customer` de la plataforma, así
+// que la búsqueda del negocio va por OTRA tabla (`stripe_connect_accounts`, no `tenant_suscripciones`)
+// y por eso hace falta una ruta propia: mezclar los dos en una firma confundiría CUÁL secreto vale.
+//
+// MISMA REGLA DE ORO que el webhook de arriba: firma comprobada ANTES de mirar nada, cuerpo CRUDO,
+// y SIEMPRE 200 aunque algo falle por dentro — un 500 aquí haría que Stripe reintentara en bucle por
+// un fallo nuestro, no del cliente que pagó.
+app.post('/stripe/connect/webhook', async (c) => {
+  const { verificarFirmaWebhook, secretoWebhookConectado } = await import('./core/stripe.js');
+  const crudo = await c.req.text();
+  const firma = c.req.header('stripe-signature');
+
+  const v = verificarFirmaWebhook(crudo, firma, secretoWebhookConectado());
+  if (!v.ok) return c.json({ error: v.error }, 400);
+
+  let evento;
+  try { evento = JSON.parse(crudo); } catch { return c.json({ error: 'cuerpo ilegible' }, 400); }
+
+  try {
+    const { getTenantByStripeConnectAccount } = await import('./core/control-db.js');
+    const { getTenantDb } = await import('./core/tenant-middleware.js');
+    const cuentaConectada = evento?.account || null;
+    const tenant = cuentaConectada ? getTenantByStripeConnectAccount(cuentaConectada) : null;
+
+    // Una cuenta que no reconocemos se acepta y se ignora — igual que el webhook de arriba con un
+    // cliente ajeno: devolver error haría que Stripe lo reintentara para siempre sin sentido.
+    if (tenant) {
+      const tdb = getTenantDb(tenant);
+
+      if (evento.type === 'payment_intent.succeeded') {
+        const pi = evento.data.object;
+        const invoiceId = parseInt(pi?.metadata?.bamburu_invoice_id, 10);
+        if (Number.isFinite(invoiceId)) {
+          const { registrarCobroFactura } = await import('./modules/erp/routes/invoices.js');
+          const { logActivity } = await import('./core/auth.js');
+          const { ENTITY } = await import('./core/activity-entities.js');
+          const inv = tdb.prepare('SELECT invoice_number FROM invoices WHERE id=?').get(invoiceId);
+          if (inv) {
+            const r = registrarCobroFactura(tdb, invoiceId, {
+              amount: (pi.amount_received ?? pi.amount) / 100,
+              paidDate: new Date().toISOString().slice(0, 10),
+              paymentMethod: 'tarjeta',
+              note: 'Cobro online con tarjeta (Stripe) · ' + pi.id,
+              stripePaymentIntentId: pi.id,
+            });
+            if (!r.duplicado) {
+              logActivity(tdb, null, 'Cobro automático con tarjeta (Stripe)', ENTITY.INVOICE, invoiceId, inv.invoice_number + ' · ' + ((pi.amount_received ?? pi.amount) / 100));
+              console.log('[stripe:connect:webhook] cobro automático de', tenant.slug, 'factura', invoiceId);
+            }
+          }
+        }
+      } else if (evento.type === 'account.updated') {
+        // El estado puede cambiar SIN que el autónomo vuelva a pasar por Ajustes (Stripe le pide
+        // un dato más días después, o al revés, termina de verificarse solo) — este evento es la
+        // única forma de que «listo para cobrar» no se quede desactualizado.
+        const listo = !!evento.data?.object?.charges_enabled;
+        tdb.prepare('UPDATE company_config SET stripe_connect_listo=? WHERE id=1').run(listo ? 1 : 0);
+      }
+    }
+  } catch (e) {
+    console.error('[stripe:connect:webhook] fallo procesando', evento?.type, e.message);
+  }
+
+  return c.json({ recibido: true });
+});
+
 app.use('*', tenantMiddleware);
 app.use('*', readOnlyGuard);   // bloqueo de escritura para negocios en SOLO LECTURA (impago)
 

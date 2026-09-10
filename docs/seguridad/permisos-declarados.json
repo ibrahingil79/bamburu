@@ -644,6 +644,18 @@
         "invoices.read"
       ]
     },
+    "GET /admin/portal/stripe/conectar": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.read"
+      ]
+    },
+    "GET /admin/portal/stripe/retorno": {
+      "veredicto": "permiso",
+      "permisos": [
+        "invoices.read"
+      ]
+    },
     "GET /admin/products": {
       "veredicto": "permiso",
       "permisos": [
@@ -3002,6 +3014,9 @@
     "GET /portal/factura/:id/pdf": {
       "veredicto": "solo sesion"
     },
+    "POST /portal/factura/:id/pagar": {
+      "veredicto": "solo sesion"
+    },
     "POST /portal/mensaje": {
       "veredicto": "solo sesion"
     },
@@ -3029,6 +3044,9 @@
       "pendiente_revisar": true
     },
     "POST /stripe/webhook": {
+      "veredicto": "sin guarda"
+    },
+    "POST /stripe/connect/webhook": {
       "veredicto": "sin guarda"
     },
     "GET /superadmin": {

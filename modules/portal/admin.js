@@ -8,6 +8,9 @@ import { sendEmail } from '../../core/mailer.js';
 import { getPortalSetting, setPortalSetting, sendPortalLink,
          mensajesDe, escribirMensaje, marcarVisto, sinLeer } from './portal.js';
 import { fechaHoraEs } from '../erp/voz.js';   // la marca de tiempo, en cristiano (24/08/2026 14:30)
+// Ficha `cobro-online-facturas` (10 sep 2026, evolución de `enlace-pago-nivel-a`).
+import { estaConfigurado, crearCuentaConectada, crearEnlaceOnboarding, recuperarCuentaConectada } from '../../core/stripe.js';
+import { fijarCuentaConectada } from '../../core/control-db.js';
 
 export function createPortalAdminRoutes(db) {
   const views = new Hono();
@@ -33,11 +36,27 @@ export function createPortalAdminRoutes(db) {
         : '<span style="color:var(--warn);font-size:12px">Sin email</span>'}</td></tr>`).join('')
       || emptyRow(5, 'Todavía no tienes clientes a los que dar acceso al portal. Empieza por crear uno.', { cta: 'Nuevo cliente', href: '/admin/clients' });
     const totalPend = [...pend.values()].reduce((a, b) => a + b, 0);
+    // Ficha `cobro-online-facturas` (10 sep 2026) — estado de la cuenta conectada de Stripe.
+    const cfgCobro = db.prepare('SELECT stripe_connect_account_id, stripe_connect_listo FROM company_config WHERE id=1').get() || {};
+    const cobroCard = !estaConfigurado()
+      ? `<div class="card" style="margin-top:1rem"><div class="card-body"><h3>Cobro con tarjeta</h3>
+          <p style="color:var(--text2);font-size:12px;margin:.3rem 0 0">Stripe no está configurado en este servidor todavía.</p></div></div>`
+      : `<div class="card" style="margin-top:1rem"><div class="card-body"><h3>Cobro con tarjeta</h3>
+          <p style="color:var(--text2);font-size:12px;margin:.3rem 0 .6rem">Conecta tu propia cuenta de Stripe una vez. El dinero va directo a TU cuenta —
+          Bamburu no lo toca ni se queda comisión— y la factura se marca pagada sola en cuanto el cliente paga.</p>
+          ${cfgCobro.stripe_connect_listo
+            ? '<span class="pill" style="background:var(--ok-s);color:var(--ok);border-radius:20px;padding:.15rem .6rem;font-size:.8rem;font-weight:600">✅ Listo para cobrar</span>'
+            : cfgCobro.stripe_connect_account_id
+              ? `<span class="pill" style="background:var(--warn-s);color:var(--warn);border-radius:20px;padding:.15rem .6rem;font-size:.8rem;font-weight:600">⚠️ Pendiente de completar</span>
+                 <a class="btn" style="margin-left:.5rem" href="/admin/portal/stripe/conectar">Continuar</a>`
+              : '<a class="btn" href="/admin/portal/stripe/conectar">Conectar cuenta de cobro</a>'}
+          </div></div>`;
     const content = `<div class="ph"><h2>Portal de cliente</h2></div>
-      <div style="color:var(--text2);font-size:12px;margin-bottom:.5rem">Envía a cada cliente un enlace privado (caduca en 14 días) para que vea y descargue sus facturas y su estado de pago. El pago con tarjeta queda fuera por ahora: se muestran los datos de transferencia.</div>
+      <div style="color:var(--text2);font-size:12px;margin-bottom:.5rem">Envía a cada cliente un enlace privado (caduca en 14 días) para que vea y descargue sus facturas y su estado de pago, con botón de pago con tarjeta si tienes tu cuenta de cobro lista y datos de transferencia si no.</div>
       ${flash}${err}
       ${totalPend ? `<div style="margin:.5rem 0;padding:.5rem .75rem;border-left:3px solid var(--warn);background:var(--warn-s);font-size:12px;color:var(--warn)">Tienes <strong>${totalPend}</strong> mensaje(s) de clientes sin leer.</div>` : ''}
-      <div class="card"><div class="card-body"><h3>Datos de transferencia (los ve el cliente)</h3>
+      ${cobroCard}
+      <div class="card" style="margin-top:1rem"><div class="card-body"><h3>Datos de transferencia (los ve el cliente)</h3>
         <form method="post" action="/admin/portal/iban" style="display:flex;gap:.5rem;align-items:end;flex-wrap:wrap;margin-top:.5rem">
           <input type="hidden" name="_csrf" value="${escHtml(csrf)}">
           <div><label class="doc-label">IBAN</label><br><input name="iban" value="${escHtml(iban)}" style="width:22rem" placeholder="ESXX XXXX ..."></div>
@@ -46,6 +65,46 @@ export function createPortalAdminRoutes(db) {
         </form></div></div>
       <div class="card" style="margin-top:1rem"><table><thead><tr><th>Cliente</th><th>Email</th><th>Enlaces</th><th>Conversación</th><th>Acción</th></tr></thead><tbody>${filas}</tbody></table></div>`;
     return c.html(adminLayout('Portal de cliente', content, 'portal', csrf, c));
+  });
+
+  // ── FICHA `cobro-online-facturas` (10 sep 2026) · CONECTAR LA CUENTA DE STRIPE ─────────────────
+  // Un clic, y solo uno: si ya hay cuenta creada, esto SOLO genera un enlace de onboarding fresco
+  // (el de Stripe caduca a los pocos minutos) — nunca crea una segunda cuenta para el mismo negocio.
+  views.get('/stripe/conectar', requirePerm('invoices.read'), async c => {
+    try {
+      const tenant = c.get('tenant');
+      const cfg = db.prepare('SELECT stripe_connect_account_id, email FROM company_config WHERE id=1').get() || {};
+      let accountId = cfg.stripe_connect_account_id;
+      if (!accountId) {
+        const r = await crearCuentaConectada({ email: cfg.email || undefined, tenantId: tenant.id, slug: tenant.slug });
+        if (!r.ok) return c.redirect('/admin/portal?err=' + encodeURIComponent('No se pudo crear la cuenta de cobro: ' + r.error));
+        accountId = r.datos.id;
+        db.prepare('UPDATE company_config SET stripe_connect_account_id=? WHERE id=1').run(accountId);
+        fijarCuentaConectada(tenant.id, accountId);   // control.db: así el webhook sabe de qué negocio es
+      }
+      const base = process.env.PUBLIC_BASE_DOMAIN && tenant?.slug ? `https://${tenant.slug}.${process.env.PUBLIC_BASE_DOMAIN}` : '';
+      const enlace = await crearEnlaceOnboarding({
+        accountId,
+        returnUrl: base + '/admin/portal/stripe/retorno',
+        refreshUrl: base + '/admin/portal/stripe/conectar',
+      });
+      if (!enlace.ok) return c.redirect('/admin/portal?err=' + encodeURIComponent('No se pudo generar el enlace de Stripe: ' + enlace.error));
+      return c.redirect(enlace.datos.url);
+    } catch (e) { return c.redirect('/admin/portal?err=' + encodeURIComponent(e.message || 'No se pudo conectar con Stripe')); }
+  });
+
+  // Vuelta del onboarding de Stripe. El `return_url` de Stripe NO trae el resultado en la URL — se
+  // pregunta a la API cuál es el estado de verdad, nunca se confía en "ha vuelto" como si fuera "ha
+  // terminado" (el autónomo puede volver a medias, cerrando la pestaña de Stripe antes de acabar).
+  views.get('/stripe/retorno', requirePerm('invoices.read'), async c => {
+    try {
+      const cfg = db.prepare('SELECT stripe_connect_account_id FROM company_config WHERE id=1').get() || {};
+      if (!cfg.stripe_connect_account_id) return c.redirect('/admin/portal');
+      const r = await recuperarCuentaConectada(cfg.stripe_connect_account_id);
+      const listo = r.ok && !!r.datos?.charges_enabled;
+      db.prepare('UPDATE company_config SET stripe_connect_listo=? WHERE id=1').run(listo ? 1 : 0);
+      return c.redirect('/admin/portal' + (listo ? '' : '?err=' + encodeURIComponent('Casi. Stripe todavía pide algún dato más — pulsa «Continuar» para terminarlo.')));
+    } catch (e) { return c.redirect('/admin/portal?err=' + encodeURIComponent(e.message || 'No se pudo comprobar el estado de la cuenta')); }
   });
 
   // ── FICHA G2 · LA CONVERSACIÓN CON UN CLIENTE, desde el lado del negocio ─────────────────────

@@ -100,6 +100,15 @@ export function runMigrations(db) {
   // (`ACCENT_DEFAULT` en `documentos.js`), no un valor guardado — así un negocio nuevo no tiene
   // que borrar nada si algún día cambia el neutro de fábrica.
   addCol(db, 'company_config', 'accent_color', "TEXT DEFAULT ''");
+  // Ficha `cobro-online-facturas` (10 sep 2026, evolución de `enlace-pago-nivel-a`) — la cuenta de
+  // Stripe conectada de ESTE negocio. `stripe_connect_account_id` es el espejo local del `account_id`
+  // que vive en `control.db` (`stripe_connect_accounts`) — hace falta aquí porque el resto del ERP
+  // (Ajustes, el botón de pago de la factura) trabaja con la BD del tenant y no tiene por qué abrir
+  // `control.db` para saber si el negocio puede cobrar. `stripe_connect_listo` es el espejo de
+  // `charges_enabled` de Stripe, refrescado al volver del onboarding — así el botón «Pagar con
+  // tarjeta» de la factura no llama a Stripe en cada carga de página.
+  addCol(db, 'company_config', 'stripe_connect_account_id', 'TEXT');
+  addCol(db, 'company_config', 'stripe_connect_listo', 'INTEGER NOT NULL DEFAULT 0');
 
   // Store settings
   db.exec(`CREATE TABLE IF NOT EXISTS store_settings (
@@ -1941,6 +1950,16 @@ export function runMigrations(db) {
     FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE
   )`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_invoice_payments_invoice ON invoice_payments(invoice_id)`);
+
+  // Ficha `cobro-online-facturas` (10 sep 2026) — el id del PaymentIntent de Stripe que generó
+  // este cobro, cuando lo generó Stripe y no una mano. ES LA IDEMPOTENCIA DEL WEBHOOK: Stripe puede
+  // reintentar `payment_intent.succeeded` (reinicios, timeouts, lo que sea) y sin esto un reintento
+  // duplicaría el cobro — la factura de 100 € se quedaría marcada como pagada 200 €. El índice único
+  // PARCIAL (`WHERE ... IS NOT NULL`) deja que los cobros manuales sigan sin id (NULL) sin que SQLite
+  // los trate como duplicados entre sí: NULL nunca es igual a NULL en un índice único.
+  addCol(db, 'invoice_payments', 'stripe_payment_intent_id', 'TEXT');
+  db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_invoice_payments_stripe_pi
+             ON invoice_payments(stripe_payment_intent_id) WHERE stripe_payment_intent_id IS NOT NULL`);
 
   // Fecha de vencimiento GUARDADA en la factura (no calculada al vuelo): el plazo del
   // cliente puede cambiar y cada factura debe conservar el suyo. Al emitir se fija

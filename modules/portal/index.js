@@ -18,6 +18,9 @@ import { canjearToken, crearSesion, validarSesion, clientInvoices, transferData,
          analiticaCliente, mensajesDe, escribirMensaje, marcarVisto } from './portal.js';
 import { fechaEs, fechaHoraEs } from '../erp/voz.js';   // la fecha, en cristiano (24/08/2026 14:30)
 import { fmtEur } from '../erp/margen.js';   // el dinero, como en España: 6.023,00 €
+// Ficha `cobro-online-facturas` (10 sep 2026, evolución de `enlace-pago-nivel-a`).
+import { invoiceCobro, isCobrable } from '../erp/cobros.js';
+import { crearSesionDePagoFactura } from '../../core/stripe.js';
 
 function shell(title, body) {
   return `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -93,16 +96,26 @@ export function register(app, db) {
     const client = db.prepare('SELECT name FROM clients WHERE id=?').get(v.client_id) || {};
     const { rows, totalPendiente } = clientInvoices(db, v.client_id);
     const t = transferData(db);
+    // Ficha `cobro-online-facturas` — el botón de tarjeta SOLO aparece si el negocio tiene su
+    // cuenta de cobro lista. Sin cuenta conectada, la factura se ve exactamente como antes de
+    // esta ficha: IBAN y punto, que es lo que ya funcionaba.
+    const cobroListo = !!(db.prepare('SELECT stripe_connect_listo FROM company_config WHERE id=1').get() || {}).stripe_connect_listo;
     const filas = rows.map(r => `<tr>
       <td>${escHtml(r.invoice_number)}</td><td>${fechaEs(r.issue_date)}</td>
       <td class="r">${dinero(r.total, r.currency_symbol)}</td>
       <td>${r.pagada ? '<span class="pill pagada">Pagada</span>' : `<span class="pill pend">Pendiente${r.pendiente < r.total ? ' · ' + dinero(r.pendiente, r.currency_symbol) : ''}</span>`}</td>
-      <td class="r"><a class="btn" href="/portal/factura/${r.id}/pdf">PDF</a></td></tr>`).join('')
+      <td class="r">
+        ${!r.pagada && cobroListo ? `<form method="post" action="/portal/factura/${r.id}/pagar" style="display:inline"><button class="btn" type="submit" style="background:var(--accent);border:0;cursor:pointer">Pagar con tarjeta</button></form> ` : ''}
+        <a class="btn" href="/portal/factura/${r.id}/pdf">PDF</a></td></tr>`).join('')
       || '<tr><td colspan="5" style="text-align:center;color:var(--text3);padding:2rem">No tienes facturas pendientes. Estás al día.</td></tr>';
+    const pagoQuery = c.req.query('pago');
+    const avisoPago = pagoQuery === 'ok'
+      ? '<div class="okmsg">Pago recibido. La factura se marcará como pagada en un momento — no hace falta que hagas nada más.</div>'
+      : pagoQuery === 'cancelado' ? '<div class="aviso">Pago cancelado. La factura sigue pendiente; puedes volver a intentarlo cuando quieras.</div>' : '';
     const pago = t.iban ? `<div class="card"><h3 style="margin:.2rem 0">¿Cómo pagar?</h3>
-      <p class="sub">Haz una transferencia a esta cuenta indicando el nº de factura en el concepto. El estado se actualizará cuando tu proveedor concilie el pago.</p>
+      <p class="sub">${cobroListo ? 'Paga con tarjeta desde el botón de cada factura, o haz' : 'Haz'} una transferencia a esta cuenta indicando el nº de factura en el concepto. El estado se actualizará cuando tu proveedor concilie el pago.</p>
       <div class="iban">${escHtml(t.iban)}</div>${t.holder ? `<div style="color:var(--text2);font-size:.85rem;margin-top:.2rem">Titular: ${escHtml(t.holder)}</div>` : ''}</div>`
-      : `<div class="card"><p class="sub">Para el pago por transferencia, contacta con tu proveedor para obtener el número de cuenta.</p></div>`;
+      : cobroListo ? '' : `<div class="card"><p class="sub">Para el pago por transferencia, contacta con tu proveedor para obtener el número de cuenta.</p></div>`;
     // ── FICHA G1 · SUS PROPIAS ANALÍTICAS ────────────────────────────────────────────────────
     // Solo sus datos, y con el MISMO criterio de «qué cuenta» que usa el negocio, para que no pueda
     // ver aquí un total distinto del de su lista de facturas dos centímetros más arriba.
@@ -159,6 +172,7 @@ export function register(app, db) {
       Después tendrás que pedirle a ${escHtml(t.company_name)} un enlace nuevo.</p>`;
 
     const body = `<h1>Tus facturas</h1><div class="sub">${escHtml(t.company_name)} · ${escHtml(client.name || '')}${totalPendiente > 0 ? ` · Pendiente total: ${dinero(totalPendiente, rows[0]?.currency_symbol)}` : ' · Todo al día'}</div>
+      ${avisoPago}
       <div class="card"><table><thead><tr><th>Factura</th><th>Fecha</th><th class="r">Total</th><th>Estado</th><th></th></tr></thead><tbody>${filas}</tbody></table></div>
       ${pago}
       ${analitica}
@@ -196,6 +210,43 @@ export function register(app, db) {
       return new Response(pdf, { headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': 'attachment; filename="' + fname + '"' } });
     } catch (e) { return c.html(shell('No se pudo generar el PDF', `<div class="card"><h1>No hemos podido preparar el PDF</h1>
   <p class="sub">Vuelve a intentarlo en un momento.</p></div>`), 500); }
+  });
+
+  // ── FICHA `cobro-online-facturas` (10 sep 2026) · PAGAR CON TARJETA ────────────────────────────
+  // MISMO CANDADO que el PDF: sesión de portal + `invoiceBelongsToClient` — nunca se genera un
+  // cobro para una factura ajena, aunque alguien adivine un id. El importe SALE DEL SERVIDOR
+  // (`invoiceCobro`, lo pendiente de verdad), nunca de nada que mande el navegador: un cliente no
+  // puede decidir cuánto paga tocando el formulario. El estado NO cambia aquí — cambia cuando
+  // llegue `payment_intent.succeeded` al webhook; esta ruta solo abre el Checkout de Stripe.
+  app.post('/portal/factura/:id/pagar', async (c) => {
+    const v = deLaCookie(c);
+    if (!v) return c.html(denied(), 403);
+    const invId = Number(c.req.param('id'));
+    if (!invoiceBelongsToClient(db, invId, v.client_id)) return c.html(denied(), 404);
+    try {
+      const inv = db.prepare('SELECT * FROM invoices WHERE id=?').get(invId);
+      if (!inv || !isCobrable(db, inv)) return c.redirect('/portal?pago=cancelado');
+      const today = new Date().toISOString().slice(0, 10);
+      const st = invoiceCobro(db, inv, today);
+      if (st.pendiente <= 0.0049) return c.redirect('/portal');   // ya está pagada: nada que cobrar
+      const cfg = db.prepare('SELECT stripe_connect_account_id, stripe_connect_listo FROM company_config WHERE id=1').get() || {};
+      if (!cfg.stripe_connect_listo || !cfg.stripe_connect_account_id) return c.redirect('/portal?pago=cancelado');
+      const tenant = c.get('tenant');
+      const cliente = db.prepare('SELECT email FROM clients WHERE id=?').get(v.client_id);
+      const base = process.env.PUBLIC_BASE_DOMAIN && tenant?.slug ? `https://${tenant.slug}.${process.env.PUBLIC_BASE_DOMAIN}` : '';
+      const sesion = await crearSesionDePagoFactura({
+        cuentaConectada: cfg.stripe_connect_account_id,
+        importeCentimos: Math.round(st.pendiente * 100),
+        descripcion: 'Factura ' + (inv.invoice_number || ('#' + invId)),
+        facturaId: invId,
+        tenantSlug: tenant?.slug || '',
+        successUrl: base + '/portal?pago=ok',
+        cancelUrl: base + '/portal?pago=cancelado',
+        clienteEmail: cliente?.email || null,
+      });
+      if (!sesion.ok) return c.redirect('/portal?pago=cancelado');
+      return c.redirect(sesion.datos.url);
+    } catch (e) { return c.redirect('/portal?pago=cancelado'); }
   });
 
   console.log('✅ Portal: portal de cliente en /portal (se entra con el enlace de un solo uso)');

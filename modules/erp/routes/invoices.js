@@ -1015,6 +1015,29 @@ export function emitSustitutivaSvc(db, ticketId, client_id) {
   return out;
 }
 
+// ── COBRO ONLINE DE FACTURAS (10 sep 2026) — LA MISMA PUERTA QUE EL COBRO A MANO ──────────────────
+// Un cobro de Stripe NO inventa un segundo sistema de estado: es una fila más en `invoice_payments`,
+// igual que la que deja «Registrar cobro» a mano. El estado «pagada»/«pendiente» sigue calculándose
+// en vivo desde la suma de esa tabla (`invoiceCobro`, `cobros.js`) — nunca hay una columna aparte que
+// pueda desincronizarse de lo que de verdad se cobró.
+//
+// `stripePaymentIntentId` es la idempotencia: si ya hay una fila con ese PaymentIntent (el índice
+// único parcial de `invoice_payments`, `models.js`), NO se inserta una segunda — un reintento del
+// webhook de Stripe (los reintenta si no le contestamos 200 a tiempo) no puede duplicar el cobro.
+// Los cobros a mano nunca traen `stripePaymentIntentId` (queda `NULL`), y NULL nunca choca con NULL
+// en un índice único: pueden convivir tantos cobros manuales como haga falta.
+export function registrarCobroFactura(db, invoiceId, { amount, paidDate, paymentMethod = '', note = '', stripePaymentIntentId = null }) {
+  if (stripePaymentIntentId) {
+    const yaExiste = db.prepare('SELECT id FROM invoice_payments WHERE stripe_payment_intent_id=?').get(stripePaymentIntentId);
+    if (yaExiste) return { id: yaExiste.id, duplicado: true };
+  }
+  const res = db.prepare(
+    'INSERT INTO invoice_payments (invoice_id, amount, paid_date, payment_method, note, stripe_payment_intent_id) VALUES (?,?,?,?,?,?)'
+  ).run(invoiceId, amount, paidDate, paymentMethod, note, stripePaymentIntentId);
+  try { postInvoicePayment(db, res.lastInsertRowid); } catch {}   // asiento de cobro (tesorería/430); no rompe el cobro
+  return { id: res.lastInsertRowid, duplicado: false };
+}
+
 export function createInvoiceRoutes(db) {
   const api = new Hono();
   const views = new Hono();
@@ -1217,11 +1240,10 @@ export function createInvoiceRoutes(db) {
       if (!isCobrable(db, inv)) return c.json({ error: 'Esta factura no admite cobro (anulada, abono o sustituida por una rectificativa)' }, 400);
       const { amount, paid_date, payment_method, note } = c.get('validated');
       const today = new Date().toISOString().slice(0, 10);
-      const res = db.prepare('INSERT INTO invoice_payments (invoice_id, amount, paid_date, payment_method, note) VALUES (?,?,?,?,?)')
-        .run(id, amount, paid_date || today, payment_method || '', note || '');
-      try { postInvoicePayment(db, res.lastInsertRowid); } catch {}   // asiento de cobro (tesorería/430); no rompe el cobro
+      const { id: paymentId } = registrarCobroFactura(db, id,
+        { amount, paidDate: paid_date || today, paymentMethod: payment_method, note });
       logActivity(db, c.get('session'), 'Registró cobro', ENTITY.INVOICE, id, `${inv.invoice_number} · ${amount}`);
-      return c.json({ id: res.lastInsertRowid, cobro: invoiceCobro(db, inv, today) }, 201);
+      return c.json({ id: paymentId, cobro: invoiceCobro(db, inv, today) }, 201);
     } catch (e) { return c.json({ error: safeError(e) }, 400); }
   });
 

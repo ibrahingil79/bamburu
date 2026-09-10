@@ -341,6 +341,26 @@ function runMigrations(db) {
       FROM tenants t
      WHERE NOT EXISTS (SELECT 1 FROM tenant_suscripciones s WHERE s.tenant_id = t.id)
   `);
+
+  // ── COBRO ONLINE DE FACTURAS — CUENTA CONECTADA DE STRIPE (tarea `cobro-online-facturas`,
+  // 10 sep 2026), evolución de `enlace-pago-nivel-a`. NADA QUE VER CON `tenant_suscripciones`
+  // de arriba, a propósito: aquella es Bamburu cobrándole al autónomo sus 9,90 €/mes (una cuenta
+  // de Stripe: la de Bamburu). Esta es el autónomo cobrando a SU cliente con SU propia cuenta de
+  // Stripe conectada — dos flujos de dinero que no se tocan ni comparten fila.
+  //
+  // Vive en `control.db` y NO en `company_config` del tenant (que también guarda su propio
+  // `stripe_connect_account_id`, ver `models.js`) porque el webhook de Connect llega ANTES de
+  // resolver el tenant (misma razón que obliga a `tenant_suscripciones.stripe_cliente_id`): Stripe
+  // manda `evento.account` con el id de la cuenta conectada, y de ahí hay que llegar al tenant sin
+  // abrir 84 bases a probar suerte.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS stripe_connect_accounts (
+      tenant_id  INTEGER PRIMARY KEY,
+      account_id TEXT NOT NULL UNIQUE,
+      creado_en  DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id)
+    )
+  `);
 }
 
 // ---------------------------------------------------------------------------
@@ -369,6 +389,20 @@ export function getTenantById(id) {
   return controlDb
     .prepare('SELECT * FROM tenants WHERE id = ?')
     .get(id) ?? null;
+}
+
+// El webhook de Connect (`index.js`, `POST /stripe/connect/webhook`) llega con `evento.account` y
+// nada más — así se llega al tenant. Guarda o reemplaza la fila de ESE tenant (aditivo: cambiar de
+// cuenta conectada no dobla la fila, la sustituye).
+export function fijarCuentaConectada(tenantId, accountId) {
+  controlDb.prepare(
+    'INSERT INTO stripe_connect_accounts (tenant_id, account_id) VALUES (?,?) ' +
+    'ON CONFLICT(tenant_id) DO UPDATE SET account_id=excluded.account_id'
+  ).run(tenantId, accountId);
+}
+export function getTenantByStripeConnectAccount(accountId) {
+  const fila = controlDb.prepare('SELECT tenant_id FROM stripe_connect_accounts WHERE account_id=?').get(accountId);
+  return fila ? getTenantById(fila.tenant_id) : null;
 }
 
 // Valida una cookie de sesión y devuelve { session, tenant } o null.

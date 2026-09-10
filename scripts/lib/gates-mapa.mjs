@@ -215,6 +215,10 @@ export const GRUPOS = {
     // criterio: PDF adjunto, correo fijo de la ficha del cliente, registrado en Actividad. Se
     // declara EL MISMO DÍA que nace: un gate fuera de este mapa no lo ejecuta nadie.
     'gate-enviar-documentos-por-correo',
+    // 10 sep 2026 (`cobro-online-facturas`) — el botón de pago engancha en el mismo bloque de
+    // totales que `gate-documentos` ya vigila (logo, membrete), y usa el PDF/portal de la factura
+    // que construyó `enviar-documentos-por-correo`. Declarado el mismo día que nace.
+    'gate-cobro-online-facturas',
   ],
   // ── LA PUERTA PÚBLICA DE RESERVA (peldaño 7 · pieza 6) — DENTRO DEL BARRIDO (20 ago 2026) ────
   // SEGUNDA ZONA ENTERA que aparece fuera del mapa en el mismo día (la primera fue la agenda). Las
@@ -482,6 +486,9 @@ export const EMPIEZAN_DE_CERO = new Set([
   'gate-cola-envios',              // negocio nuevo: la cola vacía es justo lo primero que se mide
   'gate-documentos',               // DOS negocios nuevos: uno con logo y otro sin él (y el de al lado
                                    // sirve para probar que un negocio no ve el logo del otro)
+  'gate-cobro-online-facturas',    // DOS negocios nuevos: uno para «Conectar» (habla con Stripe de
+                                   // verdad) y otro para el ciclo de pago/webhook, para no cruzar
+                                   // cuentas de Stripe entre los dos casos.
   // `gate-pantallas-documento` NO va aquí: necesita el negocio de desarrollo, que es el único con
   // documentos de los diez tipos que abre. Se trae lo suyo (el presupuesto en borrador) y lo limpia.
   'gate-mapa-cliente',             // negocio nuevo: cuatro clientes, uno por cada caso del mapa

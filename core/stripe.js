@@ -66,6 +66,11 @@ export function claveSecreta() {
 
 export function clavePublica() { return delEntorno('STRIPE_PUBLISHABLE_KEY'); }
 export function secretoWebhook() { return delEntorno('STRIPE_WEBHOOK_SECRET'); }
+// Segundo webhook, segundo secreto — a propósito, NO el mismo que `secretoWebhook()`. Los eventos
+// de Connect (cobro-online-facturas) llegan a una URL distinta (`/stripe/connect/webhook`) con
+// `evento.account` puesto, y Stripe firma cada endpoint con su propia clave: compartir el secreto
+// de la suscripción con Connect dejaría que una firma válida para uno colara en el otro.
+export function secretoWebhookConectado() { return delEntorno('STRIPE_CONNECT_WEBHOOK_SECRET'); }
 export function estaConfigurado() { return !!claveSecreta(); }
 
 /** Para pintarlo en la pantalla del dueño sin enseñar ninguna clave. */
@@ -103,7 +108,7 @@ function aFormulario(obj, prefijo = '', salida = []) {
  * `Idempotency-Key` va en todos los POST. No es adorno: sin ella, un reintento por timeout de red
  * cobra DOS VECES al mismo cliente, y el cliente ve dos cargos idénticos con segundos de diferencia.
  */
-export async function stripeApi(metodo, ruta, params = {}, { idempotencia = null } = {}) {
+export async function stripeApi(metodo, ruta, params = {}, { idempotencia = null, cuentaConectada = null } = {}) {
   const clave = claveSecreta();
   if (!clave) {
     const d = diagnostico();
@@ -118,6 +123,11 @@ export async function stripeApi(metodo, ruta, params = {}, { idempotencia = null
     'Content-Type': 'application/x-www-form-urlencoded',
     'Stripe-Version': '2024-06-20',
   };
+  // CARGO DIRECTO A LA CUENTA CONECTADA (Connect). Con esta cabecera, la llamada se hace EN NOMBRE
+  // de esa cuenta — la misma clave de la plataforma, pero el dinero, el PaymentIntent y el Checkout
+  // Session pertenecen a la cuenta conectada, no a Bamburu. Es lo que hace que «Bamburu nunca toca
+  // el dinero» sea literal y no una promesa: el saldo nace y se queda en la cuenta del autónomo.
+  if (cuentaConectada) cabeceras['Stripe-Account'] = cuentaConectada;
   if (idempotencia && metodo !== 'GET') cabeceras['Idempotency-Key'] = idempotencia;
 
   let r;
@@ -408,6 +418,85 @@ export async function cambiarMetodoDeSuscripcion(suscripcionId, metodoId) {
 }
 export async function desasociarMetodo(metodoId) {
   return stripeApi('POST', `/payment_methods/${encodeURIComponent(metodoId)}/detach`);
+}
+
+// ── COBRO ONLINE DE FACTURAS — CUENTA CONECTADA POR AUTÓNOMO (tarea `cobro-online-facturas`,
+// 10 sep 2026, evolución de `enlace-pago-nivel-a`) ─────────────────────────────────────────────────
+//
+// MODELO A, Y ES LITERAL: cada autónomo conecta SU PROPIA cuenta de Stripe. Los cobros de sus
+// facturas son CARGOS DIRECTOS (`Stripe-Account`, sin `application_fee_amount`, sin
+// `transfer_data`) — la cuenta conectada es la comerciante, el dinero nace y se queda en SU saldo.
+// Bamburu no lo ve pasar, no lo retiene ni un segundo, y no cobra comisión: solo la de Stripe, que
+// se la descuenta Stripe a la cuenta conectada, no a Bamburu.
+//
+// EXPRESS, no Standard ni Custom: onboarding alojado por Stripe (el autónomo rellena SUS datos en
+// la web de Stripe, no en un formulario nuestro que tendría que guardarlos), y no exige que el
+// autónomo entre nunca al Dashboard de Stripe para nada del día a día — coincide con «una vez y
+// listo» del encargo. Con `card_payments` únicamente: no se pide `transfers` porque los cargos
+// directos no mueven dinero A TRAVÉS de la plataforma, así que Bamburu no necesita esa capacidad.
+export async function crearCuentaConectada({ email, tenantId, slug }) {
+  const params = {
+    type: 'express',
+    country: 'ES',
+    email: email || undefined,
+    capabilities: { card_payments: { requested: true } },
+    metadata: { bamburu_tenant_id: String(tenantId), bamburu_slug: slug || '' },
+    business_type: 'individual',   // autónomo — se puede corregir en el propio onboarding de Stripe
+  };
+  return stripeApi('POST', '/accounts', params,
+                   { idempotencia: llaveIdempotente(`cuenta-conectada-tenant-${tenantId}`, params) });
+}
+
+/**
+ * El enlace de onboarding, de UN SOLO USO y CORTO (caduca a los pocos minutos — lo dice Stripe, no
+ * es cosa nuestra). Por eso nunca se guarda: se genera fresco cada vez que el autónomo pulsa
+ * «Conectar» o «Continuar», y `refreshUrl` es a dónde vuelve Stripe si el enlace caducó a medias.
+ */
+export async function crearEnlaceOnboarding({ accountId, returnUrl, refreshUrl }) {
+  return stripeApi('POST', '/account_links', {
+    account: accountId, type: 'account_onboarding',
+    return_url: returnUrl, refresh_url: refreshUrl,
+  });
+}
+
+/** Estado de la cuenta conectada: lo único que Bamburu necesita saber es si YA puede cobrar. */
+export async function recuperarCuentaConectada(accountId) {
+  return stripeApi('GET', `/accounts/${encodeURIComponent(accountId)}`);
+}
+
+/**
+ * El Checkout de la factura — CARGO DIRECTO en nombre de la cuenta conectada (`cuentaConectada`).
+ * `payment_intent_data.metadata` es lo que el webhook de Connect necesita para saber QUÉ factura
+ * cobró este pago: viaja pegado al PaymentIntent, así que llega intacto en `payment_intent.succeeded`
+ * sin tener que ir a buscarlo a ningún sitio.
+ *
+ * SIN `application_fee_amount`: Bamburu no se queda ni un céntimo. Managed Payments no aplica aquí
+ * (esa restricción era solo para `mode: setup` en la cuenta PLATAFORMA, ver `crearSesionDeAlta`) —
+ * `mode: payment` nunca la ha necesitado.
+ */
+export async function crearSesionDePagoFactura({ cuentaConectada, importeCentimos, descripcion,
+                                                  facturaId, tenantSlug, successUrl, cancelUrl,
+                                                  clienteEmail = null }) {
+  const params = {
+    mode: 'payment',
+    payment_method_types: ['card'],   // explícito: solo tarjeta (Bizum queda fuera, ver Paso 0)
+    line_items: [{
+      price_data: { currency: 'eur', unit_amount: importeCentimos,
+                     product_data: { name: descripcion } },
+      quantity: 1,
+    }],
+    payment_intent_data: {
+      metadata: { bamburu_invoice_id: String(facturaId), bamburu_tenant_slug: tenantSlug || '' },
+    },
+    success_url: successUrl,
+    cancel_url: cancelUrl,
+    locale: 'es',
+    customer_email: clienteEmail || undefined,   // el recibo de Stripe llega a quien de verdad paga
+  };
+  return stripeApi('POST', '/checkout/sessions', params, {
+    cuentaConectada,
+    idempotencia: llaveIdempotente(`pago-factura-${facturaId}`, params),
+  });
 }
 
 /**

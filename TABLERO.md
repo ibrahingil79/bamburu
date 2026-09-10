@@ -10307,28 +10307,155 @@ cada recurrente nace sin autoemisión, y hay que encenderla una a una).
 ## TAREA — Botón de pago propio en la factura (nivel A: enlace, sin cobrar por Bamburu)
 
 - **id:** enlace-pago-nivel-a
-- **estado:** pendiente — **SOLO ANOTADA, NO CONSTRUIDA** (orden expresa de Ibrahin, 9 sep 2026;
-  confirmada en cola el 10 sep 2026, Ficha 3 de 3 — detrás de `facturacion-recurrente-autoemision`)
+- **estado:** ⚙️ **SUPERADA por `cobro-online-facturas` (10 sep 2026), ver ficha justo debajo.**
+  Se tacha, no se borra: Ibrahin pidió construir el cobro real con cuenta conectada (modelo A) en
+  vez de este enlace pegado a mano, así que esta ficha ya no se va a construir tal cual está
+  escrita — lo que pedía (un botón «Pagar» en la factura, sin que Bamburu toque el dinero) lo
+  cubre la nueva, y mejor: con cobro que se concilia solo en vez de a ojo. ~~pendiente — SOLO
+  ANOTADA, NO CONSTRUIDA~~
 - **origen:** encargo de Ibrahin, 9 sep 2026 · Pilar 4 (Ventas) · continúa a `enviar-documentos-por-correo`
 
-Un campo en **Ajustes del negocio** donde el autónomo pega **su propio** enlace de cobro (Stripe,
+~~Un campo en **Ajustes del negocio** donde el autónomo pega **su propio** enlace de cobro (Stripe,
 PayPal, Bizum de negocio, su banco… cualquiera). Bamburu lo muestra como botón **"Pagar"** en la
-**FACTURA** (en el PDF y en el correo).
+**FACTURA** (en el PDF y en el correo). Bamburu NO impone pasarela ni toca el dinero, y no
+comprueba si se pagó — eso lo concilia el autónomo.~~
 
-**Regla de producto (decisión de Ibrahin):** Bamburu **NO impone pasarela ni toca el dinero**. Solo
-deja la plataforma lista para que cada negocio enchufe la suya. **Bamburu no comprueba si se
-pagó** — eso lo concilia el autónomo. (El **nivel B** — conexión real que marca la factura como
-cobrada sola — queda para más adelante y **NO entra aquí**.)
+## 🔍 TAREA — `cobro-online-facturas` (evolución de `enlace-pago-nivel-a`) — CONSTRUIDA, A LA ESPERA DEL OK DE IBRAHIN
 
-Si el negocio no ha puesto enlace, **no aparece ningún botón**.
+- **id:** cobro-online-facturas
+- **estado:** 🔍 **CONSTRUIDA — NO CERRADA.** Regla nueva de esta misma sesión («LO VISIBLE LO VE
+  IBRAHIN ANTES DE CERRAR», más arriba en este documento): esta tarea tiene pantalla y botón, así
+  que no se marca `✅ HECHA` sola. Queda lista, con el «míralo aquí» de la entrega, esperando el OK.
+- **origen:** encargo de Ibrahin, 10 sep 2026 · Pilar 4 (Ventas) · Ficha 3 de 3, evolución de
+  `enlace-pago-nivel-a`. Commit `3693ef3`.
 
-**Criterios de aceptación (para cuando se construya)**
+**QUÉ SE PIDIÓ:** que una factura se pueda pagar online — tarjeta o el IBAN para transferir — con
+el dinero yendo **directo a la cuenta del autónomo** (modelo A): Bamburu no lo toca, no lo retiene,
+no cobra comisión.
 
-- [ ] Ajustes del negocio tiene un campo para pegar el enlace de cobro propio.
-- [ ] Con enlace puesto, la factura (PDF + correo) muestra un botón "Pagar" que lleva a ESE enlace.
-- [ ] Sin enlace, no aparece ningún botón — no se inventa uno ni se avisa de que falta.
-- [ ] Bamburu no marca nada como cobrado por este camino: es solo el botón, la conciliación es del
-      autónomo.
+**PASO 0 (antes de construir, con lo que se encontró):**
+- Stripe hoy solo se usa para UNA cosa: cobrarle a Bamburu sus 9,90 €/mes al autónomo
+  (`core/stripe.js`, `Customers`/`Subscriptions`/`PaymentIntents` sobre la cuenta DE BAMBURU).
+  **Connect es un espacio de objetos distinto dentro de la MISMA cuenta** (`Account`,
+  `Account Link`, cargos con la cabecera `Stripe-Account`) — no comparte tabla, no comparte
+  webhook, no puede cruzarse con la suscripción por accidente.
+- **Bizum: NO se construye.** Comprobado contra la documentación oficial de Stripe (no de
+  memoria): no aparece en la lista de métodos con soporte de Connect
+  (`docs.stripe.com/payments/payment-methods/payment-method-connect-support`, que sí cubre Swish,
+  MB WAY, Multibanco…) y su propia página de aceptación abre con un banner de **acceso anticipado**
+  («Interested in getting early access to Bizum?»). **Anotado como «a la espera de que Stripe lo
+  saque de preview»** — no se promete lo que Stripe mismo no da por hecho.
+- El PDF/portal engancha en `documentos.js`/`modules/portal/` — el bloque de totales, sin tocar
+  la leyenda de exención ni el hash Verifactu.
+
+**🛑 UN BLOQUEO EXTERNO DE VERDAD, DESCUBIERTO CONSTRUYENDO (no se veía en el Paso 0 porque solo
+se ve intentando crear una cuenta):** la cuenta de Stripe de Ibrahin (la misma que cobra la
+suscripción) **todavía no se ha dado de alta como plataforma de Connect.** Stripe lo dice con sus
+propias palabras al intentar crear la primera cuenta conectada:
+> *"You can only create new accounts if you've signed up for Connect, which you can do at
+> https://dashboard.stripe.com/connect."*
+
+**Esto no lo puede hacer el código — es un alta que solo puede dar de alta el dueño de la cuenta,
+en su Dashboard.** Consecuencia medida, no de palabra: con esto sin hacer, **el botón «Conectar
+cuenta de cobro» de Ajustes no puede terminar de conectar ninguna cuenta de verdad todavía**, y por
+tanto tampoco se puede completar un cobro real de principio a fin. El resto — sí se ha construido y
+comprobado — está listo para funcionar en cuanto esa alta exista.
+
+**LO QUE SE CONSTRUYÓ:**
+- **`control.db`**: tabla `stripe_connect_accounts` (tenant_id ↔ account_id de Stripe) — el
+  webhook de Connect llega con `evento.account`, no con un `customer` de la plataforma, así que
+  hace falta esta tabla para saber de qué negocio es (mismo motivo que `tenant_suscripciones.
+  stripe_cliente_id` para el otro webhook).
+- **`core/stripe.js`**: `stripeApi()` acepta ahora `cuentaConectada` (cabecera `Stripe-Account`,
+  aditivo — nada que ya llamaba a `stripeApi` cambia de comportamiento), y cuatro funciones nuevas:
+  `crearCuentaConectada` (Express, `card_payments`), `crearEnlaceOnboarding` (Account Link, de un
+  solo uso y corto), `recuperarCuentaConectada` (¿`charges_enabled`?), `crearSesionDePagoFactura`
+  (Checkout **cargo directo** — sin `application_fee_amount`, el dinero nace en la cuenta
+  conectada, Bamburu no se queda ni un céntimo). Segundo secreto de webhook,
+  `STRIPE_CONNECT_WEBHOOK_SECRET` — **distinto** del de la suscripción, a propósito.
+- **`modules/erp/models.js`**: `company_config.stripe_connect_account_id` /
+  `stripe_connect_listo`; `invoice_payments.stripe_payment_intent_id` con **índice único
+  PARCIAL** (`WHERE ... IS NOT NULL`) — la idempotencia del webhook: NULL nunca choca con NULL, así
+  que los cobros a mano (que siempre traen NULL) conviven sin límite con los de Stripe.
+- **`modules/erp/routes/invoices.js`**: `registrarCobroFactura()` — LA MISMA puerta para el cobro
+  manual y el automático. Un cobro de Stripe no inventa un segundo sistema de estado: es una fila
+  más en `invoice_payments`, igual que «Registrar cobro» a mano. El estado sigue calculándose en
+  vivo (`invoiceCobro`), nunca una columna aparte.
+- **Ajustes → Portal de cliente** (`modules/portal/admin.js`): tarjeta «Cobro con tarjeta» con el
+  botón «Conectar cuenta de cobro» / «✅ Listo para cobrar» / «⚠️ Pendiente de completar», y las
+  dos rutas (`/stripe/conectar`, `/stripe/retorno`) que hablan con Stripe de verdad.
+- **Portal del cliente** (`modules/portal/index.js`): botón «Pagar con tarjeta» junto a cada
+  factura pendiente —**solo si** `stripe_connect_listo`—, que abre un Checkout real en nombre de
+  la cuenta conectada por el importe pendiente de VERDAD (nunca lo que mande el navegador). El
+  IBAN sigue enseñándose igual que antes de esta ficha — no se ha tocado lo que ya funcionaba.
+- **`index.js`**: segundo webhook, `POST /stripe/connect/webhook` — firma comprobada con el
+  secreto de Connect (no el de la suscripción), y **siempre 200** aunque algo falle por dentro
+  (mismo criterio que el webhook de la suscripción: un 500 haría que Stripe reintentara en bucle
+  por un fallo nuestro). En `payment_intent.succeeded`, llama a `registrarCobroFactura`; en
+  `account.updated`, refresca `stripe_connect_listo` — para que el estado no se quede
+  desactualizado si Stripe pide un dato más días después.
+- **`docs/seguridad/permisos-declarados.json`**: las 4 rutas nuevas declaradas (la barrera de
+  permisos bloqueó el primer arranque hasta hacerlo — funcionando tal cual está diseñada).
+- **`/etc/bamburu.env`**: `STRIPE_CONNECT_WEBHOOK_SECRET` con un **valor de PLACEHOLDER**
+  (generado aleatorio) — Ibrahin tiene que sustituirlo por el de verdad cuando dé de alta el
+  webhook de Connect en su Dashboard (apuntando a `https://bamburu.com/stripe/connect/webhook`,
+  eventos `payment_intent.succeeded` y `account.updated`), **después** de resolver el bloqueo de
+  arriba.
+
+**Comprobado con navegador real** (`node scripts/gate-cobro-online-facturas.mjs`, nuevo):
+**22 ✓ · 0 ✗**, con dos negocios de prueba reales y Stripe DE VERDAD en modo prueba donde se
+pudo:
+- [x] Sin cuenta conectada, la factura solo enseña el IBAN — igual que antes de esta ficha.
+- [x] El botón «Conectar» habla con Stripe de verdad (HTTP real) y, ante el bloqueo de Connect
+      sin dar de alta, **falla limpio**: redirige con aviso claro, no revienta, no deja una cuenta
+      a medio crear en el negocio. *(No se pudo comprobar la creación de la cuenta hasta el final
+      ni el alta completa, por el bloqueo de arriba — se comprobará en cuanto se resuelva.)*
+- [x] Con `stripe_connect_listo=1`, el botón «Pagar con tarjeta» aparece en el HTML servido de
+      verdad (no solo en el código) y conviven con el IBAN. Pulsado de verdad con navegador —no
+      `fetch`— contra una cuenta que Stripe no reconoce, falla limpio, vuelve con «cancelado».
+- [x] El webhook, firmado con el mismo secreto que ya lee el servidor sobre un PaymentIntent con
+      la forma exacta que manda Stripe: **inserta el cobro, la factura queda pagada del todo
+      (121,00 €), y el portal la enseña «Pagada» de verdad** (el `<span>` de la fila — no
+      `.includes('Pagada')` a secas, que este mismo gate destapó que SIEMPRE es cierto por un
+      comentario CSS de `ROOT_TOKENS`; hallazgo de propina, corregido en el propio gate).
+      Reintentado el mismo aviso (Stripe reintenta de verdad si tarda en contestar): **no duplica
+      el cobro**, una sola fila.
+- [x] Una firma inválida se rechaza con 400, no con 200 — Stripe no lo reintentaría en bucle por
+      error nuestro.
+- [x] «Marcar pagada a mano» sigue funcionando exactamente igual, y su fila queda con
+      `stripe_payment_intent_id = NULL`, sin cruzarse con los cobros online.
+- [x] Prueba en rojo: se rompió a propósito `secretoWebhookConectado()` (forzada a devolver un
+      valor fijo que no es el real) y se relanzó el gate — cayeron en rojo exactamente las 6
+      aserciones del webhook (firma rechazada con 400 en vez de 200, nada se inserta, nada se
+      duplica porque nada llega), sin tocar las de antes ni las de después. Revertido y
+      confirmado verde otra vez (22 ✓ · 0 ✗, idéntico).
+
+**NO se ha corrido el barrido completo** — este encargo no lo pedía arriba del todo (a diferencia
+de `plantillas-documento`), así que no se lanza (RITUAL.md · «LA REGRESIÓN»). El cambio en
+`stripeApi()` es aditivo y de bajo riesgo para la suscripción (un parámetro nuevo con valor por
+defecto `null`, la cabecera solo se añade si se pasa) — revisado por inspección, no por barrido.
+
+**LÍMITES RESPETADOS, tal como pedía el encargo:** no se ha tocado la facturación de suscripción
+de Bamburu (tablas, webhook y funciones distintas, cero solapamiento); no se ha tocado ni una fila
+del cálculo del hash Verifactu; Bamburu no retiene el dinero en ningún punto del código (cargos
+DIRECTOS, sin `application_fee_amount`, sin `transfer_data`).
+
+**Para probarlo en cuanto Ibrahin dé de alta Connect:** entrar a `/admin/portal` de cualquier
+negocio → «Conectar cuenta de cobro» → completar el formulario de Stripe (de verdad, con datos de
+prueba) → volver → pulsar «Pagar con tarjeta» en una factura del portal del cliente → tarjeta de
+prueba `4242 4242 4242 4242` → la factura se marca pagada sola en unos segundos.
+
+**Criterios de aceptación**
+
+- [x] En Ajustes, el autónomo conecta su propia cuenta de cobro una vez y queda marcado como
+      «listo para cobrar» — construido; el alta completa está bloqueada por Stripe (ver arriba).
+- [x] En cada factura del portal, un botón de pago con tarjeta; al pagar, el dinero va a la cuenta
+      del autónomo y la factura pasa a «pagada» sola — construido y comprobado con el webhook real.
+- [x] En la factura, se enseña el IBAN del autónomo para quien prefiera transferencia, con opción
+      de marcarla como pagada a mano — ya existía (Bloque C, portal de cliente); comprobado que
+      sigue intacto.
+- [ ] Bizum — **no se construye**: en acceso anticipado en Stripe, sin soporte documentado de
+      Connect. A la espera de que Stripe lo saque de preview.
 
 ---
 
