@@ -95,6 +95,11 @@ export function runMigrations(db) {
   // proveedor. Hermano del anterior, invertido en el tiempo: aquel mira hacia atrás (ya vencido),
   // este hacia delante (está a punto de vencer). Mismo defecto (7) y mismo sitio en Ajustes.
   addCol(db, 'company_config', 'dias_aviso_pago', 'INTEGER DEFAULT 7');
+  // Ficha `plantillas-documento` (9 sep 2026) — el color de acento del membrete de los cuatro
+  // documentos de venta. Vacío = «no ha elegido ninguno»: el render usa el neutro por defecto
+  // (`ACCENT_DEFAULT` en `documentos.js`), no un valor guardado — así un negocio nuevo no tiene
+  // que borrar nada si algún día cambia el neutro de fábrica.
+  addCol(db, 'company_config', 'accent_color', "TEXT DEFAULT ''");
 
   // Store settings
   db.exec(`CREATE TABLE IF NOT EXISTS store_settings (
@@ -3363,4 +3368,11 @@ export function runMigrations(db) {
   for (const t of ['invoices', 'quotes', 'customer_orders', 'delivery_notes', 'purchase_orders']) {
     addCol(db, t, 'company_logo_id', 'INTEGER');
   }
+  // EL COLOR DE ACENTO NO SE CONGELA AQUÍ, Y ES A PROPÓSITO (ficha `plantillas-documento`,
+  // 9 sep 2026). El nombre/NIF/dirección/logo describen QUIÉN emitió el documento — un hecho que
+  // no puede cambiar con retroactividad. El color es solo el envoltorio visual: no describe ningún
+  // hecho económico ni legal, así que no hay nada que fotografiar. Se lee siempre EN VIVO de
+  // `company_config.accent_color` en `partesDe()` (`documentos.js`), para los documentos de hoy
+  // y para los de marzo por igual — y así esta columna no se acerca a las mismas filas de
+  // `invoices` que calculan `verifactu_hash`, que es donde un descuido de verdad sale caro.
 }

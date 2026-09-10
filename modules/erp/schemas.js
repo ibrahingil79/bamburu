@@ -764,6 +764,10 @@ export const companySchema = z.object({
   // D5 — días tras el vencimiento para que DISA proponga recordatorio de impago (0..365).
   dias_recordatorio_impago: z.coerce.number().int().min(0).max(365).optional(),
   dias_aviso_pago: z.coerce.number().int().min(0).max(365).optional(),
+  // Ficha `plantillas-documento` (9 sep 2026): el color de acento de los documentos. Vacío = «no
+  // ha elegido ninguno» (sale el neutro por defecto). Cualquier otra cosa que no sea un hex de
+  // 6 dígitos se rechaza aquí — no llega ni a la base ni, por tanto, a un `style` de un PDF.
+  accent_color: z.string().trim().regex(/^#[0-9a-fA-F]{6}$/).optional().or(z.literal('')),
 }).passthrough();
 export const storeSettingsSchema = z.object({}).passthrough();
 

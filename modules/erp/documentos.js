@@ -88,6 +88,25 @@ export function logoImgHtml(dataUri) {
        + 'width:auto;height:auto;object-fit:contain;display:block;margin-bottom:10px">';
 }
 
+// ── EL COLOR DE ACENTO ───────────────────────────────────────────────────────────────────────────
+// Ficha `plantillas-documento`, 9 sep 2026. SIEMPRE EN VIVO, nunca congelado —a diferencia del
+// nombre/NIF/dirección/logo, no describe ningún hecho legal ni económico del documento, así que no
+// hay nada que fotografiar (motivo completo en `models.js`, junto al `addCol` del logo). Por eso no
+// se lee de `doc`, se lee de `company_config` en las dos ramas de `partesDe()` por igual.
+//
+// El azul de aquí ES el que ya pintaban el pedido y el presupuesto en su borde de total
+// (`--accent-d` de `tokens.js`) — elegir no elegir no cambia nada.
+export const ACCENT_DEFAULT = '#2456D6';
+const HEX_RE = /^#[0-9a-f]{6}$/i;
+
+// Falla cerrado, igual que `logoDataUri`: un valor corrupto o a medio migrar en la base no rompe
+// un documento, se convierte en «no ha elegido» y sale con el neutro de fábrica.
+export function colorAcentoValido(v) {
+  if (typeof v !== 'string') return null;
+  const t = v.trim();
+  return HEX_RE.test(t) ? t.toUpperCase() : null;
+}
+
 // ── LA REGLA: ¿FOTO CONGELADA O CONFIGURACIÓN EN VIVO? ───────────────────────────────────────────
 // LA ÚNICA DEFINICIÓN DEL PROYECTO. Si el documento trae `company_name`, es que se congeló al
 // emitirlo y manda la foto: una factura de marzo tiene que seguir enseñando la dirección de marzo,
@@ -104,6 +123,8 @@ export function logoImgHtml(dataUri) {
 export function partesDe(db, doc, contraparte = 'cliente') {
   const esProveedor = contraparte === 'proveedor';
   const cfg = () => db.prepare('SELECT * FROM company_config WHERE id=1').get() || {};
+  // EN VIVO SIEMPRE, en las dos ramas — ver el porqué arriba, junto a `ACCENT_DEFAULT`.
+  const accentColor = colorAcentoValido(cfg().accent_color) || ACCENT_DEFAULT;
 
   if (doc && doc.company_name != null) {
     const otra = esProveedor
@@ -115,7 +136,7 @@ export function partesDe(db, doc, contraparte = 'cliente') {
       emisor: {
         name: doc.company_name, fiscal_id: doc.company_fiscal_id, address: doc.company_address,
         phone: doc.company_phone, email: doc.company_email,
-        logo: logoDataUri(db, doc.company_logo_id),
+        logo: logoDataUri(db, doc.company_logo_id), accentColor,
       },
       [contraparte]: otra,
     };
@@ -138,7 +159,7 @@ export function partesDe(db, doc, contraparte = 'cliente') {
     emisor: {
       name: c.company_name || '', fiscal_id: c.fiscal_id || '', address: c.address || '',
       phone: c.phone || '', email: c.email || '',
-      logo: logoDataUri(db, c.company_logo_id),
+      logo: logoDataUri(db, c.company_logo_id), accentColor,
     },
     [contraparte]: otra,
   };

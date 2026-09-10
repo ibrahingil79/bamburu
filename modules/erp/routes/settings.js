@@ -185,7 +185,10 @@ export function createSettingsRoutes(db, cfg = {}) {
       // a un proveedor. Mismo trato: si no viene, se conserva lo guardado.
       const diasPago = (d.dias_aviso_pago === '' || d.dias_aviso_pago == null)
         ? null : Math.max(0, Math.min(365, Math.floor(Number(d.dias_aviso_pago) || 0)));
-      db.prepare('UPDATE company_config SET company_name=?,fiscal_id=?,tax_rate=?,logo_url=COALESCE(?,logo_url),address=?,postal_code=?,city=?,province=?,phone=?,email=?,website=?,country=?,currency=?,currency_symbol=?,tax_name=?,fiscal_id_label=?,document_name=?,irpf_default=?,dias_recordatorio_impago=COALESCE(?,dias_recordatorio_impago),dias_aviso_pago=COALESCE(?,dias_aviso_pago) WHERE id=1').run(d.company_name||'', d.fiscal_id||'', parseFloat(d.tax_rate)||0, d.logo_url ?? null, d.address||'', d.postal_code||'', d.city||'', d.province||'', d.phone||'', d.email||'', d.website||'', d.country||'ES', d.currency||'EUR', d.currency_symbol||sym, d.tax_name||'IVA', d.fiscal_id_label||'NIF/CIF', d.document_name||'Factura', parseFloat(d.irpf_default)||0, diasProp, diasPago);
+      // Ficha `plantillas-documento` — ya validado por `companySchema` (hex de 6 dígitos o vacío);
+      // aquí solo se normaliza el vacío/ausente a '' ("no ha elegido ninguno").
+      const accentColor = d.accent_color || '';
+      db.prepare('UPDATE company_config SET company_name=?,fiscal_id=?,tax_rate=?,logo_url=COALESCE(?,logo_url),address=?,postal_code=?,city=?,province=?,phone=?,email=?,website=?,country=?,currency=?,currency_symbol=?,tax_name=?,fiscal_id_label=?,document_name=?,irpf_default=?,dias_recordatorio_impago=COALESCE(?,dias_recordatorio_impago),dias_aviso_pago=COALESCE(?,dias_aviso_pago),accent_color=? WHERE id=1').run(d.company_name||'', d.fiscal_id||'', parseFloat(d.tax_rate)||0, d.logo_url ?? null, d.address||'', d.postal_code||'', d.city||'', d.province||'', d.phone||'', d.email||'', d.website||'', d.country||'ES', d.currency||'EUR', d.currency_symbol||sym, d.tax_name||'IVA', d.fiscal_id_label||'NIF/CIF', d.document_name||'Factura', parseFloat(d.irpf_default)||0, diasProp, diasPago, accentColor);
       return c.json({message:'Guardado'});
     } catch(e) { return c.json({error:safeError(e)},500); }
   });
@@ -570,6 +573,17 @@ export function createSettingsRoutes(db, cfg = {}) {
               </div>
             </div>
           </div>
+          <!-- Ficha plantillas-documento (9 sep 2026): mismo hueco que el logo, mismos cuatro
+               documentos. Sin elegir ninguno sale el neutro de fábrica (ACCENT_DEFAULT en
+               documentos.js) — no es que "no se aplique color", es que se aplica el de siempre. -->
+          <div class="form-group">
+            <label class="form-label">Color de acento de tus documentos</label>
+            <div style="display:flex;align-items:center;gap:.6rem">
+              <input type="color" id="cAccent" value="#2456D6" style="width:44px;height:34px;padding:2px;border:1px solid var(--border2);border-radius:8px;cursor:pointer">
+              <button type="button" class="btn btn-secondary btn-sm" id="cAccentQuitar" data-st="accent-quitar">Usar el de por defecto</button>
+              <span style="color:var(--text2);font-size:12px">Se pinta en la cabecera y las líneas del presupuesto, el pedido, el albarán y la factura.</span>
+            </div>
+          </div>
           <button class="btn btn-primary" data-st="guardar-empresa">Guardar cambios</button>
         </div>
       </div>
@@ -670,6 +684,7 @@ export function createSettingsRoutes(db, cfg = {}) {
         document.getElementById('cPostal').value=d.postal_code||'';
         document.getElementById('cCity').value=d.city||'';
         document.getElementById('cProvince').value=d.province||'';
+        document.getElementById('cAccent').value=d.accent_color||'#2456D6';
         pintaLogo(d.company_logo_id||null);
       });
 
@@ -743,7 +758,7 @@ export function createSettingsRoutes(db, cfg = {}) {
       }
 
       async function saveCompany(){
-        try{await api('PUT','/api/erp/settings/company',{company_name:document.getElementById('cName').value,fiscal_id:document.getElementById('cFiscal').value,country:document.getElementById('countryCode').value,currency:document.getElementById('currencyCode').value,currency_symbol:document.getElementById('currencySymbol').value,tax_name:document.getElementById('taxName').value,fiscal_id_label:document.getElementById('fiscalIdLabel').value,document_name:document.getElementById('documentName').value,tax_rate:document.getElementById('cTax').value,irpf_default:document.getElementById('cIrpfDefault').value,dias_recordatorio_impago:document.getElementById('cDiasImpago').value,dias_aviso_pago:document.getElementById('cDiasPago').value,email:document.getElementById('cEmail').value,phone:document.getElementById('cPhone').value,website:document.getElementById('cWeb').value,address:document.getElementById('cAddr').value,postal_code:document.getElementById('cPostal').value,city:document.getElementById('cCity').value,province:document.getElementById('cProvince').value});toast('Guardado ✓');}catch(e){toast(e.message,'err')}
+        try{await api('PUT','/api/erp/settings/company',{company_name:document.getElementById('cName').value,fiscal_id:document.getElementById('cFiscal').value,country:document.getElementById('countryCode').value,currency:document.getElementById('currencyCode').value,currency_symbol:document.getElementById('currencySymbol').value,tax_name:document.getElementById('taxName').value,fiscal_id_label:document.getElementById('fiscalIdLabel').value,document_name:document.getElementById('documentName').value,tax_rate:document.getElementById('cTax').value,irpf_default:document.getElementById('cIrpfDefault').value,dias_recordatorio_impago:document.getElementById('cDiasImpago').value,dias_aviso_pago:document.getElementById('cDiasPago').value,email:document.getElementById('cEmail').value,phone:document.getElementById('cPhone').value,website:document.getElementById('cWeb').value,address:document.getElementById('cAddr').value,postal_code:document.getElementById('cPostal').value,city:document.getElementById('cCity').value,province:document.getElementById('cProvince').value,accent_color:document.getElementById('cAccent').value});toast('Guardado ✓');}catch(e){toast(e.message,'err')}
       }
       
       // 5 SEP 2026 (csp-erp-migrar-handlers) — los cuatro controles de la ficha de empresa.
@@ -753,6 +768,7 @@ export function createSettingsRoutes(db, cfg = {}) {
         var a = t.getAttribute('data-st');
         if (a === 'logo-subir') document.getElementById('cLogoFile').click();
         else if (a === 'logo-quitar') quitarLogo();
+        else if (a === 'accent-quitar') document.getElementById('cAccent').value = '#2456D6';
         else if (a === 'guardar-empresa') saveCompany();
       });
 </script>`;

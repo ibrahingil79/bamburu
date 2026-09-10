@@ -1,5 +1,5 @@
 import { renderEmail, TONO_UNICO } from '../email-templates.js';
-import { partesDe, membreteHtml } from '../documentos.js';
+import { partesDe, membreteHtml, ACCENT_DEFAULT } from '../documentos.js';
 import { safeError } from '../../../core/errors.js';
 import { Hono } from 'hono';
 import { adminLayout, can, docShell, printableShell, estadoTabs, emptyRow, errorShell, ERR } from '../layout.js';
@@ -316,15 +316,17 @@ function quoteDocumentBodyHtml(q, items, emisor, cliente, sym) {
   ).join('');
   const irpfRow = (Number(q.irpf_amount) > 0)
     ? `<tr><td style="padding:4px 12px;color:var(--accent-purple)">IRPF (${q.irpf_rate}%)</td><td style="padding:4px 12px;text-align:right;color:var(--accent-purple)">−${dineroEs(q.irpf_amount, sym)}</td></tr>` : '';
+  // Ficha `plantillas-documento` — SIEMPRE resuelto (`partesDe` nunca deja `accentColor` vacío).
+  const accent = emisor.accentColor || ACCENT_DEFAULT;
   return `
-<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px">
+<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;border-bottom:3px solid ${accent};padding-bottom:16px">
   <div>
     <h1 style="font-size:22px;font-weight:700;margin:0 0 4px">Presupuesto</h1>
     <div style="color:var(--text2);font-size:12px">${q.quote_number ? esc(q.quote_number) : 'Borrador (sin número)'}</div>
   </div>
   <div style="text-align:right;color:var(--text2);font-size:12px">
-    <div>Fecha: <strong style="color:var(--accent-d)">${fechaEs(q.date)}</strong></div>
-    ${q.valid_until ? `<div>Válido hasta: <strong style="color:var(--accent-d)">${fechaEs(q.valid_until)}</strong></div>` : ''}
+    <div>Fecha: <strong style="color:${accent}">${fechaEs(q.date)}</strong></div>
+    ${q.valid_until ? `<div>Válido hasta: <strong style="color:${accent}">${fechaEs(q.valid_until)}</strong></div>` : ''}
   </div>
 </div>
 ${membreteHtml({ emisor, otra: cliente, rotuloOtra: 'Cliente',
@@ -332,11 +334,11 @@ ${membreteHtml({ emisor, otra: cliente, rotuloOtra: 'Cliente',
                  camposOtra: ['fiscal_id', 'address', 'email'] })}
 <table style="width:100%;border-collapse:collapse;margin-bottom:16px">
   <thead><tr>
-    <th style="background:var(--bg);padding:8px 12px;text-align:left;font-size:12px;color:var(--text2);border-bottom:2px solid var(--border2)">Descripción</th>
-    <th style="background:var(--bg);padding:8px 12px;text-align:right;font-size:12px;color:var(--text2);border-bottom:2px solid var(--border2)">Cant.</th>
-    <th style="background:var(--bg);padding:8px 12px;text-align:right;font-size:12px;color:var(--text2);border-bottom:2px solid var(--border2)">P. unit.</th>
-    <th style="background:var(--bg);padding:8px 12px;text-align:right;font-size:12px;color:var(--text2);border-bottom:2px solid var(--border2)">IVA</th>
-    <th style="background:var(--bg);padding:8px 12px;text-align:right;font-size:12px;color:var(--text2);border-bottom:2px solid var(--border2)">Subtotal</th>
+    <th style="background:var(--bg);padding:8px 12px;text-align:left;font-size:12px;color:var(--text2);border-bottom:2px solid ${accent}">Descripción</th>
+    <th style="background:var(--bg);padding:8px 12px;text-align:right;font-size:12px;color:var(--text2);border-bottom:2px solid ${accent}">Cant.</th>
+    <th style="background:var(--bg);padding:8px 12px;text-align:right;font-size:12px;color:var(--text2);border-bottom:2px solid ${accent}">P. unit.</th>
+    <th style="background:var(--bg);padding:8px 12px;text-align:right;font-size:12px;color:var(--text2);border-bottom:2px solid ${accent}">IVA</th>
+    <th style="background:var(--bg);padding:8px 12px;text-align:right;font-size:12px;color:var(--text2);border-bottom:2px solid ${accent}">Subtotal</th>
   </tr></thead>
   <tbody>${rows}</tbody>
 </table>
@@ -344,7 +346,7 @@ ${membreteHtml({ emisor, otra: cliente, rotuloOtra: 'Cliente',
   <tr><td style="padding:4px 12px;color:var(--text2)">Base imponible</td><td style="padding:4px 12px;text-align:right;font-weight:600">${dineroEs(q.subtotal, sym)}</td></tr>
   ${taxRows}
   ${irpfRow}
-  <tr><td style="padding:10px 12px;font-size:15px;border-top:2px solid var(--accent-d);font-weight:700">TOTAL</td><td style="padding:10px 12px;text-align:right;font-size:15px;border-top:2px solid var(--accent-d);font-weight:700">${dineroEs(q.total, sym)}</td></tr>
+  <tr><td style="padding:10px 12px;font-size:15px;border-top:2px solid ${accent};font-weight:700">TOTAL</td><td style="padding:10px 12px;text-align:right;font-size:15px;border-top:2px solid ${accent};font-weight:700">${dineroEs(q.total, sym)}</td></tr>
 </table>
 ${q.notes ? `<div style="margin-top:16px;color:var(--text2)">${esc(q.notes)}</div>` : ''}`;
 }

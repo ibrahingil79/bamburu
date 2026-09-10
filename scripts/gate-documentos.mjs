@@ -89,7 +89,14 @@ function sembrar(n) {
   const db = n.db;
   const cli = db.prepare("INSERT INTO clients (name,fiscal_id,address,email,active,created_at) VALUES ('Cliente Gate','X1234567L','Calle Cliente 2','cli@t.local',1,datetime('now'))").run().lastInsertRowid;
   const prov = db.prepare("INSERT INTO suppliers (name,fiscal_id,address,city,email,phone,active) VALUES ('Prov Gate','B99999999','Calle Prov 3','Madrid','prov@t.local','600000000',1)").run().lastInsertRowid;
-  const prod = db.prepare("INSERT INTO products (name,price,type,tax_band,tax_rate,status) VALUES ('Servicio Gate',100,'service','general',21,'active')").run().lastInsertRowid;
+  // fiscal_treatment='taxable': explícito, no confiado al default de la columna. Desde S5 (CLAUDE.md,
+  // «los servicios nacen pending y no taxable») un producto sembrado sin esto nace 'pending', y
+  // `createInvoice` rechaza cualquier factura con una línea sin confirmar (`ERR_FALLO`, 9 sep 2026:
+  // «Falta confirmar la clasificación fiscal de una línea antes de emitir»). Sin esto, TODAS las
+  // facturas de este gate (secciones [9], [5], [6] y la nueva [23] de `plantillas-documento`) morían
+  // en la API y arrastraban su fallo a cascada. Ajeno a `plantillas-documento`: se corrige aquí, en
+  // el fixture del gate, no en el producto ni en `createInvoice` — no es esta la tarea que lo manda.
+  const prod = db.prepare("INSERT INTO products (name,price,type,tax_band,tax_rate,fiscal_treatment,status) VALUES ('Servicio Gate',100,'service','general',21,'taxable','active')").run().lastInsertRowid;
   return { cli, prov, prod };
 }
 
@@ -278,6 +285,58 @@ try {
   const pagEnorme = (pdfEnorme.toString('latin1').match(/\/Type\s*\/Page[^s]/g) || []).length;
   ok(pdfEnorme.slice(0, 4).toString() === '%PDF' && pagEnorme === 1,
      'un logo de 4000 px se acota y el documento NO gana una página', pagEnorme + ' página(s)');
+
+  // ── [23] EL COLOR DE ACENTO (ficha plantillas-documento, 9 sep 2026) ───────────────────────
+  console.log('\n[23] el color de acento: se valida, se aplica y SIEMPRE en vivo');
+  const putCompany = async (body) => {
+    const r = await fetch(n.base + '/api/erp/settings/company', {
+      method: 'PUT', headers: { ...n.cab, 'content-type': 'application/json', 'x-csrf-token': 'gdoc-csrf' },
+      body: JSON.stringify(body),
+    });
+    let j = null; try { j = await r.json(); } catch {}
+    return { status: r.status, body: j };
+  };
+  const empresaActual = async () => (await (await fetch(n.base + '/api/erp/settings/company', { headers: n.cab })).json());
+  const cfg0 = await empresaActual();
+
+  // Un valor que no es un hex de 6 dígitos se rechaza — no llega ni a la base.
+  const rMalo = await putCompany({ ...cfg0, accent_color: 'rojo' });
+  ok(rMalo.status === 400, 'un color que no es un hex de 6 dígitos se rechaza', 'HTTP ' + rMalo.status);
+  const cfgTrasMalo = await empresaActual();
+  ok((cfgTrasMalo.accent_color || '') !== 'rojo', 'y no se queda a medias guardado en la base');
+
+  // Sin elegir ninguno, el neutro de fábrica — el mismo azul que ya pintaba el pedido y el
+  // presupuesto antes de esta ficha (`--accent-d` de tokens.js).
+  const htmlSinAccent = (await abre('/admin/invoices/' + f2.body?.id)).html;
+  ok(htmlSinAccent.includes('#2456D6'), 'sin elegir color, sale el neutro de fábrica (#2456D6)');
+
+  const hashAntesDeColor = n.db.prepare('SELECT verifactu_hash FROM invoices WHERE id=?').get(f2.body?.id).verifactu_hash;
+
+  // Un color de verdad, guardado y aplicado en los CUATRO documentos de venta.
+  const rBueno = await putCompany({ ...cfg0, accent_color: '#FF6600' });
+  ok(rBueno.status === 200, 'un hex de 6 dígitos se guarda', 'HTTP ' + rBueno.status);
+  const htmlConAccent = (await abre('/admin/invoices/' + f2.body?.id)).html;
+  ok(htmlConAccent.includes('#FF6600'), 'y sale en la FACTURA, en la cabecera y las líneas',
+     (htmlConAccent.match(/#FF6600/g) || []).length + ' apariciones');
+  const htmlQConAccent = (await abre('/admin/quotes/' + q2.body?.id)).html;
+  const htmlOConAccent = (await abre('/admin/pedidos/' + o2.body?.id)).html;
+  const htmlAlbConAccent = alb2.body?.id ? (await abre('/admin/albaranes/' + alb2.body.id)).html : '';
+  ok(htmlQConAccent.includes('#FF6600'), 'también en el PRESUPUESTO');
+  ok(htmlOConAccent.includes('#FF6600'), 'también en el PEDIDO');
+  ok(htmlAlbConAccent ? htmlAlbConAccent.includes('#FF6600') : false, 'también en el ALBARÁN', htmlAlbConAccent ? 'con color' : 'no se pudo crear el albarán');
+
+  // SIEMPRE EN VIVO: a diferencia del logo, una factura emitida ANTES de elegir color TAMBIÉN lo
+  // enseña al reimprimirse — el color no describe ningún hecho legal, así que no hay nada que
+  // fotografiar (decisión de construcción, documentada en documentos.js y models.js).
+  const htmlAntesConAccent = (await abre('/admin/invoices/' + idAntes)).html;
+  ok(htmlAntesConAccent.includes('#FF6600'), 'una factura de ANTES de elegir color TAMBIÉN lo enseña: no es un dato legal congelado');
+
+  // El QR y la huella de Veri*Factu, intactos con el color puesto — es solo el envoltorio visual.
+  const pdfConAccent = await pdfDe('/admin/invoices/' + f2.body?.id + '/pdf');
+  ok(pdfConAccent.slice(0, 4).toString() === '%PDF' && imgs(pdfConAccent) >= 2,
+     'el PDF con color sigue trayendo el QR de Veri*Factu', imgs(pdfConAccent) + ' imagen(es)');
+  const hashConColor = n.db.prepare('SELECT verifactu_hash FROM invoices WHERE id=?').get(f2.body?.id).verifactu_hash;
+  ok(hashConColor === hashAntesDeColor, 'y la huella NO ha cambiado ni un byte: el color no toca la cadena legal');
 
   // ── [7] SIN LOGO, TODO SIGUE BIEN ───────────────────────────────────────────────────────────
   console.log('\n[7] sin logo, los papeles se pintan igual de bien');

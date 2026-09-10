@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { partesDe, membreteHtml } from '../documentos.js';
+import { partesDe, membreteHtml, ACCENT_DEFAULT } from '../documentos.js';
 import { safeError } from '../../../core/errors.js';
 import { adminLayout, can, docShell, printableShell, estadoTabs, emptyRow, errorShell, ERR } from '../layout.js';
 import { renderPdfFromHtml } from '../../../core/pdf.js';   // PDF real: mismo HTML imprimible → Chromium
@@ -287,15 +287,17 @@ function albaranDocumentBodyHtml(a, items, emisor, cliente, sym) {
       <td style="padding:8px 12px;border-bottom:1px solid var(--bg3)">${esc(i.description)}${i.sku ? ` <span style="color:var(--text2);font-size:11px">[${esc(i.sku)}]</span>` : ''}${(i.product_type && i.product_type !== 'physical') ? ' <span style="color:var(--text2);font-size:11px">(no mueve stock)</span>' : ''}</td>
       <td style="padding:8px 12px;border-bottom:1px solid var(--bg3);text-align:right">${i.quantity}</td>
     </tr>`).join('');
+  // Ficha `plantillas-documento` — SIEMPRE resuelto (`partesDe` nunca deja `accentColor` vacío).
+  const accent = emisor.accentColor || ACCENT_DEFAULT;
   return `
-<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px">
+<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;border-bottom:3px solid ${accent};padding-bottom:16px">
   <div>
     <h1 style="font-size:22px;font-weight:700;margin:0 0 4px">Albarán de entrega</h1>
     <div style="color:var(--text2);font-size:12px">${a.delivery_number ? esc(a.delivery_number) : 'Sin número'}</div>
   </div>
   <div style="text-align:right;color:var(--text2);font-size:12px">
-    <div>Fecha: <strong style="color:var(--accent-d)">${fechaEs(a.date)}</strong></div>
-    ${a.order_number ? `<div>Pedido: <strong style="color:var(--accent-d)">${esc(a.order_number)}</strong></div>` : ''}
+    <div>Fecha: <strong style="color:${accent}">${fechaEs(a.date)}</strong></div>
+    ${a.order_number ? `<div>Pedido: <strong style="color:${accent}">${esc(a.order_number)}</strong></div>` : ''}
   </div>
 </div>
 ${membreteHtml({ emisor, otra: cliente, rotuloOtra: 'Entregar a',
@@ -303,8 +305,8 @@ ${membreteHtml({ emisor, otra: cliente, rotuloOtra: 'Entregar a',
                  camposOtra: ['fiscal_id', 'address'] })}
 <table style="width:100%;border-collapse:collapse;margin-bottom:16px">
   <thead><tr>
-    <th style="background:var(--bg);padding:8px 12px;text-align:left;font-size:12px;color:var(--text2);border-bottom:2px solid var(--border2)">Concepto entregado</th>
-    <th style="background:var(--bg);padding:8px 12px;text-align:right;font-size:12px;color:var(--text2);border-bottom:2px solid var(--border2)">Cantidad</th>
+    <th style="background:var(--bg);padding:8px 12px;text-align:left;font-size:12px;color:var(--text2);border-bottom:2px solid ${accent}">Concepto entregado</th>
+    <th style="background:var(--bg);padding:8px 12px;text-align:right;font-size:12px;color:var(--text2);border-bottom:2px solid ${accent}">Cantidad</th>
   </tr></thead>
   <tbody>${rows}</tbody>
 </table>

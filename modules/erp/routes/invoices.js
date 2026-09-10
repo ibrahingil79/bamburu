@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { consultaFacturas } from '../listados.js';
 import { botonesListado, JS_LISTADO_ENVIAR } from './listados.js';
-import { partesDe, membreteHtml } from '../documentos.js';
+import { partesDe, membreteHtml, ACCENT_DEFAULT } from '../documentos.js';
 import { safeError } from '../../../core/errors.js';
 import { createHash } from 'crypto';
 import QRCode from 'qrcode';
@@ -588,6 +588,11 @@ export function excessLineText(x) {
 // inicio (cuando hay registro oficial de ALTA). NO incluye el chrome ni el panel de acciones.
 export async function buildInvoicePaper(db, inv) {
   const sym = inv.currency_symbol || '€';
+  // Ficha `plantillas-documento` (9 sep 2026) — el emisor (y su `accentColor`, SIEMPRE resuelto
+  // por `partesDe`, nunca vacío) se saca una sola vez, arriba del todo, porque el borde de la
+  // cabecera Y el de la línea del total lo necesitan los dos.
+  const partes = partesDe(db, inv);
+  const accent = partes.emisor.accentColor || ACCENT_DEFAULT;
   const items = db.prepare('SELECT * FROM invoice_items WHERE invoice_id=? ORDER BY id').all(inv.id);
   const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   const rTypeLabels = { R1: 'R1 · error fundado en derecho', R2: 'R2 · concurso/impago (art.80.3)', R3: 'R3 · impago (art.80.4)', R4: 'R4 · resto de causas', R5: 'R5 · simplificada/ticket' };
@@ -675,7 +680,7 @@ export async function buildInvoicePaper(db, inv) {
   <tr><td>Base imponible</td><td>${dineroEs(inv.subtotal, sym)}</td></tr>
   ${taxBlock}
   ${irpfBlock}
-  <tr class="grand"><td>TOTAL</td><td>${dineroEs(inv.total, sym)}</td></tr>
+  <tr class="grand"><td style="border-top:2px solid ${accent}">TOTAL</td><td style="border-top:2px solid ${accent}">${dineroEs(inv.total, sym)}</td></tr>
 </table>`;
   })();
 
@@ -698,16 +703,21 @@ export async function buildInvoicePaper(db, inv) {
   return `${vfHead}
 ${lifecycle}
 <h1>${escHtml(inv.document_name)}</h1>
-<div class="doc-sub">${escHtml(inv.invoice_number)} · ${inv.status === 'emitida' ? 'Emitida' : inv.status === 'rectificada' ? 'Rectificada' : 'Anulada'} el ${fechaEs(inv.issue_date)}</div>
+<div class="doc-sub" style="border-bottom:3px solid ${accent};padding-bottom:14px">${escHtml(inv.invoice_number)} · ${inv.status === 'emitida' ? 'Emitida' : inv.status === 'rectificada' ? 'Rectificada' : 'Anulada'} el ${fechaEs(inv.issue_date)}</div>
 
-${membreteHtml({ emisor: partesDe(db, inv).emisor,
-                 otra: { ...partesDe(db, inv).cliente, name: inv.client_name || 'Cliente general' },
+${membreteHtml({ emisor: partes.emisor,
+                 otra: { ...partes.cliente, name: inv.client_name || 'Cliente general' },
                  rotuloOtra: 'Cliente',
                  camposEmisor: ['fiscal_id', 'address'],
                  camposOtra: ['fiscal_id', 'address', 'email'] })}
 
 <table>
-  <thead><tr><th>Descripción</th><th style="text-align:right">Cant.</th><th style="text-align:right">P. unitario</th><th style="text-align:right">Total</th></tr></thead>
+  <thead><tr>
+    <th style="border-bottom:2px solid ${accent}">Descripción</th>
+    <th style="text-align:right;border-bottom:2px solid ${accent}">Cant.</th>
+    <th style="text-align:right;border-bottom:2px solid ${accent}">P. unitario</th>
+    <th style="text-align:right;border-bottom:2px solid ${accent}">Total</th>
+  </tr></thead>
   <tbody>${rows}</tbody>
 </table>
 
@@ -889,6 +899,9 @@ export function emitTicketSvc(db, { lines, warehouse_id, payment_method, paid_da
 // método de pago, QR + leyenda Veri*Factu. SIN datos de cliente. Mismo QR que la factura.
 export async function buildTicketPaper(db, inv) {
   const sym = inv.currency_symbol || '€';
+  // Ficha `plantillas-documento` — mismo criterio que `buildInvoicePaper`: una sola llamada.
+  const emisorTicket = partesDe(db, inv).emisor;
+  const accent = emisorTicket.accentColor || ACCENT_DEFAULT;
   const items = db.prepare('SELECT * FROM invoice_items WHERE invoice_id=? ORDER BY id').all(inv.id);
   const pay = db.prepare('SELECT payment_method FROM invoice_payments WHERE invoice_id=? ORDER BY id').get(inv.id) || {};
   const groups = {};
@@ -905,11 +918,11 @@ export async function buildTicketPaper(db, inv) {
   const metodo = pay.payment_method === 'efectivo' ? 'Efectivo' : pay.payment_method === 'tarjeta' ? 'Tarjeta' : '—';
   return `${vfHead}
 <h1>Factura simplificada</h1>
-<div class="doc-sub">${escHtml(inv.invoice_number)} · ${fechaEs(inv.issue_date)}</div>
-${membreteHtml({ emisor: partesDe(db, inv).emisor, otra: null,
+<div class="doc-sub" style="border-bottom:3px solid ${accent};padding-bottom:14px">${escHtml(inv.invoice_number)} · ${fechaEs(inv.issue_date)}</div>
+${membreteHtml({ emisor: emisorTicket, otra: null,
                  camposEmisor: ['fiscal_id', 'address'] })}
-<table><thead><tr><th>Concepto</th><th style="text-align:right">Cant.</th><th style="text-align:right">P. unit.</th><th style="text-align:right">Total</th></tr></thead><tbody>${rows}</tbody></table>
-<table class="doc-totals"><tr><td>Base imponible</td><td>${dineroEs(inv.subtotal, sym)}</td></tr>${taxRows}<tr class="grand"><td>TOTAL</td><td>${dineroEs(inv.total, sym)}</td></tr></table>
+<table><thead><tr><th style="border-bottom:2px solid ${accent}">Concepto</th><th style="text-align:right;border-bottom:2px solid ${accent}">Cant.</th><th style="text-align:right;border-bottom:2px solid ${accent}">P. unit.</th><th style="text-align:right;border-bottom:2px solid ${accent}">Total</th></tr></thead><tbody>${rows}</tbody></table>
+<table class="doc-totals"><tr><td>Base imponible</td><td>${dineroEs(inv.subtotal, sym)}</td></tr>${taxRows}<tr class="grand"><td style="border-top:2px solid ${accent}">TOTAL</td><td style="border-top:2px solid ${accent}">${dineroEs(inv.total, sym)}</td></tr></table>
 <div style="margin-top:14px"><span class="doc-label">Forma de pago</span><div><strong>${metodo}</strong> · ${dineroEs(inv.total, sym)} (pagado)</div></div>
 <div style="margin-top:10px;color:var(--text2);font-size:11px">Factura simplificada (art. 7.1 RD 1619/2012) — sin identificación del destinatario.</div>`;
 }
