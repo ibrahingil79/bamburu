@@ -204,6 +204,7 @@ Optimizado cuando: el aislamiento multi-tenant está auditado sin fugas; no hay 
 - Simplicidad primero: el código mínimo que resuelve el problema; sin abstracciones ni configurabilidad no pedida. **Es del CÓDIGO, no del producto**: nunca se usa para recortar una función, un campo ni una opción — eso lo prohíbe §3-bis.
 - Cambios quirúrgicos: tocar solo lo pedido; aditivo, sin DROP; no tocar huella/Verifactu ni la lógica de documentos salvo autorización.
 - Verificación definida siempre: cada tarea especifica su test/gate propio. Ejecutar esa comprobación o cualquier regresión requiere la autorización expresa que fija `RITUAL.md`; el criterio de HECHO no la autoriza por sí solo.
+- La prueba en rojo se revierte y se confirma en verde dentro de la misma tanda de trabajo, antes de cualquier commit de cierre o de cualquier pausa de la sesión. Nunca se deja código deliberadamente roto subido al servidor, ni un minuto de más.
 - Fuente única de tareas: TABLERO.md. Notion es solo panel.
 - Legal/regulatorio: verificado contra fuente oficial, nunca de memoria.
 - Un tema por chat.

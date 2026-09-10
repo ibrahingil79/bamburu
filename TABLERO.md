@@ -492,6 +492,38 @@ familia entera en verde: `test-contabilidad` 38 · `verify-contabilidad-diario-m
 
 <!-- BARRIDO:FIN -->
 
+> ⚙️ **ACLARACIÓN — 10 sep 2026, a petición de Ibrahin: ¿215 o 230?** Dos cosas que este bloque no
+> distingue por su nombre y que son DISTINTAS: **«el tablero»** (§LA COLA, las tareas del producto:
+> se cierran, no se borran — la lista no encoge) y **«el barrido»** (los gates automáticos que corre
+> `run-gates.mjs --all`, un número que SÍ se mueve según cuántos gates existan ese día).
+>
+> **215 es el número real de hoy, comprobado por partida doble, no de memoria:**
+> 1. `run-gates.mjs` lo imprime él mismo al arrancar («· 215 gates · …»), calculado de `GRUPOS`
+>    (`scripts/lib/gates-mapa.mjs`), no escrito a mano por mí.
+> 2. La cuenta cuadra sola: **155 pasan + 60 no pasan = 215**, exacto — el barrido del 10 sep fue
+>    **completo**, no le faltó ninguno por correr.
+>
+> **`230` es un número real, pero de OTRO DÍA — 6 sep 2026 (`179/230`, ver más abajo en esta
+> página).** El barrido no está incompleto hoy: el CENSO de gates cambió por el camino, y está
+> documentado en esta misma página, paso a paso: 230 (6 sep) → 228 (7 sep, tras borrar DISA — 39
+> ficheros, ~5.000 líneas, varios gates de eso se retiraron con ella) → 229 → 214/215 (8-9 sep,
+> `barrera-permisos-contamina-el-barrido`, que además AÑADIÓ `verify-residuo-de-pruebas.mjs`) →
+> **215 hoy**. Ninguno de esos cambios pasó en silencio: cada uno tiene su propia entrega en esta
+> página, con su commit.
+>
+> **Y el propio barrido nombra por qué no son 232** (los ficheros `gate-*`/`verify-*`/`test-*.mjs`
+> que hay hoy en `scripts/`): **11 quedan FUERA del `--all` a propósito** (piden claves de Stripe
+> vivas, o tocan la cadena legal de Verifactu mientras otros gates emiten facturas en paralelo —
+> cada uno con su motivo escrito, se lanzan a mano) y **1 es un «gate invisible»**
+> (`gate-armazon-sin-handlers`: existe en disco y no está declarado en ningún grupo — hallazgo
+> AJENO a `plantillas-documento`, apuntado aquí para que no se pierda, sin construir).
+>
+> **No se ha vuelto a correr el barrido para esta aclaración**: los 215 de la pasada del 10 sep ya
+> están completos y cuadrados (155+60), y repetirlo solo para perseguir una cifra distinta que la
+> propia aritmética ya explica es justo lo que `RITUAL.md` prohíbe («repetir un barrido para
+> perseguir un rojo intermitente»). Si Ibrahin quiere una pasada nueva de todas formas, se pide y se
+> corre.
+
 ## 👁️ EN VIGILANCIA — UN MODELO POR PAPEL (desde el 1 sep 2026)
 
 > **Decisión de Ibrahin, 1 sep 2026.** Hasta hoy los tres papeles iban en **Opus** y una tarea
