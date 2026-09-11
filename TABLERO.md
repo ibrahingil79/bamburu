@@ -10698,6 +10698,51 @@ lo puede hacer Ibrahin:** darse de alta como plataforma de Connect en `dashboard
 — comprobando que lo hace en ESTA cuenta (`acct_1UD6f4IhksQ0ODNe` / «Entorno de prueba de Bamburu»,
 no otra que tenga abierta en el navegador). En cuanto lo haga, se completa y se prueba el resto solo.
 
+### 🛑 Ibrahin activó Connect (11 sep 2026, noche) — el bloqueo de antes SE FUE, pero apareció uno nuevo, distinto y real
+
+**Encargo de Ibrahin:** comprobar que Connect ya está activo y hacer la prueba real de punta a
+punta — conectar una cuenta de prueba, cobrar una factura de principio a fin, y que el webhook la
+marque pagada sola.
+
+**Comprobado: el bloqueo de siempre («You can only create new accounts if you've signed up for
+Connect…») YA NO APARECE.** Connect está activo como plataforma en `acct_1UD6f4IhksQ0ODNe`. Eso es
+real y es lo que Ibrahin pidió confirmar.
+
+**Pero al intentar crear la cuenta conectada de verdad (`POST /v1/accounts`, la misma llamada de
+siempre, sin cambiar nada), Stripe devuelve un error DISTINTO — no es el de antes, y no es un
+capricho de esta cuenta en concreto, es un aviso de producto de Stripe:**
+
+> *"Stripe no longer recommends Accounts v1 for new Connect integrations. Create connected
+> accounts with POST /v2/core/accounts instead […]. If your integration requires v1 account
+> creation for a supported compatibility scenario, **enable Accounts v1 support in the Dashboard**:
+> https://dashboard.stripe.com/settings/features/feat_accounts_v1_support."*
+
+**Qué significa, en corto:** las cuentas de Stripe creadas recientemente (como esta, nueva de hoy)
+nacen ya apuntando a la API nueva de Connect (Accounts v2), y rechazan la llamada v1 que usa
+`core/stripe.js` (`crearCuentaConectada`, construida en su día contra v1, que era lo recomendado
+entonces). **No es una avería de código de esta ficha** — el código no ha cambiado, es la cuenta
+la que es distinta a las que existían cuando se construyó.
+
+**Por qué esto para y pregunta, y no se decide solo:** hay dos caminos, y elegir uno sin que Ibrahin
+lo sepa sería justo lo que `AGENTS.md` prohíbe (una duda que cambia cuánto queda por construir, no
+una decisión de nombre de tabla):
+1. **El corto:** Ibrahin activa «Accounts v1 support» en el enlace de arriba (un ajuste de
+   Dashboard, treinta segundos, mismo estilo que activar Connect) — el código de hoy sigue
+   funcionando tal cual, sin tocar una línea.
+2. **El de fondo:** migrar `core/stripe.js` a la API v2 de cuentas (`docs.stripe.com/connect/accounts-v2/account-creation`) — un cambio real de arquitectura en la pieza que ya está
+   CONSTRUIDA y probada, no una línea suelta, y no es una decisión que se tome sin que Ibrahin la
+   apruebe.
+
+**No se ha creado ninguna cuenta conectada de verdad ni se ha probado ningún cobro todavía** — no
+se pudo llegar a esa parte. No se ha tocado ningún fichero de código ni el hash Verifactu.
+
+**No se cierra la ficha.** Sigue **CONSTRUIDA — NO CERRADA**. **SIGUIENTE, y decide Ibrahin:**
+¿activa «Accounts v1 support» (el camino corto, recomendado — no exige tocar nada ya construido) o
+prefiere valorar migrar a Accounts v2? En cuanto lo diga, se completa la prueba real: cuenta
+conectada de verdad con los valores de verificación instantánea que documenta Stripe para modo
+prueba, Checkout real con la tarjeta 4242, y el webhook disparado por Stripe de verdad (no
+autofirmado por el gate, como hasta ahora).
+
 ---
 
 ## BLOQUE 1 — QUE BAMBURU PUEDA COBRAR
