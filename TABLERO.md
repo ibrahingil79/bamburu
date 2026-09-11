@@ -10828,6 +10828,85 @@ mirar Ibrahin:** `dashboard.stripe.com` → Developers → Webhooks → el endpo
 intentó y qué pasó (éxito, fallo, error de conexión), se resuelve por código en cuanto lo diga; si
 dice que nunca lo intentó, hay que mirar la configuración de la cuenta con Ibrahin delante.
 
+### ✅ CERRADO EL CABO SUELTO (11 sep 2026, misma noche) — Ibrahin miró el Dashboard y dio con la causa exacta
+
+**Ibrahin miró los intentos de entrega en el Dashboard de Stripe y encontró la causa real,**
+con más precisión que lo que se podía ver desde aquí: el endpoint de Connect solo estaba
+suscrito a 2 eventos, y **ninguno era el que hace falta** — pidió comprobar el desajuste y
+verificar si se estaba escuchando en el sitio correcto (cuenta conectada) y no solo en la
+plataforma.
+
+**Comprobado, y la causa era MÁS PRECISA todavía que un evento que faltara:** los DOS eventos
+suscritos (`payment_intent.succeeded`, `account.updated`) eran los correctos por NOMBRE — el
+problema estaba en el ÁMBITO. La API v2 de Stripe (`GET /v2/core/event_destinations`, la misma
+cuenta que hoy ya obligó a usar Accounts v2 y `transfers`) mostraba `"events_from": ["self"]`
+para el endpoint que se dio de alta esta tarde por la API clásica v1 con `connect: true`. Según
+la documentación oficial de Stripe, `connect: true` en v1 "debería" crear un endpoint que recibe
+eventos de todas las cuentas conectadas — pero en ESTA cuenta (del modelo nuevo de "controller"),
+ese parámetro se guarda y se ignora en la práctica: el endpoint quedó escuchando SOLO a la propia
+plataforma (`self`), nunca a las cuentas conectadas. Confirmado en vivo, no de memoria: tres
+cobros reales completos, el evento `payment_intent.succeeded` se genera en Stripe cada vez
+(comprobado con `GET /v1/events` en el contexto de la cuenta conectada), pero como el endpoint no
+escuchaba "eventos de otras cuentas", Stripe nunca los enruta ahí — de ahí las 0 entregas que
+Ibrahin vio en su panel.
+
+**Arreglado por API, en el sitio correcto (v2, no v1):**
+- Borrado el endpoint mal encuadrado (`we_1UEU6nIhksQ0ODNeK0MLRiaw`, `events_from: self`).
+- Creado de nuevo con `POST /v2/core/event_destinations`, `events_from: ["other_accounts"]` —
+  el valor correcto para "cuentas conectadas, no la plataforma" en esta versión de la API v2
+  (`2025-08-27.basil`; la nomenclatura cambia entre versiones — otra versión más nueva documenta
+  `@accounts` en vez de `other_accounts`, comprobado contra la documentación oficial antes de
+  usarlo, no adivinado). El secreto de firma **solo lo enseña la API v2 si se pide explícitamente**
+  con `include: ["webhook_endpoint.signing_secret"]` en la propia llamada de creación — sin ese
+  parámetro, la respuesta lo devuelve `null` y no hay otra forma de recuperarlo después (ni por
+  `GET`, ni por ningún endpoint de "revelar" o "rotar": se comprobaron los tres y ninguno existe
+  para este recurso). Dos intentos se perdieron así —secreto creado y nunca leído— y se borraron
+  de Stripe sin dejar residuo antes de repetirlo bien a la tercera.
+- Guardado el secreto nuevo en `STRIPE_CONNECT_WEBHOOK_SECRET` (mismo método de siempre: sin
+  `sed -i`, copia previa fuera de `/etc` porque crear un fichero NUEVO ahí necesita permiso de
+  directorio que `ubuntu` no tiene — sobrescribir uno que ya existe, sí). Servicio reiniciado.
+- **No se ha tocado `core/stripe.js` para esto**: el alta del webhook de Connect es un paso de
+  infraestructura de una sola vez (como ya lo era el de la suscripción, que sí vive en
+  `configurar-stripe.sh`), no código de la aplicación — nada que la app ejecute solicita ni
+  gestiona endpoints de webhook por su cuenta.
+
+**Prueba en rojo antes de verde, EN LA MISMA TANDA, y esta vez sobre el aviso REAL de Stripe (no
+autofirmado, como pedía el encargo):**
+- **Rojo:** con el endpoint bien encuadrado pero `secretoWebhookConectado()` roto a propósito
+  (mismo mecanismo que ya se usó hoy antes), se repitió el cobro real de punta a punta. Esta vez
+  Stripe SÍ intentó la entrega — confirmado por API: `pending_webhooks: 1` en el evento (antes,
+  con el endpoint mal encuadrado, siempre daba `0`: ni se intentaba) — y el servidor la rechazó
+  con la firma inválida. La factura se quedó sin marcar, exactamente lo esperado.
+- **Verde:** revertido (`git diff core/stripe.js` vacío, confirmado), servidor reiniciado, cobro
+  real repetido de nuevo: **Stripe entregó el aviso en 2 segundos**, la factura quedó pagada sola,
+  y `pending_webhooks` volvió a `0` (entregado con éxito). Repetido una vez más para confirmar:
+  igual, verde, 2 segundos.
+
+**Con esto, LOS TRES GRUPOS DE LA COMPROBACIÓN QUEDAN CERRADOS DE VERDAD, contra Stripe real, en
+modo prueba, de principio a fin:** cuenta conectada real y activa · Checkout real con la tarjeta
+`4242 4242 4242 4242` en un navegador de verdad · webhook disparado por STRIPE (no autofirmado) ·
+factura marcada pagada sola · dinero confirmado recibido en la cuenta del autónomo. El criterio de
+aceptación que quedó a medias más arriba (`[~]`) se cierra del todo:
+
+- [x] En cada factura del portal, un botón de pago con tarjeta; al pagar, el dinero va a la cuenta
+      del autónomo y la factura pasa a «pagada» sola — **probado de punta a punta, con el aviso
+      disparado por Stripe de verdad, no autofirmado. Repetido dos veces en verde tras la prueba en
+      rojo, sin ninguna duda pendiente.**
+
+**Limpieza final:** las cuentas y negocios de las pruebas de hoy, borrados de Stripe y de disco.
+`node scripts/verify-residuo-de-pruebas.mjs` → 0 restos. Quedan en la plataforma únicamente los
+dos webhooks correctos (suscripción y Connect) y las dos cuentas `testaccount@example.com` que
+Stripe creó solas al activar Connect — no tocadas, no son nuestras.
+
+**No se ha tocado la suscripción de Bamburu ni el hash Verifactu** en ninguno de los arreglos de
+hoy. `node scripts/desplegar.mjs` — desplegado y verificado contra la dirección pública.
+
+**No se cierra la ficha** (regla del 10 sep: lo visible lo ve Ibrahin antes de cerrar). **Sigue
+CONSTRUIDA — PROBADA DE PUNTA A PUNTA DE VERDAD — esperando el OK de Ibrahin.** Cuando lo dé, lo
+único que queda de esta ficha es lo ya conocido y fuera de su alcance: el modo real (grupo (c),
+`--modo-real` + `sk_live_` + webhook real de producción) en el lanzamiento, y que cada autónomo
+complete su propio onboarding — nada de eso es hoy.
+
 ---
 
 ## BLOQUE 1 — QUE BAMBURU PUEDA COBRAR
