@@ -10608,6 +10608,96 @@ activada. En cuanto avise de que lo ha hecho, se retoma todo lo de esta ficha en
 **No se cierra la ficha.** Sigue **CONSTRUIDA — NO CERRADA**, esperando el OK de Ibrahin — y ahora,
 además, esperando una clave de Stripe que de verdad funcione.
 
+### ✅ Ibrahin puso la clave (11 sep 2026, misma tarde) — es una cuenta NUEVA, reapuntado, webhook real puesto
+
+**La clave ya funciona** (`GET /v1/balance` → 200, ya no `api_key_expired`).
+
+**Es una cuenta NUEVA, no la de siempre — comprobado, no supuesto.** `GET /v1/account` con la
+clave de hoy devuelve `acct_1UD6f4IhksQ0ODNe` (`contacto@ibrahingil.com`, perfil «Entorno de prueba
+de Bamburu»), y los cuatro objetos conocidos de la cuenta ANTERIOR (dos clientes, un método de pago,
+el `PaymentIntent` del cobro del 2 sep) dan los cuatro `resource_missing` en la cuenta de hoy: no es
+la misma cuenta con la clave rotada, es otra distinta.
+
+**Reapuntado, con lo que había:**
+- **Suscripción de Bamburu:** los DOS negocios que tenían un cliente de Stripe guardado
+  (`Desarrollo Bamburu` id 20, `Peluquería Gil` id 156 — los únicos con `stripe_cliente_id` en
+  `tenant_suscripciones`, ninguno es cliente real de pago) apuntaban a `cus_VBZA9xSwOHaSrx` y
+  `cus_VBZJSuybxP13rw`, muertos en la cuenta nueva. Limpiadas las tres columnas
+  (`stripe_cliente_id`/`stripe_metodo_pago_id`/`stripe_suscripcion_id` → `NULL`) en los dos; el
+  `estado` de la suscripción no se ha tocado. La próxima vez que cualquiera de los dos complete el
+  alta, `crearCliente` (idempotente, sin cambios de código) crea uno fresco en la cuenta nueva —
+  nada que hacer por código, ya funciona así.
+- **Producto/precio/IVA del plan (990 + IVA 21 %):** no existían en la cuenta nueva (nace vacía,
+  como toda cuenta de Stripe). Creados con la misma función de siempre, `asegurarPlanEnStripe()` —
+  `price_1UEU7eIhksQ0ODNeo2JhwkxK` / `txr_1UEU7eIhksQ0ODNezwPLUeiI` / `prod_VEy303jJZxcKzA`.
+- **Facturas (Connect):** **no había nada que reapuntar.** Censadas las 17 bases de negocio: NINGUNA
+  tenía `stripe_connect_account_id` puesto (bloqueado desde antes de que existiera la cuenta nueva),
+  y `control.db.stripe_connect_accounts` seguía vacía. Nace ya limpia, apuntando a la cuenta nueva
+  desde el primer autónomo que conecte.
+- **Webhook de suscripción** (`/stripe/webhook`): ya lo dio de alta el propio
+  `configurar-stripe.sh` de Ibrahin al escribir la clave (paso 3 del guion) — un único endpoint en la
+  cuenta nueva, `STRIPE_WEBHOOK_SECRET` puesto. No ha hecho falta tocarlo.
+
+**El secreto REAL del webhook de Connect, ya no el placeholder.** Dado de alta por API con
+`connect=true` contra la cuenta nueva (`POST /v1/webhook_endpoints`, eventos
+`payment_intent.succeeded` y `account.updated`) — el mismo paso que ya hacía
+`configurar-stripe.sh` para el otro webhook, aquí a mano porque el guion no cubre el de Connect.
+El secreto de un webhook **Stripe solo lo enseña una vez, al crearlo**: los dos primeros intentos
+tropezaron con eso — el primero se probó a mano sin guardar el secreto en ningún sitio, y el
+segundo se creó dentro de un guion que se cayó justo antes de guardarlo (intentaba hacer una copia
+de seguridad nueva dentro de `/etc`, que necesita permiso de ESCRITURA SOBRE EL DIRECTORIO, y
+`ubuntu` no lo tiene — distinto de sobrescribir un fichero que ya existe, que sí puede). Los dos se
+borraron de Stripe en el acto (`DELETE /v1/webhook_endpoints/:id`), sin dejar residuo, y se repitió
+bien a la tercera, con la copia de seguridad guardada aparte en vez de en `/etc`. Guardado en
+`STRIPE_CONNECT_WEBHOOK_SECRET` (`/etc/bamburu.env`, escritura en el sitio, sin `sed -i`), servicio
+reiniciado.
+
+**Gate re-corrido de punta a punta contra la cuenta NUEVA, con el secreto REAL (ya no el
+placeholder): 22 ✓ · 0 ✗** — idéntico al de antes, ahora de verdad de la buena.
+
+**Prueba en rojo antes de verde, en la misma tanda, tal y como pedía el encargo arriba del
+todo:** se rompió a propósito `secretoWebhookConectado()` (`core/stripe.js`) para que devolviera un
+valor fijo que no es el real, se reinició el servidor y se relanzó el gate → cayeron en rojo
+**exactamente las 7 aserciones del webhook** (firma rechazada con 400 en vez de 200, nada se
+inserta, nada se duplica porque nada llega), sin tocar ni una de las otras 15. Revertido
+(`git diff core/stripe.js` vacío, confirmado), servidor reiniciado, gate relanzado: **verde otra
+vez, 22 ✓ · 0 ✗**, idéntico.
+
+**La suscripción, comprobada de punta a punta contra la cuenta nueva también** (no solo el plan):
+`crearCliente` + `crearSesionDeAlta` reales contra Stripe con un cliente de prueba propio (nunca un
+negocio real) — los dos funcionan contra la cuenta nueva exactamente igual que contra la de antes
+(incluido el apaño de Managed Payments), Checkout real devuelto. Cliente de prueba borrado de
+Stripe al terminar, sin residuo. Confirmado además con `node scripts/verify-residuo-de-pruebas.mjs`
+tras los dos gates: **0 restos**.
+
+**🛑 LO QUE SIGUE BLOQUEADO, Y SIGUE SIN SER CÓDIGO — ahora en la cuenta NUEVA:** crear una cuenta
+conectada (`POST /v1/accounts`, lo que hace el botón «Conectar» de un autónomo) sigue devolviendo el
+mismo aviso de Stripe que en la cuenta de antes: *"You can only create new accounts if you've signed
+up for Connect, which you can do at https://dashboard.stripe.com/connect."* Probado ahora mismo, con
+la clave de hoy, no es un resto de la comprobación vieja. **Registrar un webhook de Connect NO
+necesita este alta** (por eso el paso de arriba sí se ha podido completar); **crear una cuenta
+conectada, sí.** Es el mismo paso pendiente de siempre (grupo (b), punto 2 de la sesión anterior),
+ahora sobre la cuenta nueva — Ibrahin lo activó, si lo activó, en OTRA cuenta.
+
+**ESTADO REAL, comprobado contra Stripe ahora mismo, a lo que preguntó Ibrahin:**
+- **Facturas (cobro-online-facturas / Connect):** clave válida ✓ · cuenta activa para API ✓ ·
+  webhook de Connect real dado de alta y probado (22 ✓ · 0 ✗, rojo/verde confirmado) ✓ · Connect
+  como plataforma **✗ sigue sin activarse** en esta cuenta — sin eso, ningún autónomo puede conectar
+  su cuenta de cobro todavía, y por tanto no hay cobro real de punta a punta posible hasta que se
+  active.
+- **Suscripción de Bamburu (9,90 €/mes):** clave válida ✓ · plan/precio/IVA creados en la cuenta
+  nueva ✓ · cliente + Checkout de alta probados de verdad contra la cuenta nueva ✓ · webhook de
+  suscripción dado de alta por el propio guion de Ibrahin ✓ · referencias muertas de los dos
+  negocios de prueba, limpiadas ✓. **No hay ningún negocio con tarjeta puesta en la cuenta nueva
+  todavía** (se limpiaron, no se recrearon solas): el primer cobro de verdad se probará el día que
+  alguien complete el alta contra esta cuenta. Nada de esto tocó el hash Verifactu.
+
+**No se cierra la ficha** (regla del 10 sep: lo visible lo ve Ibrahin antes de cerrar, y esta tiene
+pantalla y botón). Sigue **CONSTRUIDA — NO CERRADA**, lista y esperando su OK. **SIGUIENTE, y solo
+lo puede hacer Ibrahin:** darse de alta como plataforma de Connect en `dashboard.stripe.com/connect`
+— comprobando que lo hace en ESTA cuenta (`acct_1UD6f4IhksQ0ODNe` / «Entorno de prueba de Bamburu»,
+no otra que tenga abierta en el navegador). En cuanto lo haga, se completa y se prueba el resto solo.
+
 ---
 
 ## BLOQUE 1 — QUE BAMBURU PUEDA COBRAR
