@@ -27,6 +27,95 @@
 > estricto, sin esta excepción) sigue siendo el criterio para TAREAS DE VENTAS y para cuando este
 > bloque quede derogado al terminar el pilar.
 
+## ✅ HECHA (2026-09-11) — Reorganizar la navegación del panel en tres cajones
+
+- **id:** reorganizar-navegacion-tres-cajones
+- **estado:** hecha — probada de verdad, esperando el OK de Ibrahin antes de darse por cerrada (regla
+  del 10 sep: lo visible lo ve él antes de cerrar, y esta ficha es SOLO pantalla)
+- **origen:** encargo DIRECTO de Ibrahin, 11 sep 2026 (tarde/noche). **No es Pilar 4 (Ventas) ni
+  rompe su trabajo** — es una excepción explícita a la prioridad de arriba, por orden directa del
+  dueño (CANON §6: el dueño decide prioridad), no una decisión tomada por esta sesión.
+
+**QUÉ SE PIDIÓ:** separar la navegación del panel en tres sitios con lógica — la barra lateral solo
+con trabajo del día a día (con etiqueta de texto en cada icono, no iconos mudos), una sección única
+«Ajustes» con toda la configuración, y el menú del nombre solo con la cuenta (Perfil · Actividad ·
+Ayuda · Cerrar sesión). Avisos pasa a ser solo la campana. **Regla del encargo: no cambiar qué hace
+cada cosa, solo dónde vive y cómo se llega.**
+
+**PASO 0 (inventario, entregado a Ibrahin antes de tocar código):** recorrido completo de
+`modules/erp/menu.js` (la fuente única de la navegación — el propio fichero lo dice: «aquí no hay
+dos listas: hay una»). Encontrados: 6 maestros marcados `ajustes:true` dentro de 4 áreas (Grupos de
+clientes, Categorías, Etiquetas, Proveedores, Almacenes, Historial de accesos), 6 pantallas de
+«Cómo funciona mi agenda» y 3 de «Cómo habla mi negocio» (ya en `CONFIG_NEGOCIO`, sin sitio propio
+en el rail), 4 entradas de la barra de Cuenta, 5 FIJAS del pie del rail, y `/admin/portal` mezclando
+el envío de enlaces al cliente (día a día) con «Cobro con tarjeta» + IBAN (ajuste), sin entrada
+propia en ningún menú. Huérfanos de antes (Capa 2 congelada o ya desmontados: `store-settings`,
+`security`…), **sin tocar** — moverlos los haría visibles por primera vez, que ya no es «cambiar de
+sitio». Dos decisiones ambiguas resueltas con Ibrahin antes de construir (`AskUserQuestion`): (a)
+`/admin/portal` se queda como una sola pantalla con DOS accesos (Clientes y Ajustes), no se separa;
+(b) «Marca y color» es una segunda línea en el listado, con un ancla a la misma pantalla que «Datos
+del negocio», no una pantalla nueva.
+
+**LO CONSTRUIDO — ningún candado cambia, solo el sitio:**
+- **`modules/erp/menu.js`**: dos secciones nuevas en `CONFIG_NEGOCIO` — «Tu negocio y tu cuenta»
+  (Datos del negocio, Marca y color `#marca`, Cobros y pagos → `/admin/portal`, Usuarios y permisos,
+  Mi suscripción) e «Importar / traer datos» (Trae tus datos, Importar un fichero) — con el MISMO
+  permiso que cada entrada ya tenía en su sitio de origen. `CUENTA` baja de 4 a 2 (Perfil, Actividad).
+  `FIJAS` baja de 6 a 2 (Inicio, y una única «Ajustes» sin candado — la página de dentro decide qué
+  enseña a cada uno, igual que ya hacía «Datos del negocio» antes de esta ficha).
+- **`modules/erp/layout.js`**: `flyBloquesHTML` ya NO pinta el bloque «Ajustes de `<Área>`» en el
+  desplegable del rail — pinta solo `a.diario`. El dato (`a.ajustes`, calculado igual que siempre por
+  `menuDeUsuario`) no desaparece: sigue existiendo para que `settings.js` lo pinte en el sitio nuevo.
+  El menú del nombre pasa a Perfil · Actividad · Ayuda (antes «Documentación») · Cerrar sesión.
+  CSS: el rail deja de ser icono-mudo con expansión al pasar el ratón — las reglas que solo se
+  pintaban con `:hover`/`.flyopen` (ancho, etiqueta visible, padding, chincheta) se fusionan en la
+  base y quedan permanentes; el móvil (`.sidebar.open`) no se toca.
+- **`modules/erp/tokens.js`**: `--sw` (ancho del rail) pasa de 62px a 240px — de un rail colapsado
+  que se expandía a un rail permanentemente desplegado.
+- **`modules/erp/routes/settings.js`**: `seccionesDe()` suma, sin duplicar, los `a.ajustes` de cada
+  área (ya calculados y filtrados por `menuDeUsuario`) como secciones más de la misma pantalla,
+  agrupadas por el nombre de su área. Ancla `#marca` añadida junto al logo y el color de acento.
+- **Cinco pantallas** (`migracion.js`, `importador.js`, `users.js`, `settings.js` ×4, `suscripcion.js`)
+  cambian su `active` de resaltado a `'ajustes'`, para que la única entrada del pie se resalte al
+  entrar en cualquiera de ellas — antes no resaltaba nada, porque vivían repartidas.
+- **`avisos`**: retirado de `FIJAS` — deja de ser una entrada de menú/buscador/ancla. La campana del
+  topbar, que ya existía y ya abría `/admin/avisos`, no se toca: es ahora el único acceso.
+
+**PROBADO DE VERDAD, con Puppeteer y HTML servido, sobre un negocio de prueba propio (46 ✓ · 0 ✗):**
+rail con las 11 áreas de fábrica y SIN ningún «Ajustes de `<Área>`» en el HTML; una única «Ajustes»
+al pie; menú del nombre con exactamente Perfil/Actividad/Ayuda/Cerrar sesión, sin Datos del
+negocio/Usuarios; `/admin/settings` con las dos secciones nuevas, las dos ya existentes y los cinco
+maestros reagrupados, con sus hrefs reales; el ancla `#marca` existe de verdad y el enlace apunta a
+ella; «Portal de cliente» sigue en Clientes, sin tocar. **Capturas miradas** (no solo el código): el
+rail desplegado permanente con las etiquetas de texto encendidas de verdad (`getComputedStyle`,
+`opacity:1`), el menú del nombre limpio, la pantalla de Ajustes completa, y el cajón móvil — que no
+se tocó y sigue igual.
+
+**Prueba en rojo antes de verde, en la misma tanda:** se reintrodujo a propósito el bloque «Ajustes
+de `<Área>`» en `flyBloquesHTML` y se relanzaron las 46 comprobaciones → cayó **exactamente 1**, la
+que prueba justo eso, y ninguna otra. Revertido (`git diff` vuelve a la versión buena, confirmado),
+relanzado: **verde otra vez, 46 ✓ · 0 ✗**.
+
+**Desplegado y verificado contra la dirección pública** (`peluqueria-gil.bamburu.com`, HTTP 200, con
+el código de hoy). `node scripts/verify-residuo-de-pruebas.mjs` → 0 restos. `node scripts/lint-js-servido.mjs`
+→ 337 pantallas, 1155 bloques, **0 roto por esta ficha** (los 3 bloques rotos que salen son de la
+página REAL de Stripe tras el redirect de `/admin/portal/stripe/conectar` —Connect activo desde la
+ficha de hoy mismo por la tarde—, JSON de Stripe mal detectado como JS por el propio lintador; ajeno
+a esta tarea, anotado y no tocado).
+
+**No se ha tocado el hash Verifactu ni la suscripción de Bamburu.**
+
+**🛑 Deuda anotada, no arreglada aquí (fuera del encargo):** `scripts/gate-menu-navegacion.mjs`
+queda **DESACTUALIZADO A PROPÓSITO** — prueba extensamente el bloque «Ajustes de `<Área>`» y el
+arrastre entre diario/ajustes DENTRO del desplegable, que es justo el comportamiento que esta ficha
+retira por encargo. Correrlo hoy produciría una pantalla de rojos esperados, no una regresión real.
+**Necesita reescribirse** para el diseño de tres cajones antes de volver a fiarse de él — no se ha
+hecho en esta misma tanda porque es una pieza grande por su cuenta (más de 1000 líneas, con su
+propio simulacro de arrastrar y soltar) y el encargo no lo pedía arriba del todo.
+
+**No se cierra la ficha** (tiene pantalla y botón: rige la regla del 10 sep). Sigue **HECHA — NO
+CERRADA**, esperando el OK de Ibrahin.
+
 > ⚙️⚙️ **LA FASE DE SANEAMIENTO QUEDA DEROGADA. DECISIÓN DE IBRAHIN, 2 SEP 2026.** **La lista de 97
 > tareas del 2 de septiembre (§LA COLA) deroga esta fase.** Lo que quedara de saneamiento **no
 > desaparece: vive DENTRO de la lista, en su orden**, mezclado con lo demás y sin prioridad especial.

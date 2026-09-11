@@ -538,7 +538,7 @@ export function createSuscripcionRoutes(db) {
       });
     </script>`;
 
-    return c.html(adminLayout('Mi suscripción', content, 'suscripcion', c.get('session')?.csrfToken || '', c));
+    return c.html(adminLayout('Mi suscripción', content, 'ajustes', c.get('session')?.csrfToken || '', c));
   });
 
   // ── Vuelta desde Stripe ─────────────────────────────────────────────────────

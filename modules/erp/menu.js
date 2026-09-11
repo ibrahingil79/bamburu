@@ -126,6 +126,15 @@ export const NAV_PERMS = {
   // B1 — la migración asistida. MISMO candado que exige `/admin/migracion` (`company.read`, ver
   // `routes/migracion.js`): darle entrada de menú no abre ni cierra ninguna puerta, solo la enseña.
   migracion:        'company.read',
+  // ⚙️ 11 SEP 2026 (reorganizar-navegacion-tres-cajones) — «Marca y color» es la MISMA pantalla que
+  // «Datos del negocio» (un ancla dentro de `/admin/settings`, decisión de Ibrahin): mismo candado,
+  // ni uno más ni uno menos — mover una entrada de sitio no puede abrir ni cerrar una puerta.
+  'settings-marca': 'company.read',
+  // La entrada FIJA que abre el cajón único de Ajustes. Sin candado A PROPÓSITO: dentro no hay un
+  // permiso único que decida — cada grupo (empresa, cobros, usuarios, maestros de cada área…) sigue
+  // exigiendo el suyo, como hoy. Quien no tenga nada que ver dentro verá una página corta, no rota;
+  // es el mismo criterio que ya usaba «Datos del negocio» en la barra de Cuenta.
+  ajustes:          null,
 };
 
 export const ROLE_FILTERS = {
@@ -138,6 +147,7 @@ export const ROLE_FILTERS = {
   suscripcion:      r => r === 'owner',
   'store-settings': r => r === 'owner' || r === 'admin',
   security:         r => r === 'owner' || r === 'admin',
+  'settings-marca': r => r === 'owner',
 };
 
 // ── EL MENÚ ───────────────────────────────────────────────────────────────────────────────────────
@@ -332,6 +342,60 @@ export const MENU = [
 // usan los puestos. Es la ÚNICA entrada condicional del menú, y por eso lleva su regla escrita al
 // lado en vez de en un mapa lejano.
 export const CONFIG_NEGOCIO = [
+  // ── LAS DOS SECCIONES NUEVAS DEL 11 SEP 2026 (`reorganizar-navegacion-tres-cajones`) ────────────
+  // Encargo de Ibrahin: un solo cajón de Ajustes, con «Datos del negocio · Marca y color · Cobros y
+  // pagos · Usuarios y permisos · Mi suscripción · Importar / traer datos» arriba del todo, en ese
+  // orden. Van primero en esta lista por lo mismo que manda el orden de toda `CONFIG_NEGOCIO`: el
+  // orden de aquí ES el orden en pantalla.
+  //
+  // NINGÚN candado cambia. Cada entrada se queda con EXACTAMENTE el permiso que ya tenía en su sitio
+  // de origen (CUENTA para Datos del negocio y Usuarios, FIJAS para Suscripción/Migración, la propia
+  // ruta para Cobros y pagos) — mover de sitio no puede abrir ni cerrar una puerta.
+  {
+    id: 'cfg-negocio',
+    label: 'Tu negocio y tu cuenta',
+    icon: 'ti-building',
+    descripcion: 'Los datos de tu empresa, cómo cobras, quién tiene acceso y tu plan con Bamburu.',
+    items: [
+      { href: '/admin/settings', label: 'Datos del negocio', key: 'settings', icon: 'ti-building',
+        desc: 'Nombre, NIF, moneda, impuestos y el resto de datos de tu empresa.' },
+      // Mismo href que «Datos del negocio», con un ancla: es la MISMA pantalla, un mismo formulario.
+      // Decisión de Ibrahin: dos líneas en el listado de Ajustes, cero reescritura de la pantalla.
+      { href: '/admin/settings#marca', label: 'Marca y color', key: 'settings-marca', icon: 'ti-palette',
+        desc: 'El logo y el color de acento que salen en tus documentos.' },
+      // «Cobros y pagos» y «Portal de cliente» (Clientes, día a día) son la MISMA pantalla y el MISMO
+      // `key` — decisión de Ibrahin: dos accesos a un sitio, no dos pantallas. `/admin/portal` mezcla
+      // enviar el enlace al cliente (día a día) con conectar la cuenta de cobro (ajuste); no se separa
+      // aquí, que sería tocar QUÉ HACE la pantalla y el encargo solo pide DÓNDE SE LLEGA.
+      { href: '/admin/portal', label: 'Cobros y pagos (conectar tu cuenta)', key: 'portal', icon: 'ti-credit-card',
+        desc: 'Conecta tu cuenta de cobro para que tus clientes te paguen las facturas con tarjeta.' },
+      // MOVIDO de la barra de Cuenta (mismo candado: `admin.manage_users`).
+      { href: '/admin/users', label: 'Usuarios y permisos', key: 'users', icon: 'ti-user-cog',
+        desc: 'Quién tiene acceso a tu negocio y qué puede hacer cada uno.' },
+      // MOVIDO de las FIJAS del rail (mismo candado: solo el dueño — es el contrato con Bamburu).
+      { href: '/admin/suscripcion', label: 'Mi suscripción', key: 'suscripcion', icon: 'ti-credit-card',
+        alias: ['Suscripción', 'Pago', 'Mi plan', 'Plan', 'Tarjeta', 'Cuánto pago', 'Cuota',
+                'Facturación de Bamburu', 'Factura de Bamburu', 'Cobro', 'Prueba gratis'],
+        desc: 'Cuánto pagas por Bamburu y con qué tarjeta.' },
+    ],
+  },
+  {
+    id: 'cfg-importar',
+    label: 'Importar / traer datos',
+    icon: 'ti-file-import',
+    descripcion: 'Si vienes de otro programa, aquí traes tus datos.',
+    items: [
+      // MOVIDAS de las FIJAS del rail. Mismos candados, mismos `alias` — las palabras con las que un
+      // dueño las busca de verdad no cambian porque cambien de sitio.
+      { href: '/admin/migracion', label: 'Trae tus datos', key: 'migracion', icon: 'ti-file-import',
+        alias: ['Migración', 'Migrar', 'Importar datos', 'Traer mis datos', 'Holded', 'Quipu', 'Excel',
+                'Cambiar de programa', 'Programa anterior'],
+        desc: 'El equipo de Bamburu te ayuda a traer tus datos desde otro programa.' },
+      { href: '/admin/migracion/importar', label: 'Importar un fichero', key: 'migracion-importar', icon: 'ti-table-import',
+        alias: ['CSV', 'Importar CSV', 'Subir fichero', 'Excel'],
+        desc: 'Sube tú mismo un fichero CSV o Excel.' },
+    ],
+  },
   {
     id: 'cfg-agenda',
     label: 'Cómo funciona mi agenda',
@@ -434,45 +498,36 @@ export function condicionesConfig(db) {
 // mira quien acaba de entrar. Sus otras dos puertas siguen donde estaban y ninguna depende de esta:
 // el paso del panel «Pon en marcha tu negocio» (`arranque.js`), que se pliega, y la tarjeta fija de
 // «Datos del negocio» (`routes/settings.js`).
+// ⚙️ 11 SEP 2026 (reorganizar-navegacion-tres-cajones) — «Trae tus datos», «Importar un fichero»,
+// «Avisos» y «Mi suscripción» SALEN de aquí. Las dos primeras se mudan a `CONFIG_NEGOCIO` (sección
+// «Importar / traer datos»); «Mi suscripción» a la misma sección que «Datos del negocio»; «Avisos»
+// no se muda a ningún sitio — se retira como entrada de menú a propósito (encargo de Ibrahin: pasa a
+// ser SOLO la campana del topbar, que ya existía y ya abre `/admin/avisos`). «Ayuda y soporte» se
+// muda a la barra de Cuenta (ver `adminLayout`, la entrada «Ayuda»): el rail es SOLO trabajo del día
+// a día, y la ayuda no lo es. NINGÚN candado cambia en ninguna de las cinco.
 export const FIJAS = [
   { href: '/admin', label: 'Inicio', key: 'dashboard', icon: 'ti-home', sitio: 'pin' },
-  // B1 — LA ENTRADA PERMANENTE A LA MIGRACIÓN ASISTIDA. Los `alias` son las palabras con las que un
-  // dueño la busca de verdad: nadie teclea «migración asistida», teclea «Holded» o «importar».
-  { href: '/admin/migracion', label: 'Trae tus datos', key: 'migracion', icon: 'ti-file-import', sitio: 'pie',
-    alias: ['Migración', 'Migrar', 'Importar datos', 'Traer mis datos', 'Holded', 'Quipu', 'Excel',
-            'Cambiar de programa', 'Programa anterior'] },
-  // EL IMPORTADOR DE FICHEROS, junto a la migración asistida: son las dos formas de traerse los datos
-  // —una la hace el equipo por ti, la otra la haces tú— y hasta hoy solo se llegaba a la segunda
-  // escribiendo la dirección. Mismo candado que su pantalla (`company.read`).
-  { href: '/admin/migracion/importar', label: 'Importar un fichero', key: 'migracion-importar', icon: 'ti-table-import',
-    sitio: 'pie', alias: ['CSV', 'Importar CSV', 'Subir fichero', 'Excel'] },
-  // LA PANTALLA DE AVISOS. Ya se alcanzaba desde la campana («Ver y resolver todos»), así que no
-  // estaba huérfana como las otras trece — pero un destino que solo existe dentro de un desplegable
-  // no se puede buscar ni anclar, y eso sí faltaba.
-  { href: '/admin/avisos', label: 'Avisos', key: 'avisos', icon: 'ti-bell', sitio: 'pie',
-    alias: ['Notificaciones', 'Pendientes', 'Alertas'] },
-  // MI SUSCRIPCIÓN (2 sep 2026, tarea `suscripcion-plan-y-alta`). Al pie del rail y no dentro de un
-  // área porque no es del día a día de ninguna: no es una venta, ni una compra, ni un cliente — es lo
-  // que el negocio paga por usar el programa. Los `alias` son las palabras con las que un dueño lo
-  // busca de verdad: nadie teclea «suscripción», teclea «cuánto pago» o «factura de Bamburu».
-  { href: '/admin/suscripcion', label: 'Mi suscripción', key: 'suscripcion', icon: 'ti-credit-card', sitio: 'pie',
-    alias: ['Suscripción', 'Pago', 'Mi plan', 'Plan', 'Tarjeta', 'Cuánto pago', 'Cuota',
-            'Facturación de Bamburu', 'Factura de Bamburu', 'Cobro', 'Prueba gratis'] },
-  { href: '/docs', label: 'Ayuda y soporte', key: 'ayuda', icon: 'ti-lifebuoy', sitio: 'pie', target: '_blank' },
+  // LA ENTRADA ÚNICA AL CAJÓN DE AJUSTES. Sin candado (ver `NAV_PERMS.ajustes`): la página de dentro
+  // decide, grupo a grupo, qué le enseña a cada uno — el mismo criterio que ya usaba «Datos del
+  // negocio» en la barra de Cuenta antes de esta ficha.
+  { href: '/admin/settings', label: 'Ajustes', key: 'ajustes', icon: 'ti-settings', sitio: 'pie' },
 ];
 
 // ── Barra de Cuenta (desplegable del avatar): items reales ────────────────────────────────────────
 // PERFIL absorbe lo personal: datos, contraseña y verificación en dos pasos. Por eso ya no están
 // "Mi cuenta" (era la pantalla-cerrojo de contraseña obligatoria, sigue viva pero fuera del menú)
 // ni "Seguridad" (solo tenía el 2FA; su ruta redirige a /admin/perfil).
-// Una sola entrada de empresa: /admin/settings ES la "Configuración Empresa" (arreglado en U8, `9cf2e46`).
-// «Documentación» y «Cerrar sesión» NO están aquí: los pinta `adminLayout` a mano, tras su separador, y
-// se quedan exactamente donde están. Cerrar sesión, además, queda FUERA del buscador a propósito:
-// un destino que se dispara con Enter no puede ser el que te echa de la sesión.
+//
+// ⚙️ 11 SEP 2026 (reorganizar-navegacion-tres-cajones) — «Datos del negocio» y «Usuarios» SE MUDAN
+// de aquí al cajón único de Ajustes (`CONFIG_NEGOCIO`, sección «Tu negocio y tu cuenta»): son
+// configuración de la EMPRESA, no de la cuenta personal de quien ha entrado. Encargo de Ibrahin: el
+// menú del nombre pasa a ser SOLO la cuenta — Perfil · Actividad · Ayuda · Cerrar sesión. Los mismos
+// candados de siempre viajan con cada entrada a su nuevo sitio; aquí no queda ninguno que tocar.
+// «Ayuda» y «Cerrar sesión» NO están en esta lista: los pinta `adminLayout` a mano, tras su
+// separador. Cerrar sesión, además, queda FUERA del buscador a propósito: un destino que se dispara
+// con Enter no puede ser el que te echa de la sesión.
 export const CUENTA = [
   { href: '/admin/perfil', label: 'Perfil', key: 'perfil', icon: 'ti-user' },
-  { href: '/admin/settings', label: 'Datos del negocio', key: 'settings', icon: 'ti-building' },
-  { href: '/admin/users', label: 'Usuarios', key: 'users', icon: 'ti-user-cog' },
   { href: '/admin/activity', label: 'Actividad', key: 'activity', icon: 'ti-history' },
 ];
 
@@ -568,14 +623,12 @@ export function menuDeUsuario(db, { role = '', perms = [], userId = null } = {})
     config.push({ id: sec.id, label: sec.label, icon: sec.icon, descripcion: sec.descripcion, items });
   }
 
-  // «Datos del negocio» abre la pantalla que ALOJA esa sección. Si el usuario tiene algo dentro, la
-  // entrada tiene que estar: si no, la mudanza le CERRARÍA el camino visual a seis puertas que hoy
-  // abre desde Agenda — y un cambio de sitio no puede cerrar una puerta. NO abre nada: el contenido
-  // propio de esa pantalla (empresa, fiscal, plantillas) sigue exigiendo `company.read`, y lo que
-  // este usuario verá al entrar es exactamente su sección y nada más.
-  const cuenta = CUENTA
-    .filter(it => pasa(it) || (it.key === 'settings' && config.length > 0))
-    .map(it => ({ ...it, area: 'Cuenta', areaId: 'cuenta' }));
+  // ⚙️ 11 SEP 2026 (reorganizar-navegacion-tres-cajones) — `CUENTA` ya no lleva «Datos del negocio»
+  // ni «Usuarios» (mudados al cajón de Ajustes, ver `CONFIG_NEGOCIO` arriba): el caso especial que
+  // los mantenía visibles aquí aunque `pasa()` los negara ya no tiene ningún item al que aplicarse,
+  // así que se retira en vez de dejarlo muerto y confuso. Lo que queda (Perfil, Actividad) se filtra
+  // exactamente igual que el resto del menú.
+  const cuenta = CUENTA.filter(pasa).map(it => ({ ...it, area: 'Cuenta', areaId: 'cuenta' }));
   // Las FIJAS pasan por el MISMO filtro que el resto desde que una de ellas tiene candado
   // («Trae tus datos», `company.read`). Inicio y la ayuda no lo notan: no exigen ningún permiso.
   const fijas  = FIJAS.filter(pasa).filter(hayCond).map(it => ({ ...it, area: '', areaId: 'fijas' }));

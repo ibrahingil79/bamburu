@@ -474,14 +474,24 @@ export function createSettingsRoutes(db, cfg = {}) {
   // y la API sigue exigiéndolo por su cuenta. Quien entre sin ese permiso ve su sección y nada más.
   // Se resuelve UNA vez por petición y se guarda en el contexto: la guardia la necesita para decidir
   // si deja entrar, y la vista para pintar. Sin esto se recorría el menú entero dos veces por carga.
+  // ⚙️ 11 SEP 2026 (reorganizar-navegacion-tres-cajones) — AQUÍ SE SUMAN, y no se duplican, los
+  // maestros que hasta hoy vivían en el pie del desplegable de cada área («Ajustes de Clientes»,
+  // «Ajustes de Catálogo»…): `menuDeUsuario` YA calcula `a.ajustes` por área, filtrado por el permiso
+  // de cada entrada exactamente como siempre. El rail ya no lo pinta (ver `flyBloquesHTML`); esta
+  // pantalla sí, como una sección más, con el nombre de SU área. Ni una línea de permiso nueva: solo
+  // se lee un dato que ya existía y se pinta en otro sitio.
   const seccionesDe = c => {
     const ya = c.get('cfgNegocio');
     if (ya) return ya;
     let secs = [];
     try {
-      secs = menuDeUsuario(db, {
+      const menu = menuDeUsuario(db, {
         role: c.get('session')?.role || '', perms: c.get('userPerms') || [], userId: c.get('session')?.userId,
-      }).config || [];
+      });
+      const maestros = (menu.areas || [])
+        .filter(a => a.ajustes && a.ajustes.length)
+        .map(a => ({ id: 'area-ajustes-' + a.id, label: a.label, icon: a.icon, descripcion: '', items: a.ajustes }));
+      secs = [...(menu.config || []), ...maestros];
     } catch { secs = []; }
     c.set('cfgNegocio', secs);
     return secs;
@@ -556,6 +566,10 @@ export function createSettingsRoutes(db, cfg = {}) {
             <div class="form-group"><label class="form-label">Provincia</label><input class="form-control" id="cProvince" placeholder="Madrid"></div>
           </div>
           <small style="color:var(--text2);font-size:12px;margin:-8px 0 16px;display:block">Dirección completa: obligatoria para generar la factura electrónica <strong>Facturae</strong>.</small>
+          <!-- ⚙️ 11 sep 2026 (reorganizar-navegacion-tres-cajones) — «Marca y color» aparece como su
+               propia línea en el listado de Ajustes, pero es esta MISMA pantalla: el ancla solo baja
+               hasta aquí, sin ningún formulario ni ruta nueva. -->
+          <h3 id="marca" style="margin:1.4rem 0 .3rem;font-size:.95rem;scroll-margin-top:1rem">Marca y color</h3>
           <!-- EL LOGO ERA UN CAMPO DE TEXTO donde se pegaba una dirección de internet, y no se pintaba
                en ningún documento. No podía: los PDF los genera Chromium en el servidor, así que una
                URL de fuera habría hecho que cada factura disparase una petición saliente al host que
@@ -792,7 +806,7 @@ export function createSettingsRoutes(db, cfg = {}) {
       <div class="ph"><h2>Configuración Empresa</h2></div>
       ${bloqueEmpresa}
       ${seccionCitas}`;
-    return c.html(adminLayout('Configuración Empresa', content, 'settings', c.get('session')?.csrfToken || '', c));
+    return c.html(adminLayout('Configuración Empresa', content, 'ajustes', c.get('session')?.csrfToken || '', c));
   });
 
   // ── PANTALLA: Plantillas de email ──────────────────────────────────────────
@@ -1020,7 +1034,7 @@ export function createSettingsRoutes(db, cfg = {}) {
         else if (a === 'insertar') insertar('{{' + t.getAttribute('data-clave') + '}}');
       });
 </script>`;
-    return c.html(adminLayout('Plantillas de email', content, 'settings', csrf, c));
+    return c.html(adminLayout('Plantillas de email', content, 'ajustes', csrf, c));
   });
 
   // ── PANTALLA: Situación fiscal ─────────────────────────────────────────────
@@ -1260,7 +1274,7 @@ export function createSettingsRoutes(db, cfg = {}) {
         })();
       })();
       </script>`;
-    return c.html(adminLayout('Avisos y correos', content, 'settings', csrf, c));
+    return c.html(adminLayout('Avisos y correos', content, 'ajustes', csrf, c));
   });
 
   views.get('/situacion-fiscal', requirePerm('company.read'), c => {
@@ -1351,7 +1365,7 @@ export function createSettingsRoutes(db, cfg = {}) {
       // 5 SEP 2026 — el unico boton de la situacion fiscal, que es CONDICIONAL (solo con permiso).
       document.querySelector('[data-sf="guardar"]')?.addEventListener('click', function(){ guardar(); });
 </script>`;
-    return c.html(adminLayout('Situación fiscal', content, 'settings', csrf, c));
+    return c.html(adminLayout('Situación fiscal', content, 'ajustes', csrf, c));
   });
 
   // ⚙️ 7 SEP 2026 (`sacar-disa-paso-2-borrado`) — AQUÍ VIVÍA EL CONSTRUCTOR DE TIENDA, con su

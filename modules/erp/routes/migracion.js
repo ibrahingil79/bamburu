@@ -354,7 +354,7 @@ export function createMigracionRoutes(db) {
       cargar();
     })();
     </script>`;
-    return c.html(adminLayout('Trae tus datos', content, 'settings', c.get('session')?.csrfToken || '', c));
+    return c.html(adminLayout('Trae tus datos', content, 'ajustes', c.get('session')?.csrfToken || '', c));
   });
 
   return { api, views };

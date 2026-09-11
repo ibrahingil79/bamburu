@@ -505,7 +505,7 @@ export function createImportadorRoutes(db) {
     })();
     </script>`;
 
-    return c.html(adminLayout('Importar desde un CSV', content, 'settings', c.get('session')?.csrfToken || '', c));
+    return c.html(adminLayout('Importar desde un CSV', content, 'ajustes', c.get('session')?.csrfToken || '', c));
   });
 
   return { api, views };

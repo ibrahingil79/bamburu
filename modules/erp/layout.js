@@ -5,7 +5,7 @@ import { contarPropuestasPendientes, tiposVisiblesPara } from './propuestas.js';
 // buscador del topbar y las anclas del usuario. Aquí solo se pinta. `vocabulario()` (las palabras del
 // oficio) y `contarAvisosPendientes()` (el contador de la Cola) se consultan allí, no aquí: eran las
 // dos lecturas que este fichero hacía por su cuenta.
-import { menuDeUsuario, anclasDeUsuario, destinosBuscador, tienePref, MIN_AJUSTES, MAX_ANCLAS } from './menu.js';
+import { menuDeUsuario, anclasDeUsuario, destinosBuscador, tienePref, MAX_ANCLAS } from './menu.js';
 // PELDAÑO 8 · qué campos pide el oficio. `oficios.js` es HOJA (solo recibe `db`), así que el
 // layout puede importarlo sin cerrar ningún círculo — es la razón por la que se escribió así.
 import { oficioDe as oficioDeTenant, oficioPorId } from './oficios.js';
@@ -163,23 +163,14 @@ function flyItemHTML(i, ctx, bloque = 'diario') {
   return `<a href="${i.href}" class="fly-item${act}"${arr}>${ic}${pinBtn(i.key, ctx.anclado.has(i.key))}</a>`;
 }
 
-// (A) JERARQUÍA DENTRO DEL ÁREA — dos bloques separados por una línea y un rótulo. Es SEPARAR, NO
-// plegar: las dos mitades se pintan en el mismo desplegable, a la vez, y nada gana un clic. Arriba,
-// sin rótulo, lo del día a día; abajo, bajo «Ajustes de <Área>», la configuración y los maestros.
+// (A) JERARQUÍA DENTRO DEL ÁREA — ANTES eran dos bloques en el mismo desplegable, separados por una
+// línea y el rótulo «Ajustes de <Área>». ⚙️ 11 SEP 2026 (reorganizar-navegacion-tres-cajones, encargo
+// de Ibrahin): esa configuración SE SACA del rail entero. La barra lateral es SOLO el día a día; toda
+// la configuración de cada área (`a.ajustes`, calculado igual que siempre por `menuDeUsuario`) se
+// pinta ahora en el cajón único de Ajustes (ver `settings.js`), agrupada por el nombre de su área.
+// `a.ajustes` no desaparece de los datos — sigue existiendo para ESO — solo deja de pintarse aquí.
 function flyBloquesHTML(a, ctx) {
-  const arriba = a.diario.map(i => flyItemHTML(i, ctx, 'diario')).join('');
-  const abajo = a.ajustes.map(i => flyItemHTML(i, ctx, 'ajustes')).join('');
-  // UNA SOLA LISTA cuando el bloque de ajustes no da para tanto (MIN_AJUSTES): los ajustes se pintan
-  // al final, sin línea y sin rótulo. Siguen visibles, en la misma pantalla y a los mismos clics — lo
-  // único que se va es el cartel. Partir tres entradas y una en dos secciones con título era más
-  // cartel que menú (decisión de Ibrahin, 18 ago 2026).
-  if (a.ajustes.length < MIN_AJUSTES) return arriba + abajo;
-  // Cuando SÍ se parte, la línea es además el destino con el que se pasa una entrada de un bloque al
-  // otro. Si el de arriba se queda vacío se pinta MARCADA: el CSS la esconde en reposo y la enseña al
-  // arrastrar, para que se pueda deshacer.
-  const sep = `<div class="fly-sep${arriba ? '' : ' vacio'}" data-drop="diario" data-area="${escHtml(a.id)}"></div>`;
-  const grp = `<div class="fly-grp" data-drop="ajustes" data-area="${escHtml(a.id)}">Ajustes de ${escHtml(a.label)}</div>`;
-  return arriba + sep + grp + abajo;
+  return a.diario.map(i => flyItemHTML(i, ctx, 'diario')).join('');
 }
 
 // Un ÁREA del rail: su icono, su nombre y su desplegable. Con `ancla:true` es la COPIA que vive en el
@@ -421,11 +412,16 @@ export function adminLayout(title, content, active = '', csrfToken = '', c = nul
   const avatarHTML = fotoUrl
     ? `<img src="${escFoto}" alt="" class="acct-avatar" style="object-fit:cover">`
     : `<span class="acct-avatar">${initial}</span>`;
+  // ⚙️ 11 SEP 2026 (reorganizar-navegacion-tres-cajones) — EL MENÚ DEL NOMBRE PASA A SER SOLO LA
+  // CUENTA: Perfil · Actividad · Ayuda · Cerrar sesión (encargo de Ibrahin). «Datos del negocio» y
+  // «Usuarios» se mudaron al cajón de Ajustes (ver `menu.js`, `CONFIG_NEGOCIO`); lo que queda en
+  // `menu.cuenta` es exactamente Perfil y Actividad. «Documentación» pasa a llamarse «Ayuda» —
+  // mismo enlace (`/docs`), mismo target— y es donde vive ahora, ya que se retira del pie del rail.
   const acctMenuHTML =
     `<div class="acct-mh">${avatarHTML}<div><div class="acct-mh-n">${escName}</div><div class="acct-mh-e">${roleLabel}</div></div></div>`
     + acctVisible.map(i => `<a href="${i.href}" class="acct-item"><i class="ti ${i.icon}"></i><span>${i.label}</span></a>`).join('')
     + `<div class="acct-sep"></div>`
-    + `<a href="/docs" target="_blank" class="acct-item"><i class="ti ti-file-text"></i><span>Documentación</span></a>`
+    + `<a href="/docs" target="_blank" class="acct-item"><i class="ti ti-lifebuoy"></i><span>Ayuda</span></a>`
     + `<div class="acct-sep"></div>`
     + `<a href="/admin/logout" class="acct-item danger"><i class="ti ti-logout"></i><span>Cerrar sesión</span></a>`;
 
@@ -1080,17 +1076,12 @@ ${ROOT_TOKENS}
        (estilo Holded). En reposo: solo iconos (62px). Al pasar el ratón / con un flyout abierto:
        se ensancha y muestra el nombre de cada área, con la actual resaltada. El flyout sigue
        abriendo las sub-funciones a la derecha. */
-    .sidebar{width:var(--sw);background:var(--chrome);border-right:1px solid var(--chrome-div);position:fixed;top:0;left:0;height:100vh;overflow-x:hidden;overflow-y:auto;z-index:100;display:flex;flex-direction:column;transition:width .16s ease}
-    /* 240 px (antes 216): cada fila del rail desplegado lleva ahora su chincheta, y con 216 el nombre
-       del área más largo («Compras y gastos») se quedaba sin sitio y salía cortado. Si se cambia este
-       número hay que cambiar TAMBIÉN el left del flyout en openFly() — van pegados. */
-    .sidebar:hover,.sidebar.flyopen{width:240px;box-shadow:6px 0 24px rgba(16,24,40,.10)}
+    .sidebar{width:var(--sw);background:var(--chrome);border-right:1px solid var(--chrome-div);position:fixed;top:0;left:0;height:100vh;overflow-x:hidden;overflow-y:auto;z-index:100;display:flex;flex-direction:column}
     .sidebar::-webkit-scrollbar{width:6px}
     .sidebar::-webkit-scrollbar-thumb{background:rgba(0,0,0,.12);border-radius:6px}
     /* Marca fija arriba — el Inicio. YA NO lleva contador de avisos: la única señal
        de avisos de todo el chrome es la campana del topbar (una sola cosa que mirar). */
-    .pin-inicio{position:relative;display:flex;align-items:center;justify-content:center;gap:0;height:50px;flex-shrink:0;color:var(--brand);text-decoration:none;overflow:hidden}
-    .sidebar:hover .pin-inicio,.sidebar.flyopen .pin-inicio{justify-content:flex-start;gap:12px;padding-left:1.05rem}
+    .pin-inicio{position:relative;display:flex;align-items:center;justify-content:flex-start;gap:12px;height:50px;flex-shrink:0;color:var(--brand);text-decoration:none;overflow:hidden;padding-left:1.05rem}
     .pin-inicio i.ti{font-size:22px;line-height:1;flex-shrink:0}
     .pin-inicio:hover{color:var(--accent-d)}
     .pin-inicio.active i.ti{color:var(--accent)}
@@ -1098,17 +1089,20 @@ ${ROOT_TOKENS}
     .sb-nav{flex:1;padding:.4rem .5rem .6rem;display:flex;flex-direction:column;gap:3px;overflow-x:hidden}
     .rail-spacer{flex:1;min-height:8px}
     .navg{position:relative}
-    .nav-item{display:flex;align-items:center;justify-content:center;gap:0;padding:.55rem;border-radius:10px;color:var(--chrome-ic);text-decoration:none;cursor:pointer;background:none;border:none;width:100%;font-family:inherit;transition:background .15s,color .15s}
-    .sidebar:hover .nav-item,.sidebar.flyopen .nav-item{justify-content:flex-start;gap:12px;padding-left:.7rem}
+    /* 11 sep 2026 (reorganizar-navegacion-tres-cajones) — EL RAIL YA NO ES ICONO-MUDO CON EXPANSIÓN
+       AL PASAR EL RATÓN: lleva siempre su etiqueta de texto (encargo de Ibrahin, "no iconos mudos").
+       Lo que antes solo se pintaba con .sidebar:hover / .sidebar.flyopen —ancho 240px, texto visible,
+       padding a la izquierda, chincheta asomando— pasa a ser el ÚNICO estado: se fusiona en la regla
+       base y se retiran las variantes hover/flyopen de estas propiedades. La clase .sidebar.flyopen
+       sigue existiendo (la sigue añadiendo openFly() en el JS) y sigue anclando el flyout, que no
+       cambia: su posición ya asumía este ancho. */
+    .nav-item{display:flex;align-items:center;justify-content:flex-start;gap:12px;padding:.55rem .7rem;border-radius:10px;color:var(--chrome-ic);text-decoration:none;cursor:pointer;background:none;border:none;width:100%;font-family:inherit;transition:background .15s,color .15s}
     .nav-item:hover{background:var(--bg3);color:var(--accent)}
     .nav-item.active{background:var(--chrome-active);color:var(--accent)}
     .nav-item i.ti{flex-shrink:0;font-size:20px;line-height:1;color:inherit}
-    /* Etiqueta del rail: oculta en reposo, visible al desplegar */
-    .nav-label{white-space:nowrap;opacity:0;max-width:0;overflow:hidden;font-size:13px;font-weight:500;transition:opacity .12s}
-    .sidebar:hover .nav-label,.sidebar.flyopen .nav-label{opacity:1;max-width:150px}
+    .nav-label{white-space:nowrap;opacity:1;max-width:150px;overflow:hidden;font-size:13px;font-weight:500}
     .nav-item.active .nav-label{font-weight:600}
-    .nav-chev{margin-left:auto;font-size:14px!important;opacity:0;transition:opacity .12s}
-    .sidebar:hover .nav-chev,.sidebar.flyopen .nav-chev{opacity:.45}
+    .nav-chev{margin-left:auto;font-size:14px!important;opacity:.45}
     /* Badge de Propuestas pendientes, pegado a su icono (mismo patrón que el contador
        del topbar que sustituye: círculo rojo pequeño sobre la esquina del icono). */
     .rail-ic{position:relative;display:inline-flex;flex-shrink:0}
@@ -1138,13 +1132,12 @@ ${ROOT_TOKENS}
     .fly-pin:hover{background:var(--border);color:var(--accent)}
     .fly-pin i.ti{font-size:14px!important;width:14px!important;color:inherit!important}
     /* La chincheta de un ÁREA va SUELTA dentro del .navg, no dentro de su botón: un <button> dentro de
-       otro <button> es HTML inválido. Y solo asoma con el rail desplegado — en 62 px no hay sitio.
-       El hueco se lo QUITA AL PADDING de la fila, no al nombre: si se posiciona encima, la chincheta
-       tapa la última letra («Compras y gasto📌») y parece que el menú corta las palabras. */
-    .nav-pin{position:absolute;right:5px;top:50%;transform:translateY(-50%);margin:0;display:none}
-    .sidebar:hover .nav-pin,.sidebar.flyopen .nav-pin,.sidebar.open .nav-pin{display:block}
-    .sidebar:hover .navg>.nav-item,.sidebar.flyopen .navg>.nav-item,.sidebar.open .navg>.nav-item,
-    .sidebar:hover a.nav-item.anc,.sidebar.flyopen a.nav-item.anc,.sidebar.open a.nav-item.anc{padding-right:30px}
+       otro <button> es HTML inválido. El hueco se lo QUITA AL PADDING de la fila, no al nombre: si se
+       posiciona encima, la chincheta tapa la última letra («Compras y gasto📌») y parece que el menú
+       corta las palabras. El rail de escritorio ya no tiene estado "encogido" (11 sep 2026): la
+       chincheta asoma siempre. El estado .sidebar.open (móvil) se conserva igual que antes. */
+    .nav-pin{position:absolute;right:5px;top:50%;transform:translateY(-50%);margin:0;display:block}
+    .navg>.nav-item,a.nav-item.anc,.sidebar.open .navg>.nav-item,.sidebar.open a.nav-item.anc{padding-right:30px}
     .navg:hover .nav-pin,a.nav-item.anc:hover .nav-pin{opacity:1}
     /* (C) El bloque de lo anclado, arriba del rail. VACÍO no ocupa nada: quien no ancla nada ve el
        menú de siempre, byte por byte. */

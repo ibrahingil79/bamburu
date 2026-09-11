@@ -509,7 +509,7 @@ export function createUserRoutes(db) {
         if (t) togglePerm(Number(t.getAttribute('data-id')), t.checked);
       });
 </script>`;
-    return c.html(adminLayout('Usuarios Admin', content, 'users', c.get('session')?.csrfToken || '', c));
+    return c.html(adminLayout('Usuarios Admin', content, 'ajustes', c.get('session')?.csrfToken || '', c));
   });
 
   activityViews.get('/', requirePerm('admin.manage_users'), c => {

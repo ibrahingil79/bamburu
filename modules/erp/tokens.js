@@ -52,7 +52,11 @@ export const ROOT_TOKENS = `
       --chrome-active: #E4EDFF;   /* fondo del item activo (azul claro) */
       --chrome-div:    #EEEFF2;   /* divisor / borde del chrome */
       --brand:         #2F6BFF;   /* marca (sparkles) — azul */
-      --sw:        62px;
+      /* 11 sep 2026 (reorganizar-navegacion-tres-cajones) — el rail deja de ser icono-mudo con
+         expansión al pasar el ratón: ahora lleva SIEMPRE su etiqueta de texto, así que se queda
+         permanentemente en su ancho "desplegado" (antes solo con :hover/.flyopen). --sw-exp sigue
+         sin usarse en ningún sitio (ya estaba así antes de esta ficha; no se toca, no es de aquí). */
+      --sw:        240px;
       --sw-exp:    176px;
       --radius:    9px;
       --radius-lg: 12px;
