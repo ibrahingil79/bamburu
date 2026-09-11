@@ -10323,9 +10323,16 @@ comprueba si se pagó — eso lo concilia el autónomo.~~
 ## 🔍 TAREA — `cobro-online-facturas` (evolución de `enlace-pago-nivel-a`) — CONSTRUIDA, A LA ESPERA DEL OK DE IBRAHIN
 
 - **id:** cobro-online-facturas
-- **estado:** 🔍 **CONSTRUIDA — NO CERRADA.** Regla nueva de esta misma sesión («LO VISIBLE LO VE
+- **estado:** ~~🔍 **CONSTRUIDA — NO CERRADA.** Regla nueva de esta misma sesión («LO VISIBLE LO VE
   IBRAHIN ANTES DE CERRAR», más arriba en este documento): esta tarea tiene pantalla y botón, así
-  que no se marca `✅ HECHA` sola. Queda lista, con el «míralo aquí» de la entrega, esperando el OK.
+  que no se marca `✅ HECHA` sola. Queda lista, con el «míralo aquí» de la entrega, esperando el OK.~~
+  ~~**⏸️ EN PAUSA — DECISIÓN DE IBRAHIN, 11 SEP 2026 (mañana).** Se abandona Stripe Connect para
+  esta pieza y se adopta MONEI.~~ **▶️ REANUDADA — DECISIÓN DE IBRAHIN, 11 SEP 2026 (mismo día,
+  más tarde).** Se sigue tachando y no borrando: la pausa de esta misma mañana dura horas, no días
+  — Ibrahin decide seguir con Stripe; **MONEI se aparca hasta que Bamburu tenga clientes de
+  verdad**. Sigue **CONSTRUIDA — NO CERRADA**, a la espera del OK de Ibrahin. Informe completo de
+  los tres grupos de lo que falta, y lo rematado hoy del grupo (a), en el bloque «▶️ REANUDADA
+  (11 sep 2026)» justo debajo de esta ficha.
 - **origen:** encargo de Ibrahin, 10 sep 2026 · Pilar 4 (Ventas) · Ficha 3 de 3, evolución de
   `enlace-pago-nivel-a`. Commit `3693ef3`.
 
@@ -10456,6 +10463,108 @@ prueba `4242 4242 4242 4242` → la factura se marca pagada sola en unos segundo
       sigue intacto.
 - [ ] Bizum — **no se construye**: en acceso anticipado en Stripe, sin soporte documentado de
       Connect. A la espera de que Stripe lo saque de preview.
+
+~~## ⏸️ EN PAUSA (11 sep 2026) — el cobro del autónomo deja Stripe, pasa a MONEI~~
+
+~~**Decisión de Ibrahin, 11 sep 2026.** Esta ficha (`cobro-online-facturas` — cobro de las facturas
+del autónomo con tarjeta, vía Stripe Connect) **queda EN PAUSA**. Se adopta **MONEI** para el
+cobro del autónomo (tarjeta + Bizum + programa de afiliados) — **Bizum no va por Stripe**, lo cual
+coincide con lo que ya se había comprobado en esta misma ficha (arriba: «Bizum: NO se construye»,
+en acceso anticipado y sin soporte de Connect). **No se construye nada más de esta pieza mientras
+dure la pausa.**~~
+
+~~**Se conserva entero, nada se borra.** [...] **El botón de pago manual («Marcar pagada a mano») y
+el IBAN en la factura — que no dependen del proveedor — se quedan intactos y en producción**,
+exactamente como ya estaban antes de esta ficha.~~
+
+~~**Próximo paso, cuando se retome:** confirmar con MONEI las condiciones de socio (programa de
+afiliados) y montar la integración desde cero — hoy no hay nada de MONEI construido.~~
+
+**⚙️ CORREGIDO EL MISMO 11 SEP 2026, HORAS DESPUÉS, POR DECISIÓN DE IBRAHIN: se tacha entera, no se
+borra.** Se vuelve con Stripe. Ver el bloque siguiente.
+
+## ▶️ REANUDADA (11 sep 2026) — se vuelve con Stripe; MONEI se aparca hasta que haya clientes
+
+**Decisión de Ibrahin, 11 sep 2026.** La pausa de esta misma mañana queda **levantada**: se sigue
+con Stripe Connect para esta ficha. **MONEI no se descarta — se aparca hasta que Bamburu tenga
+clientes de verdad**, que es cuando tiene sentido negociar condiciones de socio con un proveedor
+nuevo. Nada de lo de MONEI se ha construido ni se va a construir mientras tanto.
+
+### Informe pedido por Ibrahin: qué falta para el cobro con tarjeta al 100%, en tres grupos
+
+**(a) Lo que se remata por código, sin que Ibrahin toque nada — HECHO HOY, con una excepción
+anotada abajo.**
+**(b) Lo que necesita que Ibrahin pulse algo en su panel de Stripe, pero SIN ser autónomo (modo
+práctica — nada de esto pide dar de alta un negocio real):**
+1. 🚨 **Nuevo, urgente — refrescar la clave secreta de PRUEBA de Stripe.** Descubierto construyendo
+   hoy, no lo pidió el encargo: la `STRIPE_SECRET_KEY` que hay puesta en el servidor está
+   **caducada** (`api_key_expired`, comprobado contra `/v1/balance` y `/v1/webhook_endpoints` de
+   Stripe DE VERDAD — no es un fallo de lectura del fichero). Con esto así, **CUALQUIER llamada a
+   Stripe falla**, incluida la de la suscripción de Bamburu el día que le toque cobrar a un
+   negocio de verdad. Se soluciona en dos minutos: Dashboard de Stripe → Developers → API keys
+   (modo TEST) → copiar la clave secreta de prueba → `bash scripts/configurar-stripe.sh` en el
+   servidor (pide la clave por teclado, nunca por la línea de comandos). **Esto NO exige estar
+   dado de alta como autónomo en Stripe** — es la misma clave de prueba de siempre.
+2. **Activar la cuenta como plataforma de Connect** — `dashboard.stripe.com/connect` → completar
+   el «platform profile» (unas preguntas cortas sobre qué construye Bamburu). Comprobado hoy contra
+   la documentación oficial de Stripe (`docs.stripe.com/connect/testing`): esto se puede completar
+   y probarse entero en modo prueba, **sin activar el negocio con datos reales** — Stripe lo dice
+   con sus propias palabras («connected accounts […] never require real identity verification» en
+   modo prueba). Es el mismo bloqueo ya anotado el 10 sep: sin este clic, ninguna cuenta conectada
+   se puede crear, ni de prueba ni real. **Solo lo puede hacer Ibrahin, en su Dashboard — no hay
+   atajo de API.**
+
+**(c) Lo que solo tiene sentido en el lanzamiento (activar el dinero real, negocio dado de alta de
+verdad):**
+- Pasar la cuenta de Stripe a modo real: `bash scripts/configurar-stripe.sh --modo-real` con la
+  clave `sk_live_`, cosa que ya exige el cerrojo de `core/stripe.js` (pide escribir «COBRAR DE
+  VERDAD» por teclado).
+- **La clave REAL del webhook de Connect** (la de `sk_live_`, para producción) — solo existe una
+  vez Stripe tiene la cuenta en modo real; hasta entonces no hay nada que pedirle. **No confundir
+  con la clave de PRÁCTICA**, que sí es de hoy (ver grupo (a) más abajo) y sí se puede sacar en
+  modo prueba sin esperar al lanzamiento.
+- Que cada autónomo cliente de Bamburu complete su propio onboarding de Stripe con datos reales
+  (banco de verdad) — eso ya está construido y probado (el botón «Conectar»); lo hace cada
+  autónomo, no Ibrahin, y solo funciona una vez resuelto el punto (b)2 de arriba.
+
+**En resumen, a lo que preguntó Ibrahin directamente:** *"activar la cuenta como plataforma de
+Connect"* → **grupo (b)**, un clic de Ibrahin en modo práctica, sin negocio real. *"La clave real
+del webhook"* → **grupo (c)**, solo existe en modo real / lanzamiento — la clave de PRÁCTICA del
+webhook (grupo (a)) es una cosa distinta y ya está puesta hoy, ver abajo.
+
+### Grupo (a) — rematado hoy
+
+- **Gate re-corrido de punta a punta, con Stripe de verdad en modo prueba: 22 ✓ · 0 ✗** (idéntico al
+  del 10 sep — nada se ha roto al reanudar).
+- **Prueba en rojo antes de verde, en la misma tanda, pedida por Ibrahin:** se rompió a propósito
+  `secretoWebhookConectado()` (`core/stripe.js`) para que devolviera un secreto que no es el real,
+  se reinició el servidor y se relanzó el gate → **cayeron en rojo exactamente las 7 aserciones del
+  webhook** (firma rechazada con 400 en vez de 200, nada se inserta en `invoice_payments`, nada se
+  duplica porque nada llega), sin tocar ni una de las otras 15. Revertido el cambio (`git diff`
+  limpio, confirmado), servidor reiniciado, gate relanzado: **verde otra vez, 22 ✓ · 0 ✗**, idéntico.
+- **🛑 Bloqueado, y no por falta de código:** con la clave caducada (punto (b)1 de arriba), no se
+  ha podido registrar contra Stripe el webhook de Connect de verdad (`POST /v1/webhook_endpoints`
+  con `connect=true` — confirmado contra la documentación oficial de Stripe que ese parámetro
+  existe y es justo para esto). **`STRIPE_CONNECT_WEBHOOK_SECRET` en `/etc/bamburu.env` sigue
+  siendo el PLACEHOLDER de antes, no la clave de práctica de verdad**, porque no hay con qué
+  pedírsela a Stripe hoy. En cuanto Ibrahin refresque la clave (grupo (b), punto 1), esto se
+  termina por código, sin que haga falta nada más suyo: se registra el webhook vía API, se guarda
+  el secreto real de prueba (nada de placeholder) y se vuelve a pasar el gate.
+- No se ha tocado el cobro de la suscripción de Bamburu (9,90 €/mes) ni una fila del cálculo del
+  hash Verifactu — comprobado (`git diff` no toca ni `documentos.js` ni las tablas de suscripción).
+
+### Grupo (b) — la lista corta para Ibrahin
+
+1. 🚨 Refrescar la clave secreta de PRUEBA en el servidor (`bash scripts/configurar-stripe.sh`) —
+   la actual está caducada.
+2. Darse de alta como plataforma de Connect en `dashboard.stripe.com/connect` (modo práctica, sin
+   datos de negocio real).
+
+Con esas dos cosas hechas, se completa solo el resto del grupo (a) (el webhook de práctica) y se
+puede probar el ciclo entero de principio a fin, en modo prueba, sin nada más pendiente que
+activar el dinero real el día del lanzamiento (grupo (c)).
+
+**No se cierra la ficha.** Sigue **CONSTRUIDA — NO CERRADA**, esperando el OK de Ibrahin.
 
 ---
 
