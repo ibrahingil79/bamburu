@@ -116,6 +116,71 @@ propio simulacro de arrastrar y soltar) y el encargo no lo pedía arriba del tod
 **No se cierra la ficha** (tiene pantalla y botón: rige la regla del 10 sep). Sigue **HECHA — NO
 CERRADA**, esperando el OK de Ibrahin.
 
+## ✅ HECHA (2026-09-11) — Ibrahin no podía pagar una factura en desarrollo-bamburu: causa real y arreglo
+
+- **id:** revisar-logs-arreglar-pago-factura
+- **estado:** hecha — probada de verdad de principio a fin, esperando el OK de Ibrahin
+- **origen:** encargo DIRECTO de Ibrahin, 11 sep 2026 (misma noche, tras la reorganización de arriba).
+  Igual que esa: excepción explícita a la prioridad de Pilar 4, por orden del dueño.
+
+**QUÉ SE PIDIÓ:** revisar los registros de verdad de la última hora en `desarrollo-bamburu`, reproducir
+el camino del cliente de principio a fin, decir en qué paso se rompía, arreglar un aviso contradictorio
+concreto en Ajustes → Portal de cliente, y arreglar la causa real hasta que el cobro funcionara de
+verdad.
+
+**LO QUE DECÍAN LOS REGISTROS, comprobado y no supuesto:**
+- `sudo journalctl -u bamburu` de la última hora: **cero errores**. `error_log` (`control.db`),
+  filtrado por `ts` de verdad: **cero filas en la última hora**. `GET /v1/checkout/sessions` y
+  `/v1/payment_intents` de la cuenta conectada real (`acct_1UEWXURRpoYkamX3`), ANTES de tocar nada:
+  **cero sesiones, cero intentos de cobro**. Ibrahin **nunca llegó a pulsar «Pagar con tarjeta»** —
+  no hay ni un rastro de que Stripe recibiera una petición de cobro. No hubo una excepción que cazar:
+  el camino se cortó antes, por otro motivo.
+- Cruce de tablas del propio negocio: la factura de prueba (`F2026-1271`, 435,60 €) es del **cliente
+  106** (Ana Suárez Campos), pero el ÚNICO enlace de portal que se generó hoy (15:54) fue para el
+  **cliente 9** (pedro) — que tiene **CERO facturas**. Ibrahin abrió el portal del cliente equivocado:
+  vio la pantalla vacía de «no tienes facturas pendientes», no un error, y de ahí «no encontré cómo
+  llegar a pagar una factura» — el enlace del cliente 106 no existía todavía, así que no había otro
+  sitio al que ir.
+
+**REPRODUCIDO YO, de principio a fin, sobre el negocio y la factura reales (no un simulacro):**
+generado el enlace del cliente 106 (que le faltaba) → abierto como lo ve el cliente → «Pagar con
+tarjeta» visible para `F2026-1271` → Checkout REAL de Stripe → tarjeta `4242 4242 4242 4242` con
+navegador de verdad → Stripe devuelve a Bamburu → **webhook real recibido, `PaymentIntent`
+`succeeded` confirmado contra Stripe, factura marcada «Pagada» sola**. **11 ✓ · 0 ✗, sin romperse en
+ningún paso.** El mecanismo de cobro no tenía ninguna avería — lo que faltaba era el enlace del
+cliente correcto, y eso ya queda resuelto: `F2026-1271` está pagada de verdad, en modo prueba.
+
+**EL AVISO CONTRADICTORIO — causa real, encontrada y arreglada (`modules/portal/admin.js`):**
+`/stripe/retorno` (la vuelta del onboarding de Stripe) comprueba el estado de verdad y, si en ESE
+instante la cuenta todavía no está lista, redirige con el aviso rojo metido en la URL
+(`?err=…todavía pide algún dato…`). Pero Stripe puede tardar unos segundos en activar la cuenta
+DESPUÉS de ese instante (medido hoy mismo, antes: entre 5 y 21 segundos) — y el aviso se quedaba
+**colgado en la URL del navegador**, contradiciendo al «✅ Listo para cobrar» que para entonces ya
+era cierto. Arreglado: el redirect ahora manda un código estable (`err=stripe_pendiente`, no el
+texto ya traducido) y la pantalla lo vuelve a comprobar contra `stripe_connect_listo` en cada carga
+— si la cuenta YA está lista, ese aviso concreto no se pinta, sin tocar los demás `err` (fallos de
+verdad al crear la cuenta o el enlace, que no dependen de este estado).
+
+**Prueba en rojo antes de verde, en la misma tanda:** se revirtió el arreglo a propósito y se
+repitió la comprobación sobre `desarrollo-bamburu` de verdad → **volvió la contradicción exacta**
+(el verde seguía, el rojo también). Revertido (`git diff` limpio, confirmado), relanzado: **verde
+otra vez, 3 ✓ · 0 ✗**. Capturas miradas: la pantalla real de Ajustes → Portal de cliente, con la URL
+exacta que traía el aviso colgado, muestra ahora solo el verde.
+
+**No arreglado aquí, por ser una decisión de producto y no un error — anotado para Ibrahin:** el
+verdadero motivo de fondo por el que es fácil generar el enlace del cliente equivocado es que
+**ninguna pantalla de factura enlaza directamente al portal de SU cliente** — hay que acordarse de
+qué cliente es y ir a buscarlo, entre cientos, en Clientes → Portal de cliente. No se ha añadido un
+atajo «enviar el enlace de este cliente» dentro de la factura porque sería una función nueva, no un
+arreglo, y el encargo pedía arreglar causas, no construir. Si Ibrahin lo quiere, es un encargo aparte.
+
+**Desplegado y verificado contra la dirección pública.** `node scripts/verify-residuo-de-pruebas.mjs`
+→ 0 restos (la factura pagada y el enlace del cliente 106 NO son residuo de prueba: son el propio
+encargo de Ibrahin, resuelto de verdad, y se dejan tal cual). No se ha tocado el hash Verifactu ni
+la suscripción de Bamburu.
+
+**No se cierra la ficha** (tiene pantalla). Sigue **HECHA — NO CERRADA**, esperando el OK de Ibrahin.
+
 > ⚙️⚙️ **LA FASE DE SANEAMIENTO QUEDA DEROGADA. DECISIÓN DE IBRAHIN, 2 SEP 2026.** **La lista de 97
 > tareas del 2 de septiembre (§LA COLA) deroga esta fase.** Lo que quedara de saneamiento **no
 > desaparece: vive DENTRO de la lista, en su orden**, mezclado con lo demás y sin prioridad especial.

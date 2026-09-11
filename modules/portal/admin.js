@@ -22,7 +22,6 @@ export function createPortalAdminRoutes(db) {
         (SELECT COUNT(*) FROM portal_tokens t WHERE t.client_id=c.id AND t.revoked=0 AND t.expires_at > strftime('%s','now')) enlaces
         FROM clients c ORDER BY c.name`).all();
     const flash = c.req.query('sent') ? `<div style="margin:.5rem 0;padding:.5rem .75rem;border-left:3px solid var(--ok);background:var(--ok-s);font-size:12px;color:var(--ok)">Enlace enviado a ${escHtml(c.req.query('sent'))}.</div>` : '';
-    const err = c.req.query('err') ? `<div style="margin:.5rem 0;padding:.5rem .75rem;border-left:3px solid var(--danger);background:var(--danger-s);font-size:12px;color:var(--danger)">${escHtml(cleanErrMsg(c.req.query('err')))}</div>` : '';
     // FICHA G2 — cuántos mensajes SIN LEER tiene cada cliente esperando al negocio.
     const pend = new Map(sinLeer(db, 'negocio').map(x => [x.client_id, x.n]));
     const filas = clientes.map(cl => `<tr>
@@ -38,6 +37,19 @@ export function createPortalAdminRoutes(db) {
     const totalPend = [...pend.values()].reduce((a, b) => a + b, 0);
     // Ficha `cobro-online-facturas` (10 sep 2026) — estado de la cuenta conectada de Stripe.
     const cfgCobro = db.prepare('SELECT stripe_connect_account_id, stripe_connect_listo FROM company_config WHERE id=1').get() || {};
+    // ⚙️ 11 sep 2026 (revisar-logs-arreglar-pago-factura) — EL AVISO ROJO SE RE-COMPRUEBA CONTRA EL
+    // ESTADO DE VERDAD, no contra lo que diga la URL. `stripe_pendiente` viene de `/stripe/retorno`
+    // (código estable, no el texto ya traducido) y decía «todavía pide algún dato» EN EL INSTANTE del
+    // redirect — pero Stripe puede activar la cuenta unos segundos después de ese instante, y el
+    // aviso se quedaba colgado en la URL contradiciendo al «✅ Listo para cobrar» que ya era cierto.
+    // Si `cfgCobro.stripe_connect_listo` dice que SÍ está lista, ese aviso concreto ya no es cierto:
+    // no se pinta. El resto de los `err` (fallo real al crear la cuenta o el enlace) no depende de
+    // este estado y se sigue mostrando igual que siempre.
+    const errQuery = c.req.query('err') || '';
+    const err = !errQuery ? ''
+      : errQuery === 'stripe_pendiente'
+        ? (cfgCobro.stripe_connect_listo ? '' : `<div style="margin:.5rem 0;padding:.5rem .75rem;border-left:3px solid var(--danger);background:var(--danger-s);font-size:12px;color:var(--danger)">Casi. Stripe todavía pide algún dato más — pulsa «Continuar» para terminarlo.</div>`)
+        : `<div style="margin:.5rem 0;padding:.5rem .75rem;border-left:3px solid var(--danger);background:var(--danger-s);font-size:12px;color:var(--danger)">${escHtml(cleanErrMsg(errQuery))}</div>`;
     const cobroCard = !estaConfigurado()
       ? `<div class="card" style="margin-top:1rem"><div class="card-body"><h3>Cobro con tarjeta</h3>
           <p style="color:var(--text2);font-size:12px;margin:.3rem 0 0">Stripe no está configurado en este servidor todavía.</p></div></div>`
@@ -103,7 +115,14 @@ export function createPortalAdminRoutes(db) {
       const r = await recuperarCuentaConectada(cfg.stripe_connect_account_id);
       const listo = r.ok && !!r.datos?.charges_enabled;
       db.prepare('UPDATE company_config SET stripe_connect_listo=? WHERE id=1').run(listo ? 1 : 0);
-      return c.redirect('/admin/portal' + (listo ? '' : '?err=' + encodeURIComponent('Casi. Stripe todavía pide algún dato más — pulsa «Continuar» para terminarlo.')));
+      // ⚙️ 11 sep 2026 (revisar-logs-arreglar-pago-factura) — CÓDIGO ESTABLE, no el texto ya traducido:
+      // este aviso se vuelve a comprobar contra el estado de VERDAD (`stripe_connect_listo`) en cada
+      // carga de la pantalla (ver más abajo), y solo se pinta si SIGUE sin estar listo. Con el texto
+      // suelto en la URL, Ibrahin vio el aviso rojo «todavía pide algún dato» A LA VEZ que el verde
+      // «Listo para cobrar»: Stripe tarda unos segundos en activar la cuenta tras el retorno del
+      // onboarding, así que el aviso nacía cierto en el instante del redirect y se quedaba COLGADO en
+      // la URL del navegador después de que la cuenta se activara sola.
+      return c.redirect('/admin/portal' + (listo ? '' : '?err=stripe_pendiente'));
     } catch (e) { return c.redirect('/admin/portal?err=' + encodeURIComponent(e.message || 'No se pudo comprobar el estado de la cuenta')); }
   });
 
