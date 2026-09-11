@@ -181,6 +181,71 @@ la suscripción de Bamburu.
 
 **No se cierra la ficha** (tiene pantalla). Sigue **HECHA — NO CERRADA**, esperando el OK de Ibrahin.
 
+## 🔍 INVESTIGADA (2026-09-11) — "Gestionar cuenta" no se cuelga hoy; aclarado qué hace y cuál es el camino de pago real
+
+- **id:** aclarar-gestionar-cuenta-y-camino-de-pago
+- **estado:** investigada de verdad, sin avería reproducible — esperando el OK de Ibrahin
+- **origen:** encargo DIRECTO de Ibrahin, 11 sep 2026 (misma noche, cuarto encargo consecutivo).
+
+**QUÉ SE PIDIÓ:** revisar registros al pulsar «Gestionar cuenta» en Clientes → Ana Suárez Campos →
+ventana «Te debe» (se cuelga), arreglar la causa, aclarar qué hace hoy ese botón, y confirmar el
+camino real y exacto para que un cliente pague con tarjeta.
+
+**BUSCADO EN LOS REGISTROS, y no encontrado nada roto:** `journalctl` y `error_log` de la ventana en
+la que se probó: limpios. Reproducido el camino EXACTO con navegador de verdad (Clientes → Ana
+Suárez Campos → pulsar la tarjeta «Te debe» → pulsar «Gestionar cuenta»), con consola del navegador
+y red capturadas: **cero errores, cero peticiones fallidas**, el modal abre con los datos reales
+(1.255,30 € en 6 facturas) en menos de un segundo. Repetido en móvil (390 px): igual. Probadas
+también las tres acciones de dentro (Mandar recordatorio, Registrar promesa, Registrar cobro a
+cuenta) y el botón «Gestionar» de una factura suelta (el otro, parecido, de la misma tabla): las
+cuatro renderizan bien, sin error. **`git log` confirma que este código no ha cambiado desde el 4
+sep** — no hay una avería reciente que un reinicio de hoy haya podido tapar sin querer.
+
+**Conclusión honesta, no supuesta: no se ha podido reproducir ningún cuelgue hoy**, en escritorio ni
+en móvil, en el botón ni en ninguna de sus acciones. No se ha tocado ni una línea de código —no hay
+avería que arreglar—, y por tanto tampoco hay prueba en rojo/verde que hacer para esta ficha
+concreta: inventar un arreglo sin causa habría sido justo lo que este encargo pedía no hacer.
+Motivos posibles de lo que vio Ibrahin, sin poder confirmarlos desde aquí: una conexión lenta o un
+clic doble en el momento, o confundir este botón con el de gestión de UNA factura suelta (mismo
+nombre parecido, «Gestionar», en la misma tabla). Queda anotado por si vuelve a pasar.
+
+**QUÉ HACE HOY «GESTIONAR CUENTA», en cristiano:** abre un panel para **gestionar el cobro manual de
+TODA la deuda del cliente a la vez** (todas sus facturas vencidas juntas, no una por una). Desde ahí
+se puede: (a) mandar UN solo email de recordatorio que resume toda la deuda, (b) apuntar una
+«promesa de pago» (una fecha en la que dice que va a pagar, para posponer la siguiente acción de
+todas sus facturas), o (c) registrar un cobro que el autónomo ya recibió POR SU CUENTA (efectivo,
+transferencia…) y repartirlo entre las facturas vivas. **No habla con Stripe. No cobra con tarjeta.
+No manda nada al cliente para que pague online.** Es la herramienta de "reclamar la deuda a mano",
+no la de "cobrar con tarjeta".
+
+**CUÁL ES, HOY, EL CAMINO REAL PARA QUE UN CLIENTE PAGUE CON TARJETA — confirmado de nuevo, paso a
+paso, tal cual lo tiene que hacer el dueño desde el panel:**
+1. `Clientes` → abrir la ficha del cliente que va a pagar (o ir directo a `Clientes → Portal de
+   cliente`).
+2. En `Portal de cliente`, buscar a ESE cliente en la lista y pulsar **«Enviar enlace»** (le llega
+   por email) — o copiar su enlace a mano si se prefiere.
+3. El cliente abre su enlace, ve sus facturas pendientes, y pulsa **«Pagar con tarjeta»** en la que
+   quiera pagar.
+4. Paga en el Checkout de Stripe (alojado por Stripe, la tarjeta nunca pasa por Bamburu). La factura
+   se marca pagada sola, sin que el dueño toque nada.
+
+**Este camino NO pasa por «Gestionar cuenta» en ningún punto**, y **no existe ningún botón para que
+el DUEÑO cobre la tarjeta desde el panel** — el cobro siempre lo dispara el cliente, desde su propio
+enlace. Es diseño a propósito (el número de tarjeta nunca llega a Bamburu), no un hueco.
+
+**¿Es claro o está escondido? Está escondido — mismo hallazgo que la ficha de esta misma noche
+sobre `desarrollo-bamburu`, y se repite porque es la misma causa:** ni la factura, ni «Gestionar
+cuenta», ni ningún sitio de la ficha del cliente menciona o enlaza al portal del cliente. Para
+mandar un enlace de pago hay que SABER que existe `Clientes → Portal de cliente`, ir ahí aparte, y
+encontrar a mano al cliente correcto entre todos. Es fácil, viniendo de «Gestionar cuenta» (que
+suena a «así es como cobro»), pensar que ese es el camino — y no lo es. **No se ha construido
+ningún atajo nuevo** (sería función nueva, no arreglo, y esta ficha no lo pedía) — queda anotado,
+igual que en la ficha anterior, para que Ibrahin decida si lo quiere como encargo aparte.
+
+**No se ha tocado ningún fichero de código, el hash Verifactu ni la suscripción de Bamburu.**
+
+**No se cierra la ficha.** Sigue **INVESTIGADA — NO CERRADA**, esperando el OK de Ibrahin.
+
 > ⚙️⚙️ **LA FASE DE SANEAMIENTO QUEDA DEROGADA. DECISIÓN DE IBRAHIN, 2 SEP 2026.** **La lista de 97
 > tareas del 2 de septiembre (§LA COLA) deroga esta fase.** Lo que quedara de saneamiento **no
 > desaparece: vive DENTRO de la lista, en su orden**, mezclado con lo demás y sin prioridad especial.
