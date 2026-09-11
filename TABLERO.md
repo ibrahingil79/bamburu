@@ -10564,7 +10564,49 @@ Con esas dos cosas hechas, se completa solo el resto del grupo (a) (el webhook d
 puede probar el ciclo entero de principio a fin, en modo prueba, sin nada más pendiente que
 activar el dinero real el día del lanzamiento (grupo (c)).
 
-**No se cierra la ficha.** Sigue **CONSTRUIDA — NO CERRADA**, esperando el OK de Ibrahin.
+### 🛑 Verificación de hoy (11 sep 2026, tarde) — la clave SIGUE caducada, nada se ha podido rematar
+
+**Encargo de Ibrahin (11 sep, tarde):** comprobar contra Stripe de verdad que la clave del servidor
+es válida, la cuenta está activa y Connect activado como plataforma; ver si la cuenta es la misma
+de siempre o una nueva (y si es nueva, reapuntar el cobro de facturas y la suscripción de Bamburu);
+poner el secreto real del webhook de Connect (ya no el placeholder); dejar el cobro con tarjeta
+probado de punta a punta. Partía de la premisa **«llave nueva instalada con el script»**.
+
+**Comprobado contra Stripe de verdad, ahora mismo — la premisa no se sostiene:**
+- `/etc/bamburu.env` **no se ha tocado desde el 10 sep 2026 22:00:02**, y **no existe**
+  `/etc/bamburu.env.antes-de-stripe` — la copia que `configurar-stripe.sh` crea SIEMPRE, sin
+  excepción, en el mismo paso en que escribe la clave. Sin esa copia, el guion no ha escrito nada
+  desde entonces.
+- `GET /v1/balance` y `GET /v1/account` con la clave que hay puesta hoy devuelven, los dos,
+  **`api_key_expired`** — el mismo fallo que ya estaba anotado, no uno nuevo. La clave no ha
+  cambiado.
+- El histórico de comandos (`.bash_history`) muestra `bash scripts/configurar-stripe.sh` corrido
+  DOS veces. El guion comprueba la clave contra Stripe **antes** de escribir nada (`GET /v1/balance`
+  → tiene que responder 200): si no escribió — y no lo hizo, ver arriba —, es que las dos claves
+  que se pegaron esas dos veces tampoco pasaron la comprobación. No hay ninguna clave nueva en el
+  servidor, funcione o no.
+- `STRIPE_CONNECT_WEBHOOK_SECRET` sigue siendo el placeholder generado el 10 sep (54 caracteres
+  hexadecimales), sin tocar.
+
+**Consecuencia: nada de lo pedido se ha podido hacer, y no por falta de intento.** Sin una clave que
+Stripe acepte no hay llamada posible, así que **no se ha podido**: confirmar cuenta ni Connect,
+decidir si la cuenta es la misma o una nueva (se intentó pedirle a Stripe cuatro objetos conocidos
+de la cuenta de antes —dos clientes, un método de pago, el cobro del 2 sep— y los cuatro fallaron
+con el mismo `api_key_expired`, así que ni eso se puede saber hoy), reapuntar nada (no hay cuenta
+nueva confirmada a la que reapuntar), dar de alta el webhook de Connect por API, ni probar ningún
+cobro de punta a punta. **No se ha tocado ni un fichero de código, ni `/etc/bamburu.env`, ni
+`control.db`** (comprobado: `git status` limpio) — por tanto tampoco la suscripción de Bamburu
+(9,90 €/mes) ni el hash Verifactu, que ya estaban fuera del alcance de esta comprobación. No hace
+falta prueba en rojo/verde: no se ha tocado ningún código que probar.
+
+**SIGUIENTE, y solo lo puede hacer Ibrahin:** copiar una clave secreta de **PRUEBA** recién sacada
+de `dashboard.stripe.com/test/apikeys` (no la que ya se probó que no vale) y correr
+`bash scripts/configurar-stripe.sh` él mismo, en su terminal — el secreto no pasa nunca por el chat.
+De paso, ya que está en el Dashboard, mirar en `dashboard.stripe.com/connect` si la plataforma está
+activada. En cuanto avise de que lo ha hecho, se retoma todo lo de esta ficha en el mismo punto.
+
+**No se cierra la ficha.** Sigue **CONSTRUIDA — NO CERRADA**, esperando el OK de Ibrahin — y ahora,
+además, esperando una clave de Stripe que de verdad funcione.
 
 ---
 
