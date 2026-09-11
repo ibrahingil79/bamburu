@@ -32,6 +32,7 @@ import { launchOpts, APP_DIR } from './lib/gate-env.mjs';
 import { provisionTenant } from '../core/tenant-provisioning.js';
 import { controlDb, getTenantBySlug } from '../core/control-db.js';
 import { soltarAtaduras } from './lib/tirar-negocio.mjs';
+import { stripeApi } from '../core/stripe.js';
 
 let pass = 0, fail = 0;
 const ok = (c, m, e = '') => { (c ? pass++ : fail++); console.log((c ? '  ✓ ' : '  ✗ FALLO: ') + m + (e ? ' — ' + e : '')); };
@@ -53,8 +54,14 @@ function firmarWebhook(cuerpo, secreto, t = Math.floor(Date.now() / 1000)) {
   return `t=${t},v1=${v1}`;
 }
 
-function borrarTenant(slug) {
+async function borrarTenant(slug) {
   const t = getTenantBySlug(slug);
+  // ⚙️ 11 sep 2026 — con Connect YA ACTIVADO de verdad, el negocio A crea una cuenta Express REAL
+  // en Stripe (antes de hoy, esto SIEMPRE estaba bloqueado por Stripe y nunca llegaba a crearse
+  // nada — «lo que un gate crea, lo borra» no tenía nada que borrar aquí). Ahora sí lo crea, así
+  // que hay que borrarla de Stripe también, no solo la fila local.
+  const fila = t ? controlDb.prepare('SELECT account_id FROM stripe_connect_accounts WHERE tenant_id=?').get(t.id) : null;
+  if (fila?.account_id) { try { await stripeApi('DELETE', `/accounts/${fila.account_id}`); } catch {} }
   soltarAtaduras(slug);
   controlDb.prepare('DELETE FROM tenants WHERE slug=?').run(slug);
   controlDb.prepare('DELETE FROM stripe_connect_accounts WHERE tenant_id=?').run(t?.id ?? -1);
@@ -246,6 +253,6 @@ try {
   console.log(pass + ' OK · ' + fail + ' fallos');
 } finally {
   try { if (b) await b.close(); } catch {}
-  for (const sl of creados) { try { borrarTenant(sl); } catch {} }
+  for (const sl of creados) { try { await borrarTenant(sl); } catch {} }
   process.exit(fail === 0 ? 0 : 1);
 }

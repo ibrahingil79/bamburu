@@ -432,14 +432,21 @@ export async function desasociarMetodo(metodoId) {
 // EXPRESS, no Standard ni Custom: onboarding alojado por Stripe (el autónomo rellena SUS datos en
 // la web de Stripe, no en un formulario nuestro que tendría que guardarlos), y no exige que el
 // autónomo entre nunca al Dashboard de Stripe para nada del día a día — coincide con «una vez y
-// listo» del encargo. Con `card_payments` únicamente: no se pide `transfers` porque los cargos
-// directos no mueven dinero A TRAVÉS de la plataforma, así que Bamburu no necesita esa capacidad.
+// listo» del encargo.
+//
+// ⚙️ `transfers` SÍ SE PIDE, aunque la ficha original decía que no (11 sep 2026, activando Connect
+// de verdad en una cuenta nueva). Stripe lo rechaza si falta: «Accounts do not currently support
+// `card_payments` without `transfers`» — confirmado hoy contra Stripe DE VERDAD, no de memoria. NO
+// cambia la promesa del encargo: pedir la CAPACIDAD no mueve un céntimo por la plataforma; sigue
+// sin haber `application_fee_amount` ni `transfer_data` en ningún cargo (ver `crearSesionDePagoFactura`
+// más abajo, sin tocar) — Stripe la exige como requisito de la cuenta Express, no como parte del
+// dinero que circula. Cambio quirúrgico y aditivo: una capacidad más, cero lógica de cobro tocada.
 export async function crearCuentaConectada({ email, tenantId, slug }) {
   const params = {
     type: 'express',
     country: 'ES',
     email: email || undefined,
-    capabilities: { card_payments: { requested: true } },
+    capabilities: { card_payments: { requested: true }, transfers: { requested: true } },
     metadata: { bamburu_tenant_id: String(tenantId), bamburu_slug: slug || '' },
     business_type: 'individual',   // autónomo — se puede corregir en el propio onboarding de Stripe
   };

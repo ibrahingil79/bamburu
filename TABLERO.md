@@ -10743,6 +10743,91 @@ conectada de verdad con los valores de verificación instantánea que documenta 
 prueba, Checkout real con la tarjeta 4242, y el webhook disparado por Stripe de verdad (no
 autofirmado por el gate, como hasta ahora).
 
+### ✅ Ibrahin activó «Accounts v1 support» (11 sep 2026, misma noche) — pago real completo, con UN cabo suelto real
+
+**Encargo de Ibrahin:** hacer la prueba real de punta a punta — conectar una cuenta de prueba,
+cobrar una factura de principio a fin, y confirmar que el webhook la marca pagada sola.
+
+**Segundo bloqueo real, distinto, encontrado y arreglado en el momento — cambio quirúrgico y
+aditivo, código mínimo:**
+- `POST /v1/accounts` con solo `card_payments` ahora lo rechaza Stripe: *"Accounts do not currently
+  support `card_payments` without `transfers`."* Confirmado en vivo, no de memoria. Se pide también
+  `transfers` en `crearCuentaConectada()` (`core/stripe.js`) — **NO cambia la promesa del encargo**:
+  pedir la capacidad no mueve dinero por la plataforma; sigue sin `application_fee_amount` ni
+  `transfer_data` en ningún cargo. Es un requisito de Stripe sobre la CUENTA, no sobre el DINERO.
+
+**Tercer bloqueo real, y el más raro de los tres — el botón no llegaba a ningún sitio, EN
+SILENCIO:** con la cuenta conectada ya activa de verdad (verificación instantánea de Stripe en
+modo prueba: DOB `1902-01-01`, documento `222222222`, dirección `address_full_match` — todo
+documentado por Stripe, no inventado), pulsar «Pagar con tarjeta» en un navegador de verdad se
+quedaba **quieto en `/portal`**, sin más. Ni error, ni petición fallida vista por fuera: el
+servidor SÍ contestaba (302 a Checkout, medido con una petición directa, 1,2 s) pero **el
+navegador nunca navegaba**. Causa: la CSP de `/portal` —endurecida a propósito el 4 sep
+(`csp-unsafe-inline`)— lleva `form-action 'self' https://*.bamburu.com`, y eso frena la
+redirección FINAL de un `<form>` aunque la URL a la que se envía sea nuestra: el navegador bloquea
+en silencio en cuanto la respuesta redirige a un dominio fuera de la lista. **No se arregló
+metiendo JavaScript al portal** — el propio código dice, en la ruta vecina `/portal/mensaje`, que
+el portal «no lleva JavaScript y no se le va a meter uno solo para esto», y `/portal` está en
+`SUPERFICIES_ESTRICTAS` con **CERO** bloques en línea, medido. Se añadió el dominio exacto del
+Checkout de Stripe a `form-action` (`core/security-headers.js`), y nada más — ni un script, ni un
+nonce nuevo.
+
+**Con las tres cosas arregladas, PROBADO DE VERDAD, de principio a fin, en modo prueba:**
+- Cuenta Custom conectada creada en Stripe, con verificación instantánea → `charges_enabled: true`.
+- Factura real de 121,00 € en un negocio de prueba, con la cuenta conectada puesta.
+- Botón «Pagar con tarjeta» pulsado en un navegador de verdad (Puppeteer) → Checkout REAL de Stripe
+  (`checkout.stripe.com`, no un simulacro) → tarjeta `4242 4242 4242 4242` tecleada y enviada →
+  Stripe devuelve a Bamburu con `?pago=ok`.
+- **Confirmado contra Stripe mismo:** el `PaymentIntent` de esa cuenta conectada quedó `succeeded`,
+  por 121,00 € recibidos de verdad (en modo prueba). **El cobro real funciona de punta a punta.**
+
+**🛑 EL CABO SUELTO, real y sin resolver — no se disimula:** el webhook que debía avisar a Bamburu
+de ese pago (`payment_intent.succeeded`, disparado por STRIPE, no autofirmado por ningún gate)
+**no llegó al servidor ni una vez**, en tres intentos, el último esperando **5 minutos completos**.
+Comprobado que no es cosa nuestra hasta donde se puede ver desde aquí: la ruta responde bien a una
+llamada directa (HTTP 400 con firma inválida, tal como está escrita), el dominio resuelve y
+responde de verdad desde este mismo servidor, y el código que la procesa es el MISMO que ya pasa
+el gate con un aviso autofirmado. Lo único que no se puede comprobar por API es si Stripe **llegó
+siquiera a intentar** la entrega — eso solo lo enseña el panel de Stripe (Developers → Webhooks →
+el endpoint `/stripe/connect/webhook` → intentos de entrega), y no hay atajo de API para verlo.
+**Por eso el criterio de aceptación de más abajo se corrige, no se calla**: lo que está probado es
+que el mecanismo FUNCIONA con un aviso con la forma exacta de Stripe (gate, autofirmado); lo que
+NO está probado todavía es que STRIPE DE VERDAD lo entregue.
+
+**Limpieza:** las cuentas conectadas y negocios de prueba que crearon las pruebas de hoy, borrados
+de Stripe y de disco uno a uno (`node scripts/verify-residuo-de-pruebas.mjs` → 0 restos). De paso,
+`scripts/gate-cobro-online-facturas.mjs` mismo tenía un descuido de higiene que hasta hoy nunca se
+notó porque nunca llegaba a disparar: el negocio A, con Connect bloqueado, nunca llegaba a crear
+una cuenta REAL en Stripe, así que «lo que un gate crea, lo borra» no tenía nada que borrar ahí.
+Con Connect ya activo, SÍ la crea — y el gate no la borraba. Corregido: `borrarTenant()` borra
+también la cuenta de Stripe antes de borrar la fila local. Confirmado con la lista de cuentas de la
+plataforma antes y después: ya no quedan sueltas.
+
+**No se ha tocado la suscripción de Bamburu ni el hash Verifactu** en ninguno de los tres arreglos
+de hoy — los tres viven dentro de `cobro-online-facturas` (cuenta conectada, CSP del portal, y el
+propio gate de esta ficha).
+
+**Corrección del criterio de aceptación (titular y cuerpo, a la vez, como manda la norma del
+23 ago):** el segundo criterio decía «construido y comprobado con el webhook real» — «real» se
+refería a que el PAYLOAD era real (pedido a Stripe tras un cobro de verdad), no a que la ENTREGA lo
+fuera. Queda así, sin inflar lo que se sabe:
+
+- [x] En Ajustes, el autónomo conecta su propia cuenta de cobro una vez y queda marcado como
+      «listo para cobrar» — **probado de punta a punta hoy, con Connect ya activo de verdad.**
+- [~] En cada factura del portal, un botón de pago con tarjeta; al pagar, el dinero va a la cuenta
+      del autónomo — **probado de punta a punta hoy: pago real, dinero recibido de verdad en la
+      cuenta conectada.** Y la factura pasa a «pagada» sola — **el mecanismo está probado (gate,
+      payload con la forma exacta de Stripe); que STRIPE DE VERDAD entregue el aviso, NO.** Tres
+      intentos reales, el último de 5 minutos, cero entregas. Pendiente de mirar en el Dashboard de
+      Stripe si de verdad lo intenta y qué dice.
+
+**No se cierra la ficha.** Sigue **CONSTRUIDA — NO CERRADA**, con el cobro probado de verdad y UNA
+sola cosa por confirmar, que solo se ve desde el Dashboard de Stripe. **SIGUIENTE, y solo lo puede
+mirar Ibrahin:** `dashboard.stripe.com` → Developers → Webhooks → el endpoint
+`.../stripe/connect/webhook` → pestaña de intentos de entrega recientes. Si Stripe dice que lo
+intentó y qué pasó (éxito, fallo, error de conexión), se resuelve por código en cuanto lo diga; si
+dice que nunca lo intentó, hay que mirar la configuración de la cuenta con Ibrahin delante.
+
 ---
 
 ## BLOQUE 1 — QUE BAMBURU PUEDA COBRAR

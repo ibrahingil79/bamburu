@@ -271,7 +271,14 @@ export function securityHeaders() {
       "font-src 'self' data: https://fonts.gstatic.com",
       "connect-src 'self'",
       "frame-ancestors 'self'",
-      "form-action 'self' https://*.bamburu.com",
+      // `checkout.stripe.com` se añade el 11 sep 2026 (ficha `cobro-online-facturas`, prueba real de
+      // punta a punta): el botón «Pagar con tarjeta» del portal es un `<form>` normal a propósito —
+      // el portal "no lleva JavaScript y no se le va a meter uno solo para esto" (ver la ruta
+      // `/portal/mensaje`, unas líneas más abajo en este mismo repo) — y `form-action` SÍ frena la
+      // redirección final aunque el destino inmediato del formulario sea nuestro propio dominio:
+      // comprobado en un navegador de verdad, sin este dominio el clic no llegaba a ningún sitio,
+      // en silencio, sin error visible. Solo el dominio de Checkout, nada más de Stripe.
+      "form-action 'self' https://*.bamburu.com https://checkout.stripe.com",
       "base-uri 'self'",
       "object-src 'none'",
     ].join('; ');
